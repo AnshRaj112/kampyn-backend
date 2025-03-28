@@ -140,24 +140,28 @@ exports.forgotPassword = async (req, res) => {
   try {
     console.log("🔵 Forgot Password Request:", req.body);
 
-    const { email } = req.body;
-    const user = await User.findOne({ email });
+    const { identifier } = req.body;
+
+    // Find user by email OR phone number
+    const user = await User.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
 
     if (!user) {
-      console.log("⚠️ User not found:", email);
+      console.log("⚠️ User not found:", identifier);
       return res.status(400).json({ message: "User not found" });
     }
+
+    const emailToSend = user.email; // Use the user's email to send OTP
 
     const otp = generateOtp();
     console.log("🔢 OTP Generated:", otp);
 
-    await new Otp({ email, otp }).save();
+    await new Otp({ email: emailToSend, otp }).save();
     console.log("✅ OTP saved to database");
 
-    await sendOtpEmail(email, otp);
-    console.log("📧 OTP sent to email:", email);
+    await sendOtpEmail(emailToSend, otp);
+    console.log("📧 OTP sent to email:", emailToSend);
 
-    res.json({ message: "OTP sent for password reset" });
+    res.json({ message: "OTP sent for password reset", email: emailToSend });
   } catch (error) {
     console.error("❌ Forgot Password Error:", error);
     res.status(500).json({ message: "Internal Server Error" });
