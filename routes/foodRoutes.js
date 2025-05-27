@@ -16,3 +16,20 @@
   
 
 // module.exports = router;
+
+const express = require("express");
+const { searchFoods, getPopularFoods, incrementSearchCount } = require("../controllers/foodController");
+
+const router = express.Router();
+
+router.get("/foods", searchFoods);
+router.get("/popular-foods", getPopularFoods);
+router.post("/increase-search", async (req, res) => {
+  const { foodName } = req.body;
+  if (!foodName) return res.status(400).json({ error: "Food name required" });
+
+  await incrementSearchCount(foodName);
+  res.json({ message: "Search count updated" });
+});
+
+module.exports = router;

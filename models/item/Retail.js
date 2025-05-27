@@ -22,6 +22,7 @@ const retailSchema = new mongoose.Schema({
   price: { type: Number, required: true },
   image: { type: String, required: true },
   isSpecial: { type: String, enum: ["Y", "N"], required: true, default: "N" },
+  vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 });
 
 module.exports = Cluster_Item.model("Retail", retailSchema); // Use Cluster_Item cluster
