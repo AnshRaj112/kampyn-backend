@@ -1,14 +1,20 @@
-// // routes/itemRoutes.js
-// const express = require("express");
-// const router = express.Router();
-// const itemController = require("../controllers/itemController");
+const express = require("express");
+const router = express.Router();
+const itemController = require("../controllers/itemController");
 
-// // Route to create a new item in the global catalog
-// router.post("/", itemController.createItem);
+// Add a new item in a category (retail/produce)
+router.post("/:category", itemController.addItem);
 
-// // Route to get all items in the global catalog
-// router.get("/", itemController.getItems);
-// router.get("/search", itemController.searchItems); 
+// Get paginated items by uniId for a category
+router.get("/:category/uni/:uniId", itemController.getItemsByUniId);
 
+// Get items filtered by type and uniId for a category
+router.get("/:category/:type/:uniId", itemController.getItemsByTypeAndUni);
 
-// module.exports = router;
+// Update an item by id in a category
+router.put("/:category/:id", itemController.updateItem);
+
+// Delete an item by id in a category
+router.delete("/:category/:id", itemController.deleteItem);
+
+module.exports = router;

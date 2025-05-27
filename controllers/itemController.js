@@ -1,60 +1,127 @@
-// const Item = require("../models/item/Item");
+const Retail = require("../models/item/Retail");
+const Produce = require("../models/item/Produce");
 
-// // Create new item
-// exports.createItem = async (req, res) => {
-//   try {
-//     // Destructure the fields including the image
-//     const { name, type, unit, price, image } = req.body;
+// Utility to get the correct model
+const getModel = (category) => {
+  switch (category.toLowerCase()) {
+    case "retail":
+      return Retail;
+    case "produce":
+      return Produce;
+    default:
+      throw new Error("Invalid category. Must be 'retail' or 'produce'.");
+  }
+};
 
-//     // Create a new Item object
-//     const newItem = new Item({
-//       name,
-//       type,
-//       unit,
-//       price,
-//       image, // Add image field to the item
-//     });
+// Add Item (with duplicate check)
+exports.addItem = async (req, res) => {
+  try {
+    const { category } = req.params;
+    const { name, uniId } = req.body;
 
-//     // Save the new item to the database
-//     await newItem.save();
+    if (!name || !uniId) {
+      return res
+        .status(400)
+        .json({ error: "Missing required fields: name and uniId" });
+    }
 
-//     // Respond with the created item
-//     res.status(201).json(newItem);
-//   } catch (err) {
-//     res
-//       .status(500)
-//       .json({ message: "Error creating item", error: err.message });
-//   }
-// };
+    const ItemModel = getModel(category);
+    const existingItem = await ItemModel.findOne({ name: name.trim(), uniId });
 
-// // Get all items
-// exports.getItems = async (req, res) => {
-//   try {
-//     // Fetch all items from the database
-//     const items = await Item.find();
+    if (existingItem) {
+      return res.status(409).json({
+        error: "Item with the same name already exists for this uniId",
+      });
+    }
 
-//     // Respond with the list of items
-//     res.status(200).json(items);
-//   } catch (err) {
-//     res
-//       .status(500)
-//       .json({ message: "Error fetching items", error: err.message });
-//   }
-// };
+    const item = new ItemModel(req.body);
+    await item.save();
 
-// // Search items by name
-// exports.searchItems = async (req, res) => {
-//   try {
-//     const { query } = req.query;
-//     if (!query) {
-//       return res.status(400).json({ message: "Query parameter is required" });
-//     }
+    res.status(201).json({ message: "Item added successfully", item });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
 
-//     // Use a case-insensitive regex search
-//     const items = await Item.find({ name: { $regex: query, $options: "i" } });
-//     res.status(200).json(items);
-//   } catch (err) {
-//     res.status(500).json({ message: "Error searching items", error: err.message });
-//   }
-// };
+// Get Items by type and uniId
+exports.getItemsByTypeAndUni = async (req, res) => {
+  try {
+    const { category, type, uniId } = req.params;
 
+    const ItemModel = getModel(category);
+    const items = await ItemModel.find({ type, uniId })
+      .select("name price image type isSpecial")
+      .lean();
+    res.status(200).json(items);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Get paginated items by uniId
+exports.getItemsByUniId = async (req, res) => {
+  try {
+    const { category, uniId } = req.params;
+    let { page = 1, limit = 10 } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 10;
+
+    const skip = (page - 1) * limit;
+
+    const ItemModel = getModel(category);
+
+    const [items, total] = await Promise.all([
+      ItemModel.find({ uniId })
+        .select("name price image type isSpecial")
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      ItemModel.countDocuments({ uniId }),
+    ]);
+
+    res.status(200).json({
+      page,
+      totalPages: Math.ceil(total / limit),
+      totalItems: total,
+      items,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Update Item
+exports.updateItem = async (req, res) => {
+  try {
+    const { category, id } = req.params;
+    const ItemModel = getModel(category);
+    const updatedItem = await ItemModel.findByIdAndUpdate(id, req.body, {
+      new: true,
+    });
+
+    if (!updatedItem) return res.status(404).json({ error: "Item not found" });
+
+    res.status(200).json({ message: "Item updated", item: updatedItem });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Delete Item
+exports.deleteItem = async (req, res) => {
+  try {
+    const { category, id } = req.params;
+    const ItemModel = getModel(category);
+    const deletedItem = await ItemModel.findByIdAndDelete(id);
+
+    if (!deletedItem) return res.status(404).json({ error: "Item not found" });
+
+    res.status(200).json({ message: "Item deleted", item: deletedItem });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
