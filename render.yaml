@@ -4,19 +4,19 @@ services:
     runtime: node
     plan: free
     branch: main
-    buildCommand: npm install && npm install debug
+    buildCommand: npm install
     startCommand: node index.js
     autoDeploy: true
     envVars:
       - key: MONGO_URI_USER
-        value: ${MONGO_URI_USER}
+        sync: false
       - key: MONGO_URI_ITEM
-        value: ${MONGO_URI_ITEM}
+        sync: false
       - key: MONGO_URI_ORDER
-        value: ${MONGO_URI_ORDER}
+        sync: false
       - key: MONGO_URI_INVENTORY
-        value: ${MONGO_URI_INVENTORY}
+        sync: false
       - key: MONGO_URI_FOODCOURT
-        value: ${MONGO_URI_FOODCOURT}
+        sync: false
       - key: MONGO_URI_CACHE
-        value: ${MONGO_URI_CACHE}
+        sync: false
