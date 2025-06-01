@@ -4,8 +4,8 @@ services:
     runtime: node
     plan: free
     branch: main
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: npm install && npm install debug
+    startCommand: node index.js
     autoDeploy: true
     envVars:
       - key: MONGO_URI_USER
