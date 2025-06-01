@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: KIITBites
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: MONGO_URI_USER
+      - key: MONGO_URI_ITEM
+      - key: MONGO_URI_ORDER
+      - key: MONGO_URI_INVENTORY
+      - key: MONGO_URI_FOODCOURT
+      - key: MONGO_URI_CACHE
