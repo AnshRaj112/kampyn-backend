@@ -8,6 +8,7 @@ const {
 
 router.get("/:userId", getFavourites);
 router.get("/:userId/:uniId", getFavouritesByUni);
-router.patch("/:userId/:itemId/:kind", toggleFavourite);
+router.get("/:userId/:uniId/:vendorId", getFavouritesByUni);
+router.patch("/:userId/:itemId/:kind/:vendorId", toggleFavourite);
 
 module.exports = router;
