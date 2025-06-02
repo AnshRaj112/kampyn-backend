@@ -62,6 +62,8 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+userSchema.index({ "cart.itemId": 1, "cart.kind": 1 });
+userSchema.index({ vendorId: 1 });
 userSchema.index({ "favourites.itemId": 1, "favourites.kind": 1 });
 
 module.exports = Cluster_Accounts.model("User", userSchema);
