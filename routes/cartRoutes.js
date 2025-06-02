@@ -4,12 +4,12 @@ const cartController = require("../controllers/cartController");
 const { authMiddleware } = require("../middleware/authMiddleware");
 // for JWT verification
 
-router.post("/add", authMiddleware, cartController.addToCart);
-router.get("/", authMiddleware, cartController.getCart);
-router.post("/add-one", authMiddleware, cartController.increaseOne);
-router.post("/remove-one", authMiddleware, cartController.decreaseOne);
-router.post("/remove-item", authMiddleware, cartController.removeItem);
-router.get("/extras", authMiddleware, cartController.getExtras);
+router.post("/add/:userId", cartController.addToCart);
+router.get("/:userId", cartController.getCart);
+router.post("/add-one/:userId", cartController.increaseOne);
+router.post("/remove-one/:userId", cartController.decreaseOne);
+router.post("/remove-item/:userId", cartController.removeItem);
+router.get("/extras/:userId", cartController.getExtras);
 
 // router.post("/pay", authMiddleware, cartController.placeOrder);
 
