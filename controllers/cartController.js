@@ -6,14 +6,14 @@ const cartUtils = require("../utils/cartUtils");
 exports.addToCart = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { itemId, kind, quantity } = req.body;
-    if (!itemId || !kind || !quantity || quantity <= 0) {
+    const { itemId, kind, quantity, vendorId } = req.body;
+    if (!itemId || !kind || !quantity || quantity <= 0 || !vendorId) {
       return res
         .status(400)
-        .json({ message: "itemId, kind, and positive quantity are required." });
+        .json({ message: "itemId, kind, vendorId, and positive quantity are required." });
     }
 
-    await cartUtils.addToCart(userId, itemId, kind, Number(quantity));
+    await cartUtils.addToCart(userId, itemId, kind, Number(quantity), vendorId);
     return res
       .status(200)
       .json({ message: "Item added to cart successfully." });

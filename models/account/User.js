@@ -54,6 +54,11 @@ const userSchema = new mongoose.Schema(
           enum: ["Retail", "Produce"],
           required: true,
         },
+        vendorId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Vendor",
+          required: true,
+        },
         _id: false,
       },
     ],

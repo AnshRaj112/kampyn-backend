@@ -5,7 +5,7 @@ const Vendor = require("../models/account/Vendor");
 
 exports.toggleFavourite = async (req, res) => {
   try {
-    const { userId, itemId, kind } = req.params;
+    const { userId, itemId, kind, vendorId } = req.params;
 
     if (!["Retail", "Produce"].includes(kind)) {
       return res.status(400).json({ error: "Invalid kind." });
@@ -14,15 +14,25 @@ exports.toggleFavourite = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found." });
 
+    // Verify the vendor exists
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({ error: "Vendor not found." });
+    }
+
     // Check if the item already exists in favorites
     const existingFavourite = user.favourites.find(
-      (fav) => fav.itemId.toString() === itemId && fav.kind === kind
+      (fav) => fav.itemId && fav.itemId.toString() === itemId && 
+               fav.kind === kind && 
+               fav.vendorId && fav.vendorId.toString() === vendorId
     );
 
     if (existingFavourite) {
       // Remove the existing favorite
       user.favourites = user.favourites.filter(
-        (fav) => !(fav.itemId.toString() === itemId && fav.kind === kind)
+        (fav) => !(fav.itemId && fav.itemId.toString() === itemId && 
+                  fav.kind === kind && 
+                  fav.vendorId && fav.vendorId.toString() === vendorId)
       );
       await user.save();
       return res.status(200).json({ message: "Favourite removed." });
@@ -32,26 +42,27 @@ exports.toggleFavourite = async (req, res) => {
       const item = await ItemModel.findById(itemId);
       if (!item) return res.status(404).json({ error: "Item not found." });
 
-      // Find the vendor that has this item in their inventory
-      const vendor = await Vendor.findOne({
-        uniID: item.uniId,
-        [kind === "Retail" ? "retailInventory.itemId" : "produceInventory.itemId"]: itemId
-      });
+      // Verify the vendor has this item in their inventory
+      const inventory = vendor[kind === "Retail" ? "retailInventory" : "produceInventory"] || [];
+      const hasItem = inventory.some(
+        inv => inv && inv.itemId && inv.itemId.toString() === itemId
+      );
 
-      if (!vendor) {
-        return res.status(404).json({ error: "Vendor not found for this item." });
+      if (!hasItem) {
+        return res.status(400).json({ error: "Item not found in vendor's inventory." });
       }
 
       // Add new favorite with vendorId
       user.favourites.push({ 
         itemId, 
         kind, 
-        vendorId: vendor._id 
+        vendorId 
       });
       await user.save();
       return res.status(200).json({ message: "Favourite added." });
     }
   } catch (err) {
+    console.error("Error in toggleFavourite:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
@@ -64,28 +75,42 @@ exports.getFavourites = async (req, res) => {
     const user = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: "User not found." });
 
+    console.log("User favorites:", user.favourites); // Debug log
+
     const favourites = await Promise.all(
       user.favourites.map(async (fav) => {
-        const Model = fav.kind === "Retail" ? Retail : Produce;
-        const item = await Model.findById(fav.itemId).lean();
-        if (!item) return null;
+        try {
+          const Model = fav.kind === "Retail" ? Retail : Produce;
+          const item = await Model.findById(fav.itemId).lean();
+          if (!item) {
+            console.log(`Item not found for ID: ${fav.itemId}`); // Debug log
+            return null;
+          }
 
-        // Find the vendor that has this item in their inventory
-        const vendor = await Vendor.findOne({
-          uniID: item.uniId,
-          [fav.kind === "Retail" ? "retailInventory.itemId" : "produceInventory.itemId"]: fav.itemId
-        });
+          // Get the vendor directly from the favorite's vendorId
+          const vendor = await Vendor.findById(fav.vendorId).lean();
+          if (!vendor) {
+            console.log(`Vendor not found for ID: ${fav.vendorId}`); // Debug log
+            return null;
+          }
 
-        return {
-          ...item,
-          kind: fav.kind,
-          vendorId: vendor?._id // Include vendorId from the found vendor
-        };
+          return {
+            ...item,
+            kind: fav.kind,
+            vendorId: fav.vendorId,
+            vendorName: vendor.fullName
+          };
+        } catch (err) {
+          console.error("Error processing favorite:", err); // Debug log
+          return null;
+        }
       })
     );
 
+    console.log("Processed favorites:", favourites.filter(Boolean)); // Debug log
     res.status(200).json({ favourites: favourites.filter(Boolean) });
   } catch (err) {
+    console.error("Error in getFavourites:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
@@ -108,16 +133,15 @@ exports.getFavouritesByUni = async (req, res) => {
         const item = await Model.findOne({ _id: fav.itemId, uniId }).lean();
         if (!item) return null;
 
-        // Find the vendor that has this item in their inventory
-        const vendor = await Vendor.findOne({
-          uniID: uniId,
-          [fav.kind === "Retail" ? "retailInventory.itemId" : "produceInventory.itemId"]: fav.itemId
-        });
+        // Get the vendor directly from the favorite's vendorId
+        const vendor = await Vendor.findById(fav.vendorId).lean();
+        if (!vendor) return null;
 
         return {
           ...item,
           kind: fav.kind,
-          vendorId: vendor?._id // Include vendorId from the found vendor
+          vendorId: fav.vendorId,
+          vendorName: vendor.fullName
         };
       })
     );
@@ -126,6 +150,7 @@ exports.getFavouritesByUni = async (req, res) => {
       favourites: filteredFavourites.filter(Boolean),
     });
   } catch (err) {
+    console.error("Error in getFavouritesByUni:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };

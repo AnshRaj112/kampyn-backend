@@ -24,7 +24,7 @@ function toObjectId(id) {
 }
 
 /**
- * 1) Return the correct Mongoose model for a given “kind”
+ * 1) Return the correct Mongoose model for a given "kind"
  */
 function _itemModel(kind) {
   if (kind === "Retail") return Retail;
@@ -78,9 +78,9 @@ async function _findVendorEntry(itemId, kind, uniId) {
  *    - Ensure the item exists
  *    - Ensure a vendor carries that item (and get exactly that one inventory sub‐doc)
  *    - For Retail: check that `desiredQty <= vendorQuantity`
- *      * ALSO: (fail‐safe) if after removing `desiredQty`, vendor’s remaining stock < MAX_QTY["Retail"], we refuse.
+ *      * ALSO: (fail‐safe) if after removing `desiredQty`, vendor's remaining stock < MAX_QTY["Retail"], we refuse.
  *    - For Produce: ensure `isAvailable === "Y"`, and allow desiredQty ≤ MAX_QTY["Produce"]
- *    - Enforce “one‐vendor‐per‐cart” rule: if the user already has a vendor in cart, it must match.
+ *    - Enforce "one‐vendor‐per‐cart" rule: if the user already has a vendor in cart, it must match.
  *
  *    Returns `{ vendorId, available }` or throws an Error.
  */
@@ -106,7 +106,7 @@ async function _validateAndFetch(user, itemId, kind, desiredQty = 1) {
   let available = 0;
 
   if (kind === "Retail") {
-    // 4.4) Retail: check vendor’s quantity
+    // 4.4) Retail: check vendor's quantity
     const invQty = vendorData.retailInventory[0]?.quantity || 0;
     if (desiredQty > invQty) {
       throw new Error(`Only ${invQty} unit(s) available`);
@@ -122,7 +122,7 @@ async function _validateAndFetch(user, itemId, kind, desiredQty = 1) {
     }
     available = invQty;
   } else {
-    // 4.5) Produce: ensure “isAvailable === 'Y'”
+    // 4.5) Produce: ensure "isAvailable === 'Y'"
     const inv = vendorData.produceInventory[0];
     if (!inv || inv.isAvailable !== "Y") {
       throw new Error("Produce item is not available");
@@ -142,7 +142,7 @@ async function _validateAndFetch(user, itemId, kind, desiredQty = 1) {
 
 /**
  * 5) addToCart:
- *    - Load the User once (not `.lean()`, because we’ll modify & then `.save()`).
+ *    - Load the User once (not `.lean()`, because we'll modify & then `.save()`).
  *    - Run `_validateAndFetch(...)` to ensure item exists, vendor exists, stock + fail‐safe passed.
  *    - Compute newQty = (existingQty in cart) + qty
  *      * Enforce newQty ≤ MAX_QTY[kind].
@@ -150,19 +150,46 @@ async function _validateAndFetch(user, itemId, kind, desiredQty = 1) {
  *    - If user.vendorId was empty, set it now.
  *    - Save the User document.
  */
-async function addToCart(userId, itemId, kind, qty) {
+async function addToCart(userId, itemId, kind, qty, vendorId) {
   const user = await User.findById(userId).select("cart vendorId");
   if (!user) {
     throw new Error("User not found");
   }
 
-  // Validate item + vendor + stock + fail‐safe
-  const { vendorId, available } = await _validateAndFetch(
-    user,
-    itemId,
-    kind,
-    qty
-  );
+  // Convert vendorId to ObjectId
+  const oVendorId = toObjectId(vendorId);
+
+  // Check if vendor exists
+  const vendor = await Vendor.findById(oVendorId);
+  if (!vendor) {
+    throw new Error("Vendor not found");
+  }
+
+  // Check if item exists in vendor's inventory
+  const itemDoc = await getItem(itemId, kind);
+  if (!itemDoc) {
+    throw new Error("Item not found");
+  }
+
+  // Validate stock and availability
+  let available = 0;
+  if (kind === "Retail") {
+    const inv = vendor.retailInventory.find(i => i.itemId.toString() === itemId);
+    if (!inv) {
+      throw new Error("Item not found in vendor's inventory");
+    }
+    available = inv.quantity;
+    if (qty > available) {
+      throw new Error(`Only ${available} unit(s) available`);
+    }
+  } else {
+    const inv = vendor.produceInventory.find(i => i.itemId.toString() === itemId);
+    if (!inv || inv.isAvailable !== "Y") {
+      throw new Error("Produce item is not available");
+    }
+    available = MAX_QTY[kind];
+  }
+
   const MAX_ALLOWED = MAX_QTY[kind];
 
   // See if the item is already in the cart
@@ -173,28 +200,33 @@ async function addToCart(userId, itemId, kind, qty) {
   const existingQty = existingEntry ? existingEntry.quantity : 0;
   const newQty = existingQty + qty;
 
-  // 5.1) Enforce max‐per‐item limit
+  // Enforce max-per-item limit
   if (newQty > MAX_ALLOWED) {
     throw new Error(
       `Cannot exceed max quantity of ${MAX_ALLOWED} for a single ${kind} item`
     );
   }
 
-  // 5.2) Enforce vendor stock again:
+  // Enforce vendor stock again
   if (newQty > available) {
     throw new Error(`Only ${available} unit(s) available`);
   }
 
-  // 5.3) Update or push
+  // One-vendor-per-cart rule
+  if (user.vendorId && user.vendorId.toString() !== vendorId.toString()) {
+    throw new Error("Cart can contain items from only one vendor");
+  }
+
+  // Update or push
   if (existingEntry) {
     existingEntry.quantity = newQty;
   } else {
     user.cart.push({ itemId: oItemId, kind, quantity: newQty });
   }
 
-  // 5.4) Set vendorId on user if not already set
+  // Set vendorId on user if not already set
   if (!user.vendorId) {
-    user.vendorId = vendorId;
+    user.vendorId = oVendorId;
   }
 
   await user.save();
@@ -261,7 +293,7 @@ async function changeQuantity(userId, itemId, kind, delta) {
 }
 
 /**
- * 7) removeItem: remove a specific (itemId, kind) from the user’s cart
+ * 7) removeItem: remove a specific (itemId, kind) from the user's cart
  */
 async function removeItem(userId, itemId, kind) {
   const user = await User.findById(userId).select("cart vendorId");
@@ -283,7 +315,7 @@ async function removeItem(userId, itemId, kind) {
 
 /**
  * 8) getCartDetails:
- *    - Load user.cart & vendorId (lean, because we won’t modify).
+ *    - Load user.cart & vendorId (lean, because we won't modify).
  *    - If vendorId exists, fetch vendorName via `.select("fullName").lean()`.
  *    - Split cart entries by kind → two arrays of ObjectId.
  *    - Batch‐fetch Retail items & Produce items (each is one .find({ _id: { $in } }).select(...).lean()).
@@ -364,7 +396,7 @@ async function getCartDetails(userId) {
  * 9) getExtras:
  *    - Load user.cart & vendorId (lean).
  *    - If no cart entries or no vendorId, return [].
- *    - Fetch Vendor’s `retailInventory` & `produceInventory` arrays (via `.select(...) .lean()`).
+ *    - Fetch Vendor's `retailInventory` & `produceInventory` arrays (via `.select(...) .lean()`).
  *    - Build a Set of itemIds already in the cart.
  *    - Filter out:
  *        • Retail entries where quantity > MAX_QTY["Retail"] AND not in cart
