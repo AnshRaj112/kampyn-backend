@@ -24,22 +24,33 @@ function toObjectId(id) {
  * Throws if Uni not found, or vendor not listed or marked unavailable.
  */
 async function assertVendorAvailableInUni(vendorId, uniId) {
+  console.log(`Checking vendor ${vendorId} availability in uni ${uniId}`);
+  
   const uni = await Uni.findById(uniId).select("vendors").lean();
   if (!uni) {
+    console.log(`Uni ${uniId} not found`);
     throw new Error(`Uni with ID ${uniId} not found.`);
   }
 
+  console.log(`Uni ${uniId} vendors:`, uni.vendors);
+  
   const entry = (uni.vendors || []).find(
     (v) => String(v.vendorId) === String(vendorId)
   );
+  
   if (!entry) {
+    console.log(`Vendor ${vendorId} not found in uni ${uniId} vendors list`);
     throw new Error(`Vendor ${vendorId} is not registered under Uni ${uniId}.`);
   }
+  
   if (entry.isAvailable !== "Y") {
+    console.log(`Vendor ${vendorId} is marked as unavailable in uni ${uniId}`);
     throw new Error(
       `Vendor ${vendorId} is currently unavailable under Uni ${uniId}.`
     );
   }
+  
+  console.log(`Vendor ${vendorId} is available in uni ${uniId}`);
 }
 
 async function getItemsForVendorId(vendorId) {
@@ -141,50 +152,58 @@ async function getVendorsByItemId(itemKind, itemId) {
   }
 
   const oid = toObjectId(itemId);
+  console.log(`Finding vendors for ${itemKind} item ${itemId}`);
 
   // 1) Find all vendors whose inventory array for that kind contains this item
   const matchField =
     itemKind === "retail" ? "retailInventory" : "produceInventory";
-  const filter =
-    itemKind === "retail"
-      ? {
-          "retailInventory.itemId": oid,
-          "retailInventory.quantity": { $gt: 0 },
-        }
-      : { "produceInventory.itemId": oid, "produceInventory.isAvailable": "Y" };
-
-  const vendors = await Vendor.find(filter)
+  
+  // First find all vendors that have this item in their inventory
+  const vendors = await Vendor.find({
+    [matchField]: { $elemMatch: { itemId: oid } }
+  })
     .select("fullName uniID " + matchField)
     .lean();
+
+  console.log(`Found ${vendors.length} vendors with item in inventory:`, vendors.map(v => v._id));
 
   const results = [];
 
   // 2) For each vendor, check Uni availability and pick out the correct inventory entry
   for (const v of vendors) {
     try {
+      // Check if vendor is available in their university
       await assertVendorAvailableInUni(v._id, v.uniID);
-    } catch {
+      
+      const entry = (v[matchField] || []).find(
+        (e) => String(e.itemId) === String(oid)
+      );
+      
+      if (!entry) {
+        console.log(`Vendor ${v._id} has no matching inventory entry for item ${itemId}`);
+        continue;
+      }
+
+      const inventoryValue =
+        itemKind === "retail"
+          ? { quantity: entry.quantity || 0 }
+          : { isAvailable: entry.isAvailable || "N" };
+
+      results.push({
+        vendorId: v._id,
+        vendorName: v.fullName,
+        uniID: v.uniID,
+        inventoryValue,
+      });
+      
+      console.log(`Added vendor ${v._id} to results with inventory:`, inventoryValue);
+    } catch (error) {
+      console.log(`Skipping vendor ${v._id}:`, error.message);
       continue;
     }
-
-    const entry = (v[matchField] || []).find(
-      (e) => String(e.itemId) === String(oid)
-    );
-    if (!entry) continue;
-
-    const inventoryValue =
-      itemKind === "retail"
-        ? { quantity: entry.quantity }
-        : { isAvailable: entry.isAvailable };
-
-    results.push({
-      vendorId: v._id,
-      vendorName: v.fullName,
-      uniID: v.uniID,
-      inventoryValue,
-    });
   }
 
+  console.log(`Returning ${results.length} available vendors:`, results.map(r => r.vendorId));
   return results;
 }
 
