@@ -173,3 +173,60 @@ exports.getItemsByVendor = async (req, res) => {
     });
   }
 };
+
+exports.getVendorsForItem = async (req, res) => {
+  try {
+    const { itemId } = req.params;
+
+    // First try to find the item in Retail collection
+    let item = await Retail.findById(itemId).lean();
+    let itemType = "retail";
+
+    // If not found in Retail, try Produce collection
+    if (!item) {
+      item = await Produce.findById(itemId).lean();
+      itemType = "produce";
+    }
+
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" });
+    }
+
+    // Get vendors that have this item in their inventory
+    const vendors = await getVendorsByItemId(itemType, itemId);
+
+    // Format the response based on item type
+    const formattedVendors = vendors.map(vendor => {
+      const baseVendor = {
+        _id: vendor.vendorId,
+        name: vendor.vendorName,
+        price: vendor.inventoryValue?.price || item.price
+      };
+
+      // For retail items, only include quantity
+      if (itemType === "retail") {
+        return {
+          ...baseVendor,
+          inventoryValue: {
+            price: vendor.inventoryValue?.price || item.price,
+            quantity: vendor.inventoryValue?.quantity || 0
+          }
+        };
+      }
+      
+      // For produce items, only include isAvailable
+      return {
+        ...baseVendor,
+        inventoryValue: {
+          price: vendor.inventoryValue?.price || item.price,
+          isAvailable: vendor.inventoryValue?.isAvailable || "N"
+        }
+      };
+    });
+
+    res.status(200).json(formattedVendors);
+  } catch (error) {
+    console.error("Error getting vendors for item:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
