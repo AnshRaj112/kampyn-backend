@@ -174,6 +174,33 @@ exports.getItemsByVendor = async (req, res) => {
   }
 };
 
+//search Items
+exports.searchItems = async (req, res) => {
+  const { query, uniID } = req.query;
+
+  if (!query || !uniID) {
+    return res.status(400).json({ error: "Missing search query or uniID" });
+  }
+
+  try {
+    const regex = new RegExp(query, "i"); // case-insensitive partial match
+
+    const [retailItems, produceItems] = await Promise.all([
+      Retail.find({ name: regex, uniId: uniID }).select("name price image type"),
+      Produce.find({ name: regex, uniId: uniID }).select("name price image type"),
+    ]);
+
+    const results = [
+      ...retailItems.map((item) => ({ ...item.toObject(), source: "retail" })),
+      ...produceItems.map((item) => ({ ...item.toObject(), source: "produce" })),
+    ];
+
+    res.status(200).json(results);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to search items", details: error.message });
+  }
+};
+
 exports.getVendorsForItem = async (req, res) => {
   try {
     const { itemId } = req.params;

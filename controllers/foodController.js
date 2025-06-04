@@ -49,3 +49,69 @@
 //     console.error("Error incrementing search count:", err);
 //   }
 // };
+
+const Produce = require("../models/item/Produce");
+const Retail = require("../models/item/Retail");
+const User = require("../models/account/User");
+
+// Search food items across both collections
+exports.searchFoods = async (req, res) => {
+  const { query, uniID } = req.query;
+  if (!query) return res.json([]);
+
+  try {
+    const regex = new RegExp(query, "i");
+
+    const filter = uniID
+      ? { name: regex, vendorId: { $exists: true } }
+      : { name: regex };
+
+    const produceItems = await Produce.find(filter).populate("vendorId", "location type uniID");
+    const retailItems = await Retail.find(filter).populate("vendorId", "location type uniID");
+
+    const filtered = [...produceItems, ...retailItems].filter(item => {
+      return !uniID || item.vendorId?.uniID?.toString() === uniID;
+    });
+
+    const sorted = filtered.sort((a, b) => (b.searchCount || 0) - (a.searchCount || 0));
+
+    res.json(sorted);
+  } catch (err) {
+    res.status(500).json({ message: "Search error", error: err.message });
+  }
+};
+
+// Popular food (from both models, sorted by search count)
+exports.getPopularFoods = async (req, res) => {
+  const { uniID } = req.query;
+
+  try {
+    const [produce, retail] = await Promise.all([
+      Produce.find({ vendorId: { $exists: true } }).populate("vendorId", "location uniID").lean(),
+      Retail.find({ vendorId: { $exists: true } }).populate("vendorId", "location uniID").lean(),
+    ]);
+
+    const allItems = [...produce, ...retail].filter(item => {
+      return !uniID || item.vendorId?.uniID?.toString() === uniID;
+    });
+
+    const sorted = allItems.sort((a, b) => (b.searchCount || 0) - (a.searchCount || 0)).slice(0, 12);
+
+    res.json(sorted);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching popular foods", error: err.message });
+  }
+};
+
+// Increment search count
+exports.incrementSearchCount = async (foodName) => {
+  try {
+    const item = await Produce.findOne({ name: foodName }) || await Retail.findOne({ name: foodName });
+    if (item) {
+      item.searchCount = (item.searchCount || 0) + 1;
+      await item.save();
+    }
+  } catch (err) {
+    console.error("Error incrementing search count:", err);
+  }
+};
