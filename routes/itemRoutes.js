@@ -29,4 +29,8 @@ router.get(
 
 //Fetch all in‐stock retail items and all available produce items for one vendor:
 router.get("/getvendors/:vendorId", itemController.getItemsByVendor);
+
+// Get vendors for a specific item
+router.get("/vendors/:itemId", itemController.getVendorsForItem);
+
 module.exports = router;
