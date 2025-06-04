@@ -125,3 +125,75 @@ exports.deleteItem = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+//search Items
+exports.searchItems = async (req, res) => {
+  const { query, uniID } = req.query;
+
+  if (!query || !uniID) {
+    return res.status(400).json({ error: "Missing search query or uniID" });
+  }
+
+  try {
+    const regex = new RegExp(query, "i"); // case-insensitive partial match
+
+    const [retailItems, produceItems] = await Promise.all([
+      Retail.find({ name: regex, uniId: uniID }).select("name price image type"),
+      Produce.find({ name: regex, uniId: uniID }).select("name price image type"),
+    ]);
+
+    const results = [
+      ...retailItems.map((item) => ({ ...item.toObject(), source: "retail" })),
+      ...produceItems.map((item) => ({ ...item.toObject(), source: "produce" })),
+    ];
+
+    res.status(200).json(results);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to search items", details: error.message });
+  }
+};
+
+
+
+
+// exports.searchItems = async (req, res) => {
+//   try {
+//     const { category, query, uniID } = req.query;
+//     if (!category || !query || !uniID) {
+//       return res.status(400).json({ error: "Missing required params" });
+//     }
+
+//     const ItemModel = getModel(category);
+
+//     // Search items by name (case-insensitive) and uniId
+//     const items = await ItemModel.find({
+//       name: { $regex: query, $options: "i" },
+//       uniId: uniID,
+//     }).lean();
+
+//     // Find the Uni document
+//     const uni = await Uni.findById(uniID).lean();
+//     if (!uni) return res.status(404).json({ error: "University not found" });
+
+//     // Extract vendor IDs from Uni
+//     const vendorIds = uni.vendors.map(v => v.vendorId);
+
+//     // Fetch vendor locations only
+//     const vendors = await Vendor.find({ _id: { $in: vendorIds } })
+//       .select("location")
+//       .lean();
+
+//     // For simplicity, get the first vendor location (or null if none)
+//     const firstVendorLocation = vendors.length > 0 ? vendors[0].location : null;
+
+//     // Attach vendor location to each item
+//     const itemsWithVendorLocation = items.map(item => ({
+//       ...item,
+//       vendorLocation: firstVendorLocation,
+//     }));
+
+//     res.json(itemsWithVendorLocation);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };

@@ -4,7 +4,7 @@ const cors = require("cors");
 const userAuthRoutes = require("./routes/auth/userAuthRoutes");
 const uniAuthRoutes = require("./routes/auth/uniAuthRoutes");
 const vendorAuthRoutes = require("./routes/auth/vendorAuthRoutes");
-// const foodRoutes = require("./routes/foodRoutes");
+const foodRoutes = require("./routes/foodRoutes");
 const contactRoute = require("./routes/contactRoute");
 const teamRoutes = require("./routes/teamRoutes");
 const itemRoutes = require("./routes/itemRoutes");
@@ -39,7 +39,7 @@ app.use(
 app.use("/api/user/auth", userAuthRoutes);
 app.use("/api/uni/auth", uniAuthRoutes);
 app.use("/api/vendor/auth", vendorAuthRoutes);
-// app.use("/api", foodRoutes);
+app.use("/api/foods", foodRoutes);
 app.use("/contact", contactRoute);
 app.use("/team", teamRoutes);
 app.use("/items", itemRoutes);

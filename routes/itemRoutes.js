@@ -17,4 +17,7 @@ router.put("/:category/:id", itemController.updateItem);
 // Delete an item by id in a category
 router.delete("/:category/:id", itemController.deleteItem);
 
+//search items
+router.get("/foods", itemController.searchItems); 
+
 module.exports = router;
