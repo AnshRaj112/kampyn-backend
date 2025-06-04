@@ -9,9 +9,11 @@ exports.getVendorsByUni = async (req, res) => {
       return res.status(400).json({ error: "Missing 'uniId' in path." });
     }
 
-    const vendors = await Vendor.find({ uniID: uniId }).select('_id fullName').lean();
+    const vendors = await Vendor.find({ uniID: uniId })
+      .select("_id fullName")
+      .lean();
     res.status(200).json(vendors);
   } catch (err) {
     res.status(500).json({ error: "Server error", details: err.message });
   }
-}; 
+};

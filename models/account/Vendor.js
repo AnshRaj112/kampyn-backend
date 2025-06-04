@@ -19,6 +19,7 @@ const vendorSchema = new mongoose.Schema(
           required: true,
         },
         quantity: { type: Number, default: 0, required: true },
+        reservedQuantity: { type: Number, default: 0, required: true },
         _id: false,
       },
     ],
@@ -39,6 +40,7 @@ const vendorSchema = new mongoose.Schema(
         _id: false,
       },
     ],
+    activeOrders: [{ type: mongoose.Types.ObjectId, ref: "Order" }],
 
     lastLoginAttempt: { type: Date, default: null },
   },
