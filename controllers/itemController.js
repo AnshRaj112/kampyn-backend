@@ -174,7 +174,6 @@ exports.getItemsByVendor = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
 //search Items
 exports.searchItems = async (req, res) => {
   const { query, uniID } = req.query;
@@ -199,7 +198,9 @@ exports.searchItems = async (req, res) => {
     res.status(200).json(results);
   } catch (error) {
     res.status(500).json({ error: "Failed to search items", details: error.message });
-=======
+  }
+};
+
 exports.getVendorsForItem = async (req, res) => {
   try {
     const { itemId } = req.params;
@@ -254,6 +255,5 @@ exports.getVendorsForItem = async (req, res) => {
   } catch (error) {
     console.error("Error getting vendors for item:", error);
     res.status(500).json({ message: error.message });
->>>>>>> 0c802a26976119ccb234642fbcde1c267ba77f98
   }
 };
