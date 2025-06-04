@@ -26,5 +26,14 @@ const retailSchema = new mongoose.Schema({
   isSpecial: { type: String, enum: ["Y", "N"], required: true, default: "N" },
 });
 retailSchema.index({ uniId: 1, type: 1 });
+retailSchema.post("findOneAndDelete", async function (doc) {
+  if (doc) {
+    const User = require("../account/User");
+    await User.updateMany(
+      {},
+      { $pull: { favourites: { itemId: doc._id, kind: "Retail" } } }
+    );
+  }
+});
 
 module.exports = Cluster_Item.model("Retail", retailSchema); // Use Cluster_Item cluster

@@ -1,5 +1,9 @@
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
+const {
+  getVendorsByItemId,
+  getItemsForVendorId,
+} = require("../utils/itemUtils");
 
 // Utility to get the correct model
 const getModel = (category) => {
@@ -126,6 +130,50 @@ exports.deleteItem = async (req, res) => {
   }
 };
 
+exports.getVendorsByItem = async (req, res) => {
+  const { itemType, itemId } = req.params;
+
+  try {
+    const vendors = await getVendorsByItemId(itemType, itemId);
+
+    if (vendors.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No available vendors found for ${itemType} item ${itemId}.`,
+      });
+    }
+
+    return res.json({ success: true, data: vendors });
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+exports.getItemsByVendor = async (req, res) => {
+  const { vendorId } = req.params;
+
+  try {
+    const { foodCourtName, retailItems, produceItems } =
+      await getItemsForVendorId(vendorId);
+    return res.json({
+      success: true,
+      foodCourtName,
+      data: {
+        retailItems,
+        produceItems,
+      },
+    });
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 //search Items
 exports.searchItems = async (req, res) => {
   const { query, uniID } = req.query;
@@ -152,48 +200,3 @@ exports.searchItems = async (req, res) => {
     res.status(500).json({ error: "Failed to search items", details: error.message });
   }
 };
-
-
-
-
-// exports.searchItems = async (req, res) => {
-//   try {
-//     const { category, query, uniID } = req.query;
-//     if (!category || !query || !uniID) {
-//       return res.status(400).json({ error: "Missing required params" });
-//     }
-
-//     const ItemModel = getModel(category);
-
-//     // Search items by name (case-insensitive) and uniId
-//     const items = await ItemModel.find({
-//       name: { $regex: query, $options: "i" },
-//       uniId: uniID,
-//     }).lean();
-
-//     // Find the Uni document
-//     const uni = await Uni.findById(uniID).lean();
-//     if (!uni) return res.status(404).json({ error: "University not found" });
-
-//     // Extract vendor IDs from Uni
-//     const vendorIds = uni.vendors.map(v => v.vendorId);
-
-//     // Fetch vendor locations only
-//     const vendors = await Vendor.find({ _id: { $in: vendorIds } })
-//       .select("location")
-//       .lean();
-
-//     // For simplicity, get the first vendor location (or null if none)
-//     const firstVendorLocation = vendors.length > 0 ? vendors[0].location : null;
-
-//     // Attach vendor location to each item
-//     const itemsWithVendorLocation = items.map(item => ({
-//       ...item,
-//       vendorLocation: firstVendorLocation,
-//     }));
-
-//     res.json(itemsWithVendorLocation);
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// };

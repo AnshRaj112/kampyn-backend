@@ -32,9 +32,12 @@ exports.signup = async (req, res) => {
     const { fullName, email, phone, password } =
       req.body;
 
-    const existingUser = await Account.findOne({ $or: [{ email }, { phone }] });
+    // Convert email to lowercase
+    const emailLower = email.toLowerCase();
+
+    const existingUser = await Account.findOne({ $or: [{ email: emailLower }, { phone }] });
     if (existingUser) {
-      console.log("⚠️ User already exists:", email);
+      console.log("⚠️ User already exists:", emailLower);
       return res.status(400).json({ message: "User already exists" });
     }
 
@@ -43,7 +46,7 @@ exports.signup = async (req, res) => {
 
     const accountData = {
       fullName,
-      email,
+      email: emailLower,
       phone,
       password: hashedPassword,
       isVerified: false,
@@ -51,7 +54,7 @@ exports.signup = async (req, res) => {
 
     const newAccount = new Account(accountData);
     await newAccount.save();
-    console.log("✅ Account created:", email);
+    console.log("✅ Account created:", emailLower);
 
     const token = jwt.sign(
       { id: newAccount._id, role: newAccount.type },
@@ -61,11 +64,11 @@ exports.signup = async (req, res) => {
 
     // Send OTP if needed
     const otp = generateOtp();
-    await new Otp({ email, otp }).save();
+    await new Otp({ email: emailLower, otp }).save();
     console.log("🔢 OTP Generated and Saved:", otp);
 
-    await sendOtpEmail(email, otp);
-    console.log("📧 OTP sent to email:", email);
+    await sendOtpEmail(emailLower, otp);
+    console.log("📧 OTP sent to email:", emailLower);
 
     // Optional: Set cookie
     // setTokenCookie(res, token);
@@ -131,8 +134,14 @@ exports.login = async (req, res) => {
     console.log("🔵 Login Request:", req.body);
 
     const { identifier, password } = req.body;
+    
+    // Process identifier based on type
+    const processedIdentifier = identifier.includes('@') 
+      ? identifier.toLowerCase() // Convert email to lowercase
+      : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
+    
     const user = await Account.findOne({
-      $or: [{ email: identifier }, { phone: identifier }],
+      $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
     });
 
     if (!user) {
@@ -179,13 +188,18 @@ exports.forgotPassword = async (req, res) => {
 
     const { identifier } = req.body;
 
+    // Process identifier based on type
+    const processedIdentifier = identifier.includes('@') 
+      ? identifier.toLowerCase() // Convert email to lowercase
+      : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
+
     // Find user by email OR phone number
     const user = await Account.findOne({
-      $or: [{ email: identifier }, { phone: identifier }],
+      $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
     });
 
     if (!user) {
-      console.log("⚠️ User not found:", identifier);
+      console.log("⚠️ User not found:", processedIdentifier);
       return res.status(400).json({ message: "User not found" });
     }
 

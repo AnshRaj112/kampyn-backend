@@ -54,6 +54,11 @@ const userSchema = new mongoose.Schema(
           enum: ["Retail", "Produce"],
           required: true,
         },
+        vendorId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Vendor",
+          required: true,
+        },
         _id: false,
       },
     ],
@@ -62,5 +67,10 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+userSchema.index({ "cart.itemId": 1, "cart.kind": 1 });
+userSchema.index({ vendorId: 1 });
+userSchema.index({ "favourites.itemId": 1, "favourites.kind": 1 });
+userSchema.index({ activeOrders: 1 });
+userSchema.index({ pastOrders: 1 });
 
 module.exports = Cluster_Accounts.model("User", userSchema);

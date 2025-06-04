@@ -20,4 +20,13 @@ router.delete("/:category/:id", itemController.deleteItem);
 //search items
 router.get("/foods", itemController.searchItems); 
 
+//Fetch all vendors that currently hold a given retail/produce item:
+// Only returns vendorName + either quantity (retail) or isAvailable (produce).
+router.get(
+  "/vendors/by-item/:itemType/:itemId",
+  itemController.getVendorsByItem
+);
+
+//Fetch all in‐stock retail items and all available produce items for one vendor:
+router.get("/getvendors/:vendorId", itemController.getItemsByVendor);
 module.exports = router;

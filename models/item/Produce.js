@@ -24,5 +24,14 @@ const produceSchema = new mongoose.Schema({
   isSpecial: { type: String, enum: ["Y", "N"], required: true, default: "N" },
 });
 produceSchema.index({ uniId: 1, type: 1 });
+produceSchema.post("findOneAndDelete", async function (doc) {
+  if (doc) {
+    const User = require("../account/User");
+    await User.updateMany(
+      {},
+      { $pull: { favourites: { itemId: doc._id, kind: "Produce" } } }
+    );
+  }
+});
 
 module.exports = Cluster_Item.model("Produce", produceSchema); // Use Cluster_Item cluster

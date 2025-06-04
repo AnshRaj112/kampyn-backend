@@ -11,6 +11,9 @@ const itemRoutes = require("./routes/itemRoutes");
 const foodCourtRoutes = require("./routes/foodCourtRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const inventoryRoutes = require("./routes/inventoryRoutes");
+const favouriteRoutes = require("./routes/favouriteRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const vendorRoutes = require("./routes/vendorRoutes");
 // const paymentRoutes = require("./routes/paymentRoute");
 
 const app = express();
@@ -27,7 +30,7 @@ app.use(
   cors({
     origin: [FRONTEND_URL],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
     exposedHeaders: ["Content-Range", "X-Content-Range"],
   })
@@ -46,7 +49,10 @@ app.use("/items", itemRoutes);
 app.use("/foodcourts", foodCourtRoutes);
 app.use("/cart", cartRoutes);
 app.use("/inventory", inventoryRoutes);
+app.use("/fav", favouriteRoutes);
+app.use("/order", orderRoutes);
 // app.use("/payment", paymentRoutes);
+app.use("/api/vendor", vendorRoutes);
 
 // ✅ Global error handling
 app.use((err, req, res, next) => {

@@ -1,16 +1,24 @@
-// controllers/inventoryController.js
+const Vendor = require("../models/account/Vendor"); // Cluster_Accounts
+const Retail = require("../models/item/Retail"); // Cluster_Item
+const Produce = require("../models/item/Produce"); // Cluster_Item
+const InventoryReport = require("../models/inventory/InventoryReport"); // Cluster_Inventory
 
-const Vendor = require("../models/account/Vendor");
-const Retail = require("../models/item/Retail");
-const Produce = require("../models/item/Produce");
-const InventoryReport = require("../models/inventory/InventoryReport");
+const validateSameUniversity = (vendor, item) => {
+  return vendor.uniID.toString() === item.uniId.toString();
+};
+
+const getTodayRange = () => {
+  const now = new Date();
+  const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+  const endOfDay = new Date(now.setHours(23, 59, 59, 999));
+  return { startOfDay, endOfDay };
+};
 
 exports.addInventory = async (req, res) => {
   try {
     let { vendorId, itemId, itemType, quantity, isAvailable } = req.body;
     quantity = quantity ? Number(quantity) : 0;
 
-    // Normalize and validate itemType
     if (!vendorId || !itemId || !itemType) {
       return res.status(400).json({ message: "Missing required fields" });
     }
@@ -28,40 +36,34 @@ exports.addInventory = async (req, res) => {
       return res.status(400).json({ message: "Invalid availability flag" });
     }
 
-    // Check if vendor exists
     const vendor = await Vendor.findById(vendorId);
-    if (!vendor) {
-      return res.status(404).json({ message: "Vendor not found" });
-    }
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
 
-    // Get today's date range
-    const today = new Date();
-    const startOfDay = new Date(today);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(today);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    // Get or create today's InventoryReport for the vendor
+    const { startOfDay, endOfDay } = getTodayRange();
     let report = await InventoryReport.findOne({
       vendorId,
       date: { $gte: startOfDay, $lt: endOfDay },
     });
 
-    if (!report) {
-      report = new InventoryReport({ vendorId, date: new Date() });
-    }
+    if (!report) report = new InventoryReport({ vendorId, date: new Date() });
 
     if (normalizedItemType === "retail") {
       const item = await Retail.findById(itemId);
-      if (!item) {
+      if (!item)
         return res.status(404).json({ message: "Retail item not found" });
+
+      if (!validateSameUniversity(vendor, item)) {
+        return res
+          .status(403)
+          .json({
+            message:
+              "Retail item does not belong to the same university as the vendor",
+          });
       }
 
-      // Update or insert item in vendor's retailInventory
       const existingRetail = vendor.retailInventory.find(
         (i) => i.itemId.toString() === itemId
       );
-
       if (existingRetail) {
         existingRetail.quantity += quantity;
       } else {
@@ -70,7 +72,6 @@ exports.addInventory = async (req, res) => {
 
       vendor.markModified("retailInventory");
 
-      // Update or insert in inventory report
       const updatedQty =
         vendor.retailInventory.find((i) => i.itemId.toString() === itemId)
           ?.quantity || quantity;
@@ -78,7 +79,6 @@ exports.addInventory = async (req, res) => {
       const retailEntry = report.retailEntries.find(
         (entry) => entry.item.toString() === itemId
       );
-
       if (retailEntry) {
         retailEntry.closingQty = updatedQty;
       } else {
@@ -91,16 +91,22 @@ exports.addInventory = async (req, res) => {
       }
     } else if (normalizedItemType === "produce") {
       const item = await Produce.findById(itemId);
-      if (!item) {
+      if (!item)
         return res.status(404).json({ message: "Produce item not found" });
+
+      if (!validateSameUniversity(vendor, item)) {
+        return res
+          .status(403)
+          .json({
+            message:
+              "Produce item does not belong to the same university as the vendor",
+          });
       }
 
       const status = isAvailable === "Y" ? "Y" : "N";
-
       const existingProduce = vendor.produceInventory.find(
         (i) => i.itemId.toString() === itemId
       );
-
       if (existingProduce) {
         existingProduce.isAvailable = status;
       } else {
@@ -108,11 +114,9 @@ exports.addInventory = async (req, res) => {
       }
 
       vendor.markModified("produceInventory");
-
-      // Do NOT update inventory report produceEntries here!
+      // No inventory report update needed for produce items
     }
 
-    // Save both documents
     await vendor.save();
     await report.save();
 
@@ -122,7 +126,6 @@ exports.addInventory = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-// controllers/inventoryController.js
 
 exports.reduceRetailInventory = async (req, res) => {
   try {
@@ -134,19 +137,24 @@ exports.reduceRetailInventory = async (req, res) => {
     }
 
     const vendor = await Vendor.findById(vendorId);
-    if (!vendor) {
-      return res.status(404).json({ message: "Vendor not found" });
-    }
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
 
     const item = await Retail.findById(itemId);
-    if (!item) {
+    if (!item)
       return res.status(404).json({ message: "Retail item not found" });
+
+    if (!validateSameUniversity(vendor, item)) {
+      return res
+        .status(403)
+        .json({
+          message:
+            "Retail item does not belong to the same university as the vendor",
+        });
     }
 
     const existingRetail = vendor.retailInventory.find(
       (i) => i.itemId.toString() === itemId
     );
-
     if (!existingRetail || existingRetail.quantity < quantity) {
       return res.status(400).json({ message: "Insufficient stock to reduce" });
     }
@@ -154,28 +162,20 @@ exports.reduceRetailInventory = async (req, res) => {
     existingRetail.quantity -= quantity;
     vendor.markModified("retailInventory");
 
-    // Prepare today's date range using local time
-    const now = new Date();
-    const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
-
+    const { startOfDay, endOfDay } = getTodayRange();
     let report = await InventoryReport.findOne({
       vendorId,
-      date: { $gte: startDate, $lt: endDate },
+      date: { $gte: startOfDay, $lt: endOfDay },
     });
 
-    if (!report) {
-      report = new InventoryReport({ vendorId, date: new Date() });
-    }
+    if (!report) report = new InventoryReport({ vendorId, date: new Date() });
 
     const retailEntry = report.retailEntries.find(
       (entry) => entry.item.toString() === itemId
     );
-
     if (retailEntry) {
       retailEntry.closingQty = existingRetail.quantity;
     } else {
-      // If no previous entry exists, create it (with 0 opening/soldQty)
       report.retailEntries.push({
         item: itemId,
         openingQty: 0,
