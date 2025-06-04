@@ -195,14 +195,34 @@ exports.getVendorsForItem = async (req, res) => {
     // Get vendors that have this item in their inventory
     const vendors = await getVendorsByItemId(itemType, itemId);
 
-    // Format the response
-    const formattedVendors = vendors.map(vendor => ({
-      _id: vendor.vendorId,
-      name: vendor.vendorName,
-      price: item.price,
-      quantity: vendor.inventoryValue.quantity || 0,
-      isAvailable: vendor.inventoryValue.isAvailable || "N"
-    }));
+    // Format the response based on item type
+    const formattedVendors = vendors.map(vendor => {
+      const baseVendor = {
+        _id: vendor.vendorId,
+        name: vendor.vendorName,
+        price: vendor.inventoryValue?.price || item.price
+      };
+
+      // For retail items, only include quantity
+      if (itemType === "retail") {
+        return {
+          ...baseVendor,
+          inventoryValue: {
+            price: vendor.inventoryValue?.price || item.price,
+            quantity: vendor.inventoryValue?.quantity || 0
+          }
+        };
+      }
+      
+      // For produce items, only include isAvailable
+      return {
+        ...baseVendor,
+        inventoryValue: {
+          price: vendor.inventoryValue?.price || item.price,
+          isAvailable: vendor.inventoryValue?.isAvailable || "N"
+        }
+      };
+    });
 
     res.status(200).json(formattedVendors);
   } catch (error) {
