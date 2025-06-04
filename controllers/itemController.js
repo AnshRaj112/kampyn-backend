@@ -1,5 +1,9 @@
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
+const {
+  getVendorsByItemId,
+  getItemsForVendorId,
+} = require("../utils/itemUtils");
 
 // Utility to get the correct model
 const getModel = (category) => {
@@ -123,5 +127,49 @@ exports.deleteItem = async (req, res) => {
     res.status(200).json({ message: "Item deleted", item: deletedItem });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getVendorsByItem = async (req, res) => {
+  const { itemType, itemId } = req.params;
+
+  try {
+    const vendors = await getVendorsByItemId(itemType, itemId);
+
+    if (vendors.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No available vendors found for ${itemType} item ${itemId}.`,
+      });
+    }
+
+    return res.json({ success: true, data: vendors });
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+exports.getItemsByVendor = async (req, res) => {
+  const { vendorId } = req.params;
+
+  try {
+    const { foodCourtName, retailItems, produceItems } =
+      await getItemsForVendorId(vendorId);
+    return res.json({
+      success: true,
+      foodCourtName,
+      data: {
+        retailItems,
+        produceItems,
+      },
+    });
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
   }
 };

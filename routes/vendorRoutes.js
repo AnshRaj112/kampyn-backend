@@ -5,4 +5,4 @@ const { getVendorsByUni } = require("../controllers/vendorController");
 // Get all vendors for a specific university
 router.get("/list/uni/:uniId", getVendorsByUni);
 
-module.exports = router; 
+module.exports = router;
