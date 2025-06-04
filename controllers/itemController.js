@@ -186,8 +186,21 @@ exports.searchItems = async (req, res) => {
     const regex = new RegExp(query, "i"); // case-insensitive partial match
 
     const [retailItems, produceItems] = await Promise.all([
-      Retail.find({ name: regex, uniId: uniID }).select("name price image type"),
-      Produce.find({ name: regex, uniId: uniID }).select("name price image type"),
+      Retail.find({
+        uniId: uniID,
+        $or: [
+          { name: regex },
+          { type: regex },
+        ],
+      }).select("name price image type"),
+      
+      Produce.find({
+        uniId: uniID,
+        $or: [
+          { name: regex },
+          { type: regex },
+        ],
+      }).select("name price image type"),
     ]);
 
     const results = [
