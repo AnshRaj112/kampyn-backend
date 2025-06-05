@@ -19,7 +19,6 @@ const vendorSchema = new mongoose.Schema(
           required: true,
         },
         quantity: { type: Number, default: 0, required: true },
-        reservedQuantity: { type: Number, default: 0, required: true },
         _id: false,
       },
     ],

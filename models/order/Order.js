@@ -25,7 +25,10 @@ const orderSchema = new mongoose.Schema({
     },
   ],
   total: { type: Number, required: true },
-  address: { type: String, required: true },
+  address: { type: String },
+
+  reservationExpiresAt: { type: Date }, // this helps to delete the document if unsuccesful payment
+  paymentId: { type: String, default: null },
   status: {
     type: String,
     enum: [
@@ -37,13 +40,6 @@ const orderSchema = new mongoose.Schema({
       "failed",
     ],
     default: "pendingPayment",
-  },
-  reservationExpiresAt: { type: Date }, // this helps to delete the document if unsuccesful payment
-  paymentId: { type: mongoose.Schema.Types.ObjectId, ref: "Payment" },
-  paymentStatus: {
-    type: String,
-    enum: ["paid", "failed", "pending"],
-    default: "pending",
   },
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,

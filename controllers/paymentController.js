@@ -1,99 +1,73 @@
-const Razorpay = require("razorpay");
-const crypto = require("crypto");
-const Payment = require("../models/order/Payment"); // adjust path as needed
-const Account = require("../models/account/User");
-const Item = require("../models/item/Item");
+// src/controllers/paymentController.js
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+const Order = require("../models/order/Order");
+const orderUtils = require("../utils/orderUtils");
+const paymentUtils = require("../utils/paymentUtils");
 
-// Utility: Check if cart has any produce item
-async function hasProduceItems(cart) {
-  const itemIds = cart.map((c) => c.itemId);
-  const items = await Item.find({ _id: { $in: itemIds } });
-  return items.some((item) => item.type === "produce");
-}
-
-exports.createOrder = async (req, res) => {
-  try {
-    const { userId } = req.body;
-
-    const user = await Account.findById(userId).populate("cart.itemId");
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const produceExists = await hasProduceItems(user.cart);
-
-    const cartTotal = user.cart.reduce((acc, curr) => {
-      const price = curr.itemId?.price || 0;
-      return acc + price * curr.quantity;
-    }, 0);
-
-    const amountInPaise = cartTotal * 100;
-
-    const options = {
-      amount: amountInPaise,
-      currency: "INR",
-      receipt: `receipt_${Date.now()}`,
-    };
-
-    const razorpayOrder = await razorpay.orders.create(options);
-
-    res.status(200).json({
-      orderId: razorpayOrder.id,
-      amount: amountInPaise,
-      currency: "INR",
-      payMode: produceExists ? "pay_now" : "pay_on_dine_in",
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Payment creation failed" });
-  }
-};
-
-exports.verifyPayment = async (req, res) => {
+/**
+ * POST /payments/verify
+ * Body: {
+ *   razorpay_order_id:   String,
+ *   razorpay_payment_id: String,
+ *   razorpay_signature:  String,
+ *   orderId:             String // your own Order._id
+ * }
+ */
+async function verifyPaymentHandler(req, res, next) {
   try {
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      userId,
+      orderId,
     } = req.body;
 
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(razorpay_order_id + "|" + razorpay_payment_id)
-      .digest("hex");
+    // 1. Validate signature first
+    const isValid = paymentUtils.validateRazorpaySignature({
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    });
 
-    if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ error: "Invalid signature" });
+    if (!isValid) {
+      // If invalid, mark the order as failedPayment (status updated in util)
+      await orderUtils.verifyAndProcessPaymentWithOrderId({
+        razorpay_order_id,
+        razorpay_payment_id,
+        razorpay_signature,
+        ourOrderId: orderId,
+      });
+      return res.status(400).json({
+        success: false,
+        message: "Payment signature verification failed.",
+      });
     }
 
-    const payment = new Payment({
-      orderId: null, // attach actual order ID if applicable
-      userId,
-      amount: req.body.amount / 100,
-      status: "paid",
-      paymentMethod: "razorpay",
-      razorpayOrderId: razorpay_order_id,
-      razorpayPaymentId: razorpay_payment_id,
-    });
+    // 2. Signature is valid → Update Order.status and paymentId (string)
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found." });
+    }
 
-    await payment.save();
+    order.status = "inProgress";
+    order.paymentId = razorpay_payment_id; // assign string directly
+    await order.save();
 
-    // Optionally update user's cart/orders
-    await Account.findByIdAndUpdate(userId, {
-      $push: { pastOrders: payment._id },
-      $set: { cart: [] },
-    });
+    // 3. Run post-payment logic (inventory, user/cart updates, etc.)
+    await orderUtils.postPaymentProcessing(order);
 
-    res.status(200).json({
-      message: "Payment verified successfully",
-      paymentId: payment._id,
+    return res.json({
+      success: true,
+      message: "Payment successful and order processed.",
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Payment verification failed" });
+    console.error("Error in verifyPaymentHandler:", err);
+    return res.status(500).json({ success: false, message: err.message });
   }
+}
+
+module.exports = {
+  verifyPaymentHandler,
 };
