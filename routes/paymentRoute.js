@@ -1,11 +1,10 @@
-const express = require('express');
+// src/routes/paymentRoutes.js
+
+const express = require("express");
 const router = express.Router();
-const paymentController = require('../controllers/paymentController');
+const paymentController = require("../controllers/paymentController");
 
-// Create Razorpay order
-router.post('/create-order', paymentController.createOrder);
-
-// Verify Razorpay payment
-router.post('/verify-payment', paymentController.verifyPayment);
+// Verify Razorpay payment & process post‐payment updates
+router.post("/verify", paymentController.verifyPaymentHandler);
 
 module.exports = router;
