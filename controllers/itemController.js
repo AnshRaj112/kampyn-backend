@@ -174,8 +174,8 @@ exports.getItemsByVendor = async (req, res) => {
   }
 };
 
-//search Items
-exports.searchItems = async (req, res) => {
+// Search vendors by name within uniID
+exports.searchVendorsByName = async (req, res) => {
   const { query, uniID } = req.query;
 
   if (!query || !uniID) {
@@ -185,28 +185,134 @@ exports.searchItems = async (req, res) => {
   try {
     const regex = new RegExp(query, "i"); // case-insensitive partial match
 
+    // Search in both Retail and Produce collections for vendors
+    const [retailVendors, produceVendors] = await Promise.all([
+      Retail.find({
+        uniId: uniID,
+        "vendor.name": regex
+      }).select("vendor.name vendor._id").lean(),
+      
+      Produce.find({
+        uniId: uniID,
+        "vendor.name": regex
+      }).select("vendor.name vendor._id").lean()
+    ]);
+
+    // Combine and deduplicate vendors
+    const vendorMap = new Map();
+    [...retailVendors, ...produceVendors].forEach(item => {
+      if (item.vendor && !vendorMap.has(item.vendor._id.toString())) {
+        vendorMap.set(item.vendor._id.toString(), {
+          _id: item.vendor._id,
+          name: item.vendor.name
+        });
+      }
+    });
+
+    const vendors = Array.from(vendorMap.values());
+    res.status(200).json(vendors);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to search vendors", details: error.message });
+  }
+};
+
+//search Items with enhanced enum matching
+exports.searchItems = async (req, res) => {
+  const { query, uniID, searchByType } = req.query;
+
+  if (!query || !uniID) {
+    return res.status(400).json({ error: "Missing search query or uniID" });
+  }
+
+  try {
+    const regex = new RegExp(query, "i"); // case-insensitive partial match
+
+    // Define retail types
+    const retailTypes = [
+      "biscuits",
+      "chips",
+      "icecream",
+      "drinks",
+      "snacks",
+      "sweets",
+      "nescafe"
+    ];
+
+    // First, find items that match the query directly
     const [retailItems, produceItems] = await Promise.all([
       Retail.find({
         uniId: uniID,
         $or: [
           { name: regex },
-          { type: regex },
-        ],
-      }).select("name price image type"),
+          { type: regex }
+        ]
+      }).select("name price image type").lean(),
       
       Produce.find({
         uniId: uniID,
         $or: [
           { name: regex },
-          { type: regex },
-        ],
-      }).select("name price image type"),
+          { type: regex }
+        ]
+      }).select("name price image type").lean()
     ]);
 
-    const results = [
-      ...retailItems.map((item) => ({ ...item.toObject(), source: "retail" })),
-      ...produceItems.map((item) => ({ ...item.toObject(), source: "produce" })),
-    ];
+    // If we found any items, get their types for enum matching
+    const matchedTypes = new Set();
+    [...retailItems, ...produceItems].forEach(item => {
+      if (item.type) matchedTypes.add(item.type);
+    });
+
+    // If we found matching types and searchByType is true, search for all items with those types
+    let additionalItems = [];
+    if (matchedTypes.size > 0 && searchByType === 'true') {
+      const [additionalRetail, additionalProduce] = await Promise.all([
+        Retail.find({
+          uniId: uniID,
+          type: { $in: Array.from(matchedTypes) }
+        }).select("name price image type").lean(),
+        
+        Produce.find({
+          uniId: uniID,
+          type: { $in: Array.from(matchedTypes) }
+        }).select("name price image type").lean()
+      ]);
+
+      additionalItems = [
+        ...additionalRetail.map(item => ({ ...item, source: "retail", isTypeMatch: true })),
+        ...additionalProduce.map(item => ({ ...item, source: "produce", isTypeMatch: true }))
+      ];
+    }
+
+    // Combine results, ensuring no duplicates and correct source assignment
+    const itemMap = new Map();
+    [...retailItems, ...produceItems].forEach(item => {
+      const key = `${item._id}-${item.type}`;
+      if (!itemMap.has(key)) {
+        // Determine source based on type
+        const isRetailType = retailTypes.includes(item.type.toLowerCase());
+        itemMap.set(key, {
+          ...item,
+          source: isRetailType ? "retail" : "produce",
+          isTypeMatch: false
+        });
+      }
+    });
+
+    // Add additional items (type matches) if they don't already exist
+    additionalItems.forEach(item => {
+      const key = `${item._id}-${item.type}`;
+      if (!itemMap.has(key)) {
+        // Determine source based on type for additional items
+        const isRetailType = retailTypes.includes(item.type.toLowerCase());
+        itemMap.set(key, {
+          ...item,
+          source: isRetailType ? "Retail" : "Produce"
+        });
+      }
+    });
+
+    const results = Array.from(itemMap.values());
 
     res.status(200).json(results);
   } catch (error) {
