@@ -1,6 +1,7 @@
 // src/controllers/paymentController.js
 
 const Order = require("../models/order/Order");
+const Payment = require("../models/order/Payment"); // ← import the Payment model
 const orderUtils = require("../utils/orderUtils");
 const paymentUtils = require("../utils/paymentUtils");
 
@@ -10,7 +11,7 @@ const paymentUtils = require("../utils/paymentUtils");
  *   razorpay_order_id:   String,
  *   razorpay_payment_id: String,
  *   razorpay_signature:  String,
- *   orderId:             String // your own Order._id
+ *   orderId:             String // our own Order._id
  * }
  */
 async function verifyPaymentHandler(req, res, next) {
@@ -22,7 +23,7 @@ async function verifyPaymentHandler(req, res, next) {
       orderId,
     } = req.body;
 
-    // 1. Validate signature first
+    // 1. Validate the Razorpay signature
     const isValid = paymentUtils.validateRazorpaySignature({
       razorpay_order_id,
       razorpay_payment_id,
@@ -30,7 +31,7 @@ async function verifyPaymentHandler(req, res, next) {
     });
 
     if (!isValid) {
-      // If invalid, mark the order as failedPayment (status updated in util)
+      // If invalid, mark the order as failedPayment
       await orderUtils.verifyAndProcessPaymentWithOrderId({
         razorpay_order_id,
         razorpay_payment_id,
@@ -43,7 +44,7 @@ async function verifyPaymentHandler(req, res, next) {
       });
     }
 
-    // 2. Signature is valid → Update Order.status and paymentId (string)
+    // 2. Signature is valid → fetch the Order
     const order = await Order.findById(orderId);
     if (!order) {
       return res
@@ -51,16 +52,35 @@ async function verifyPaymentHandler(req, res, next) {
         .json({ success: false, message: "Order not found." });
     }
 
+    // 3. Create a new Payment document in the payment collection:
+    //    • orderId → reference to the Order._id
+    //    • userId  → comes from order.userId
+    //    • amount  → the order’s total
+    //    • status  → "paid"
+    //    • paymentMethod → "razorpay"
+    //    • razorpayOrderId, razorpayPaymentId → from Razorpay
+    const paymentDoc = await Payment.create({
+      orderId: order._id,
+      userId: order.userId,
+      amount: order.total,
+      status: "paid",
+      paymentMethod: "razorpay",
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+    });
+
+    // 4. Update the Order to store this payment’s ObjectId and set status = "inProgress"
     order.status = "inProgress";
-    order.paymentId = razorpay_payment_id; // assign string directly
+    order.paymentId = paymentDoc._id;
     await order.save();
 
-    // 3. Run post-payment logic (inventory, user/cart updates, etc.)
+    // 5. Run post-payment logic (inventory updates, user.cart → pastOrders, vendor.activeOrders, etc.)
     await orderUtils.postPaymentProcessing(order);
 
     return res.json({
       success: true,
-      message: "Payment successful and order processed.",
+      message:
+        "Payment successful, Payment record created, and order processed.",
     });
   } catch (err) {
     console.error("Error in verifyPaymentHandler:", err);
