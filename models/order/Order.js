@@ -6,7 +6,7 @@ const orderSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   orderType: {
     type: String,
-    enum: ["takeaway", "delivery", "dinein"],
+    enum: ["takeaway", "delivery", "dinein", "cash"],
     required: true,
   },
   collectorName: { type: String, required: true },
@@ -28,7 +28,11 @@ const orderSchema = new mongoose.Schema({
   address: { type: String },
 
   reservationExpiresAt: { type: Date }, // this helps to delete the document if unsuccesful payment
-  paymentId: { type: String, default: null },
+  paymentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Payment",
+    default: null,
+  },
   status: {
     type: String,
     enum: [

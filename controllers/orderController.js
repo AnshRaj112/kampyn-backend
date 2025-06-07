@@ -4,22 +4,43 @@ const orderUtils = require("../utils/orderUtils");
 
 /**
  * POST /orders/:userId
- * We expect the client to send the userId as a URL‐param.
- * E.g. POST http://localhost:5001/orders/6838db6c9e28f2f94e11b9d2
+ * Expects:
+ *   URL param:  userId
+ *   Body JSON:
+ *     {
+ *       orderType:       "takeaway" | "delivery" | "dinein",
+ *       collectorName:   String,
+ *       collectorPhone:  String,
+ *       address?:        String   // required if orderType === "delivery"
+ *     }
  */
 async function placeOrderHandler(req, res) {
   try {
-    // Extract the string userId from req.params
     const { userId } = req.params;
+    const { orderType, collectorName, collectorPhone, address } = req.body;
 
-    // Now pass that string (e.g. "6838db6c9e28f2f94e11b9d2") into your util
-    const { orderId, razorpayOrderOptions } =
-      await orderUtils.createOrderForUser(userId);
+    // Basic validation: ensure those fields exist
+    if (!orderType || !collectorName || !collectorPhone) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "orderType, collectorName, and collectorPhone are required in the request body.",
+      });
+    }
+
+    // Call createOrderForUser with the new signature
+    const { orderId, razorpayOptions } = await orderUtils.createOrderForUser({
+      userId,
+      orderType,
+      collectorName,
+      collectorPhone,
+      address, // may be undefined if not delivery
+    });
 
     return res.status(201).json({
       success: true,
       orderId,
-      razorpayOptions: razorpayOrderOptions,
+      razorpayOptions,
     });
   } catch (err) {
     console.error("Error in placeOrderHandler:", err);
