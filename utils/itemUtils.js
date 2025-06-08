@@ -89,13 +89,13 @@ async function getItemsForVendorId(vendorId) {
       _id: { $in: retailItemIds.map(toObjectId) },
       uniId: vendor.uniID,
     })
-      .select("name price") // only name & price
+      .select("name price image type")
       .lean(),
     Produce.find({
       _id: { $in: produceItemIds.map(toObjectId) },
       uniId: vendor.uniID,
     })
-      .select("name price") // only name & price
+      .select("name price image type")
       .lean(),
   ]);
 
@@ -114,6 +114,8 @@ async function getItemsForVendorId(vendorId) {
         name: doc.name,
         price: doc.price,
         quantity, // how many units left
+        image: doc.image,
+        type: doc.type
       };
     })
     .filter(Boolean);
@@ -127,6 +129,8 @@ async function getItemsForVendorId(vendorId) {
         itemId: doc._id,
         name: doc.name,
         price: doc.price,
+        image: doc.image,
+        type: doc.type
       };
     })
     .filter(Boolean);
@@ -149,7 +153,7 @@ async function getItemsForVendorId(vendorId) {
  *      • Pull out only the relevant inventory field (quantity or isAvailable)
  *      • Return an array of { vendorId, vendorName, uniID, inventoryValue }.
  *
- * We only select “fullName” + “uniID” + the inventory array field needed, so the DB reads minimal data.
+ * We only select "fullName" + "uniID" + the inventory array field needed, so the DB reads minimal data.
  */
 async function getVendorsByItemId(itemKind, itemId) {
   if (!["retail", "produce"].includes(itemKind)) {
