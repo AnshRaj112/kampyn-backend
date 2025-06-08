@@ -3,8 +3,12 @@ const { Cluster_Inventory } = require("../../config/db");
 
 const inventoryReportSchema = new mongoose.Schema(
   {
-    vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },
-    date: { type: Date, default: Date.now },
+    vendorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Vendor",
+      required: true,
+    },
+    date: { type: Date, default: Date.now, required: true },
 
     retailEntries: [
       {
@@ -41,8 +45,8 @@ const inventoryReportSchema = new mongoose.Schema(
         },
         kind: { type: String, enum: ["Retail", "Produce", "Raw"] },
         quantity: Number,
-        _id: false,
         date: { type: Date, default: Date.now },
+        _id: false,
       },
     ],
 
@@ -50,17 +54,21 @@ const inventoryReportSchema = new mongoose.Schema(
       {
         itemId: {
           type: mongoose.Schema.Types.ObjectId,
-          refPath: "itemProduced.kind",
+          refPath: "itemSend.kind",
         },
         kind: { type: String, enum: ["Retail", "Produce", "Raw"] },
         quantity: Number,
-        _id: false,
         date: { type: Date, default: Date.now },
+        _id: false,
       },
     ],
   },
-  { timestamps: true } // correct place for this
+  { timestamps: true }
 );
+
+// Now build the correct unique index on vendorId + date:
+inventoryReportSchema.index({ vendorId: 1, date: 1 }, { unique: true });
+
 const InventoryReport = Cluster_Inventory.model(
   "InventoryReport",
   inventoryReportSchema
