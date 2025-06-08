@@ -15,7 +15,7 @@ const favouriteRoutes = require("./routes/favouriteRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const paymentRoutes = require("./routes/paymentRoute");
-
+const inventoryReportRoutes = require("./routes/inventoryReportRoutes");
 const app = express();
 
 app.use(express.json()); // ✅ Parses incoming JSON data
@@ -53,7 +53,7 @@ app.use("/fav", favouriteRoutes);
 app.use("/order", orderRoutes);
 app.use("/payment", paymentRoutes);
 app.use("/api/vendor", vendorRoutes);
-
+app.use("/inventoryreport", inventoryReportRoutes);
 // ✅ Global error handling
 app.use((err, req, res, next) => {
   console.error("🔥 Server Error:", err);
