@@ -278,8 +278,77 @@ async function postPaymentProcessing(orderDoc) {
   );
 }
 
+/**
+ * Fetches all in-progress orders for a vendor (and optional type),
+ * populating item details *in two queries* instead of N per-item calls.
+ */
+async function getOrdersWithDetails(vendorId, orderType) {
+  // 1) Fetch the orders
+  const filter = { vendorId, status: "inProgress" };
+  if (orderType) filter.orderType = orderType;
+  const orders = await Order.find(filter, {
+    orderType: 1,
+    status: 1,
+    collectorName: 1,
+    collectorPhone: 1,
+    items: 1,
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (orders.length === 0) return [];
+
+  // 2) Gather all itemIds by kind
+  const retailIds = new Set();
+  const produceIds = new Set();
+  orders.forEach((o) =>
+    o.items.forEach(({ itemId, kind }) =>
+      (kind === "Retail" ? retailIds : produceIds).add(itemId.toString())
+    )
+  );
+
+  // 3) Batch-fetch details in parallel
+  const [retails, produces] = await Promise.all([
+    Retail.find({ _id: { $in: [...retailIds] } }, "name price unit").lean(),
+    Produce.find({ _id: { $in: [...produceIds] } }, "name price unit").lean(),
+  ]);
+
+  // 4) Build lookup maps
+  const retailMap = Object.fromEntries(
+    retails.map((r) => [r._id.toString(), r])
+  );
+  const produceMap = Object.fromEntries(
+    produces.map((p) => [p._id.toString(), p])
+  );
+
+  // 5) Assemble each order’s detailed items
+  return orders.map((order) => {
+    const detailedItems = order.items.map(({ itemId, kind, quantity }) => {
+      const key = itemId.toString();
+      const doc = kind === "Retail" ? retailMap[key] : produceMap[key];
+      return {
+        name: doc.name,
+        price: doc.price,
+        unit: doc.unit,
+        type: kind.toLowerCase(),
+        quantity,
+      };
+    });
+
+    return {
+      orderId: order._id,
+      orderType: order.orderType,
+      status: order.status,
+      collectorName: order.collectorName,
+      collectorPhone: order.collectorPhone,
+      items: detailedItems,
+    };
+  });
+}
+
 module.exports = {
   createOrderForUser,
   verifyAndProcessPaymentWithOrderId,
   postPaymentProcessing,
+  getOrdersWithDetails,
 };
