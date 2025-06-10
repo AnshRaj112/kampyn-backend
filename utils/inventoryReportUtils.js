@@ -117,34 +117,41 @@ async function generateDailyReportForUni(uniId, targetDate = new Date()) {
   };
 }
 /**
- * Fetches a full report for one vendor+date, plus vendor name.
+ * Fetches a full report for one vendor+date, always returning vendor details.
+ * If no report exists for the given date, returns an object with vendor info and an error message.
  */
-
 async function getInventoryReport(vendorId, forDate) {
   const vendorObjectId = new mongoose.Types.ObjectId(vendorId);
+
+  // 1) Always fetch vendor name first
+  const vendor = await Vendor.findById(vendorObjectId)
+    .lean()
+    .select("fullName");
+  if (!vendor) throw new Error(`Vendor not found: ${vendorId}`);
+
   const dayStart = startOfDay(forDate);
   const dayEnd = endOfDay(forDate);
 
-  // 1) Find _any_ document on that day
+  // 2) Try to find any document on that day
   const report = await InventoryReport.findOne({
     vendorId: vendorObjectId,
     date: { $gte: dayStart, $lte: dayEnd },
   }).lean();
+
   if (!report) {
-    throw new Error(
-      `No inventory report found for vendor ${vendorId} on ${dayStart
+    // Return vendor info and error instead of throwing
+    return {
+      vendor: { _id: vendor._id, fullName: vendor.fullName },
+      error: `No inventory report found for vendor ${vendorId} on ${dayStart
         .toISOString()
-        .slice(0, 10)}`
-    );
+        .slice(0, 10)}`,
+    };
   }
 
-  // 2) Manually fetch vendor name
-  const vendor = await Vendor.findById(vendorObjectId)
-    .lean()
-    .select("fullName");
+  // 3) Attach vendor info
   report.vendor = { _id: vendor._id, fullName: vendor.fullName };
 
-  // 3) Resolve item names for retailEntries
+  // 4) Resolve item names for retailEntries
   if (report.retailEntries?.length) {
     const ids = report.retailEntries.map((e) => e.item);
     const docs = await Retail.find({ _id: { $in: ids } })
@@ -159,7 +166,7 @@ async function getInventoryReport(vendorId, forDate) {
     }));
   }
 
-  // 4) Resolve produceEntries similarly
+  // 5) Resolve produceEntries similarly
   if (report.produceEntries?.length) {
     const ids = report.produceEntries.map((e) => e.item);
     const docs = await Produce.find({ _id: { $in: ids } })
