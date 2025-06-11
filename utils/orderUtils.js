@@ -296,6 +296,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
     collectorName: 1,
     collectorPhone: 1,
     items: 1,
+    createdAt: 1,
   })
     .sort({ createdAt: -1 })
     .lean();
