@@ -16,6 +16,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const paymentRoutes = require("./routes/paymentRoute");
 const inventoryReportRoutes = require("./routes/inventoryReportRoutes");
+//const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
 app.use(express.json()); // ✅ Parses incoming JSON data
@@ -54,6 +55,8 @@ app.use("/order", orderRoutes);
 app.use("/payment", paymentRoutes);
 app.use("/api/vendor", vendorRoutes);
 app.use("/inventoryreport", inventoryReportRoutes);
+//app.use("/temp", tempRoutes);
+
 // ✅ Global error handling
 app.use((err, req, res, next) => {
   console.error("🔥 Server Error:", err);
