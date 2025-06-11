@@ -137,3 +137,23 @@ exports.deliverOrder = async (req, res) => {
     return res.status(500).json({ message: "Server error." });
   }
 };
+
+/**
+ * Move an order from completed ➔ onTheWay
+ */
+exports.startDelivery = async (req, res) => {
+  const { orderId } = req.params;
+  try {
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      { status: "onTheWay" },
+      { new: true }
+    );
+    if (!order)
+      return res.status(404).json({ success: false, message: "Not found" });
+    res.json({ success: true, data: order });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
