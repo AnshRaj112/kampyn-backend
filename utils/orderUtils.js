@@ -284,7 +284,11 @@ async function postPaymentProcessing(orderDoc) {
  */
 async function getOrdersWithDetails(vendorId, orderType) {
   // 1) Fetch the orders
-  const filter = { vendorId, status: "inProgress" };
+  const filter = {
+    vendorId,
+    status: { $in: ["completed", "inProgress"] },
+  };
+
   if (orderType) filter.orderType = orderType;
   const orders = await Order.find(filter, {
     orderType: 1,
@@ -292,6 +296,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
     collectorName: 1,
     collectorPhone: 1,
     items: 1,
+    createdAt: 1,
   })
     .sort({ createdAt: -1 })
     .lean();
@@ -339,6 +344,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
       orderId: order._id,
       orderType: order.orderType,
       status: order.status,
+      createdAt: order.createdAt,
       collectorName: order.collectorName,
       collectorPhone: order.collectorPhone,
       items: detailedItems,
