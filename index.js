@@ -23,19 +23,45 @@ app.use(express.json()); // ✅ Parses incoming JSON data
 app.use(express.urlencoded({ extended: true })); // ✅ Parses form data
 
 // ✅ Load environment variables
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+// const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const PORT = process.env.PORT || 5001;
 
+// Get all allowed origins from environment variables
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL_2,
+  process.env.FRONTEND_URL_3,
+  process.env.FRONTEND_URL_4,
+  process.env.FRONTEND_URL_5
+]
+  .filter(Boolean) // Remove any undefined/null values
+  .map(url => url.trim()) // Remove any whitespace
+  .reduce((acc, url) => {
+    // If the URL is localhost, add both http and https versions
+    if (url.includes('localhost')) {
+      acc.push(url.replace('http://', 'https://'));
+      acc.push(url.replace('https://', 'http://'));
+    }
+    acc.push(url);
+    return acc;
+  }, []);
+
 // ✅ Fix CORS issues: Use a single instance
-app.use(
-  cors({
-    origin: [FRONTEND_URL],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
-    exposedHeaders: ["Content-Range", "X-Content-Range"],
-  })
-);
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked for origin:', origin);
+      console.log('Allowed origins:', allowedOrigins);
+      callback(new Error("CORS not allowed: " + origin));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  exposedHeaders: ["Content-Range", "X-Content-Range"],
+}));
 
 // ✅ Ensure MONGO_URL exists
 
@@ -76,6 +102,6 @@ if (process.env.NODE_ENV === "production") {
 // ✅ Start Server
 app.listen(PORT, () =>
   console.log(
-    `🚀 Server running on port ${PORT}, allowing frontend from ${FRONTEND_URL}`
+    `🚀 Server running on port ${PORT}`
   )
 );
