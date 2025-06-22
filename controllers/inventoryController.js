@@ -53,12 +53,10 @@ exports.addInventory = async (req, res) => {
         return res.status(404).json({ message: "Retail item not found" });
 
       if (!validateSameUniversity(vendor, item)) {
-        return res
-          .status(403)
-          .json({
-            message:
-              "Retail item does not belong to the same university as the vendor",
-          });
+        return res.status(403).json({
+          message:
+            "Retail item does not belong to the same university as the vendor",
+        });
       }
 
       const existingRetail = vendor.retailInventory.find(
@@ -95,12 +93,10 @@ exports.addInventory = async (req, res) => {
         return res.status(404).json({ message: "Produce item not found" });
 
       if (!validateSameUniversity(vendor, item)) {
-        return res
-          .status(403)
-          .json({
-            message:
-              "Produce item does not belong to the same university as the vendor",
-          });
+        return res.status(403).json({
+          message:
+            "Produce item does not belong to the same university as the vendor",
+        });
       }
 
       const status = isAvailable === "Y" ? "Y" : "N";
@@ -144,12 +140,10 @@ exports.reduceRetailInventory = async (req, res) => {
       return res.status(404).json({ message: "Retail item not found" });
 
     if (!validateSameUniversity(vendor, item)) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Retail item does not belong to the same university as the vendor",
-        });
+      return res.status(403).json({
+        message:
+          "Retail item does not belong to the same university as the vendor",
+      });
     }
 
     const existingRetail = vendor.retailInventory.find(

@@ -2,6 +2,14 @@ const express = require("express");
 const router = express.Router();
 const itemController = require("../controllers/itemController");
 
+router.get(
+  "/getvendors/:vendorId/retail",
+  itemController.getRetailItemsByVendor
+);
+router.get(
+  "/getvendors/:vendorId/produce",
+  itemController.getProduceItemsByVendor
+);
 // Add a new item in a category (retail/produce)
 router.post("/:category", itemController.addItem);
 

@@ -115,7 +115,7 @@ async function getItemsForVendorId(vendorId) {
         price: doc.price,
         quantity, // how many units left
         image: doc.image,
-        type: doc.type
+        type: doc.type,
       };
     })
     .filter(Boolean);
@@ -130,7 +130,7 @@ async function getItemsForVendorId(vendorId) {
         name: doc.name,
         price: doc.price,
         image: doc.image,
-        type: doc.type
+        type: doc.type,
       };
     })
     .filter(Boolean);
@@ -209,7 +209,85 @@ async function getVendorsByItemId(itemKind, itemId) {
   return results;
 }
 
+async function getRetailItemsForVendorId(vendorId) {
+  const vOid = toObjectId(vendorId);
+  const vendor = await Vendor.findById(vOid)
+    .select("fullName uniID retailInventory")
+    .lean();
+  if (!vendor) throw new Error(`Vendor ${vendorId} not found.`);
+  await assertVendorAvailableInUni(vOid, vendor.uniID);
+
+  const retailEntries = (vendor.retailInventory || []).filter(
+    (e) => e.quantity > -1
+  );
+  const retailItemIds = retailEntries.map((e) => String(e.itemId));
+
+  const retailDocs = await Retail.find({
+    _id: { $in: retailItemIds.map(toObjectId) },
+    uniId: vendor.uniID,
+  })
+    .select("name price isSpecial type")
+    .lean();
+
+  const retailMap = new Map(retailDocs.map((d) => [String(d._id), d]));
+  const retailItems = retailEntries
+    .map(({ itemId, quantity }) => {
+      const doc = retailMap.get(String(itemId));
+      if (!doc) return null;
+      return {
+        itemId: doc._id,
+        name: doc.name,
+        price: doc.price,
+        quantity,
+        type: doc.type,
+        isSpecial: doc.isSpecial,
+      };
+    })
+    .filter(Boolean);
+
+  return { foodCourtName: vendor.fullName, retailItems };
+}
+
+// Utility to fetch only produce items for a given vendor
+async function getProduceItemsForVendorId(vendorId) {
+  const vOid = toObjectId(vendorId);
+  const vendor = await Vendor.findById(vOid)
+    .select("fullName uniID produceInventory")
+    .lean();
+  if (!vendor) throw new Error(`Vendor ${vendorId} not found.`);
+  await assertVendorAvailableInUni(vOid, vendor.uniID);
+
+  const produceEntries = vendor.produceInventory;
+  const produceItemIds = produceEntries.map((e) => String(e.itemId));
+
+  const produceDocs = await Produce.find({
+    _id: { $in: produceItemIds.map(toObjectId) },
+    uniId: vendor.uniID,
+  })
+    .select("name price isSpecial type")
+    .lean();
+
+  const produceMap = new Map(produceDocs.map((d) => [String(d._id), d]));
+  const produceItems = produceEntries
+    .map(({ itemId, isAvailable }) => {
+      const doc = produceMap.get(String(itemId));
+      if (!doc) return null;
+      return {
+        itemId: doc._id,
+        name: doc.name,
+        price: doc.price,
+        isAvailable,
+        type: doc.type,
+        isSpecial: doc.isSpecial,
+      };
+    })
+    .filter(Boolean);
+
+  return { foodCourtName: vendor.fullName, produceItems };
+}
 module.exports = {
   getItemsForVendorId,
   getVendorsByItemId,
+  getRetailItemsForVendorId,
+  getProduceItemsForVendorId,
 };
