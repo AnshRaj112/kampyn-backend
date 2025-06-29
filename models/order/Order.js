@@ -3,6 +3,12 @@ const { Cluster_Order } = require("../../config/db");
 const { Cluster_Accounts } = require("../../config/db");
 
 const orderSchema = new mongoose.Schema({
+  // Custom order number for better user experience (unique across all orders)
+  orderNumber: {
+    type: String,
+    unique: true,
+    required: true,
+  },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   orderType: {
     type: String,
@@ -52,8 +58,19 @@ const orderSchema = new mongoose.Schema({
   },
   createdAt: { type: Date, default: Date.now },
 });
+
+// Ensure _id is unique (MongoDB default, but explicit for clarity)
+orderSchema.index({ _id: 1 }, { unique: true });
+
+// Existing indexes
 orderSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
 orderSchema.index({ userId: 1, status: 1, createdAt: -1 });
 orderSchema.index({ status: 1, reservationExpiresAt: 1 });
+
+// Prevent duplicate pending orders from same user at same time
+orderSchema.index({ userId: 1, status: 1, createdAt: 1 }, { 
+  unique: true, 
+  partialFilterExpression: { status: "pendingPayment" } 
+});
 
 module.exports = Cluster_Order.model("Order", orderSchema);
