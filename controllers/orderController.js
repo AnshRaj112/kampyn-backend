@@ -98,16 +98,10 @@ exports.completeOrder = async (req, res) => {
         .json({ message: "No active in-progress order found." });
     }
 
-    // Move order from activeOrders to pastOrders when completed
-    await User.updateOne(
-      { _id: result.userId },
-      {
-        $pull: { activeOrders: result._id },
-        $push: { pastOrders: result._id },
-      }
-    );
+    // Orders stay in activeOrders until delivered
+    // Only move to pastOrders when status becomes "delivered"
 
-    return res.json({ message: "Order marked as completed and moved to past orders." });
+    return res.json({ message: "Order marked as completed." });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Server error." });
