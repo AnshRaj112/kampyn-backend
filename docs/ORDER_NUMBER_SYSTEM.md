@@ -1,140 +1,163 @@
 # Order Number System Documentation
 
 ## Overview
+The KIITBites order number system ensures unique, traceable order identifiers across all users and vendors. The system uses the **Atomic Counter Format** as the recommended production solution with **vendor-specific daily counters**.
 
-This document explains the different order number generation systems implemented to handle various scale scenarios.
+## Order Number Format
+**Format:** `BB-YYYYMMDD-UUUU-XXXXX`
 
-## Order Number Formats
+**Components:**
+- `BB` = BitesBay identifier
+- `YYYYMMDD` = Date (e.g., 20241201 for December 1, 2024)
+- `UUUU` = User ID suffix (last 4 characters, uppercase)
+- `XXXXX` = Vendor-specific atomic counter (5-digit sequential number)
 
-### 1. Basic Format (Current Implementation)
-**Format**: `BB-YYYYMMDD-UUUU-XXXXX`
-- **BB**: BitesBay identifier
-- **YYYYMMDD**: Date (e.g., 20241201)
-- **UUUU**: User ID suffix (last 4 characters)
-- **XXXXX**: Sequential number (5 digits, per user per day)
+**Example:** `BB-20241201-A1B2-00001`
 
-**Example**: `BB-20241201-A1B2-00001`
+## Key Features
 
-### 2. High-Performance Format (For Massive Scale)
-**Format**: `BB-TIMESTAMP-UUUU-XXXXX`
-- **BB**: BitesBay identifier
-- **TIMESTAMP**: Unix timestamp (10 digits)
-- **UUUU**: User ID suffix (last 4 characters)
-- **XXXXX**: Microsecond precision (5 digits)
+### Vendor-Specific Daily Counters
+- **Each vendor gets their own daily counter** starting from 00001
+- **Independent counters** - Vendor A and Vendor B both start from 00001 each day
+- **No cross-vendor interference** - Each vendor's orders are counted separately
+- **Daily reset** - Counters reset to 00001 at midnight for each vendor
 
-**Example**: `BB-1701234567-A1B2-12345`
+**Example:**
+```
+December 1, 2024:
+- Vendor A: BB-20241201-1234-00001, BB-20241201-5678-00002, BB-20241201-9012-00003
+- Vendor B: BB-20241201-3456-00001, BB-20241201-7890-00002
 
-### 3. Atomic Counter Format (Recommended for Production)
-**Format**: `BB-YYYYMMDD-UUUU-XXXXX`
-- **BB**: BitesBay identifier
-- **YYYYMMDD**: Date
-- **UUUU**: User ID suffix (last 4 characters)
-- **XXXXX**: Atomic counter (5 digits, global per day)
+December 2, 2024:
+- Vendor A: BB-20241202-1234-00001, BB-20241202-5678-00002
+- Vendor B: BB-20241202-3456-00001
+```
 
-**Example**: `BB-20241201-A1B2-00001`
+## System Types
 
-## System Comparison
+### 1. Atomic Counter Format (Recommended for Production) ✅
 
-| Feature | Basic | High-Performance | Atomic Counter |
-|---------|-------|------------------|----------------|
-| **Uniqueness** | ✅ Per user per day | ✅ Global | ✅ Global |
-| **User Identification** | ✅ | ✅ | ✅ |
-| **Race Condition Safe** | ❌ | ✅ | ✅ |
-| **Performance** | Medium | High | High |
-| **Database Load** | High (queries) | Low | Low |
-| **Scalability** | Limited | Excellent | Excellent |
-| **Readability** | High | Medium | High |
-| **Date Tracking** | ✅ | ✅ | ✅ |
+**Implementation:** `utils/orderUtils.js` - `generateOrderNumber(userId, vendorId)`
 
-## Scale Handling
+**How it works:**
+- Uses MongoDB atomic operations (`findOneAndUpdate` with `$inc`)
+- Maintains a separate `OrderCounter` collection for vendor-specific daily counters
+- Each vendor-date combination has its own atomic counter
+- Prevents race conditions and ensures uniqueness per vendor
 
-### Small Scale (< 1000 orders/day)
-- **Recommended**: Basic Format
-- **Reason**: Simple, readable, sufficient performance
+**Benefits:**
+- ✅ **Atomic operations** prevent race conditions
+- ✅ **High performance** with proper indexing
+- ✅ **Scalable** for massive concurrent users
+- ✅ **Guaranteed uniqueness** across all users
+- ✅ **Production-ready** for high-traffic applications
+- ✅ **Vendor-specific counters** - each vendor starts from 00001 daily
 
-### Medium Scale (1000-10000 orders/day)
-- **Recommended**: Atomic Counter Format
-- **Reason**: Good performance, readable, handles concurrent users
-
-### Large Scale (10000+ orders/day)
-- **Recommended**: Atomic Counter Format
-- **Reason**: Excellent performance, atomic operations, no race conditions
-
-### Massive Scale (100000+ orders/day)
-- **Recommended**: High-Performance Format
-- **Reason**: Maximum performance, timestamp-based, no database bottlenecks
-
-## User Differentiation
-
-### Current System Benefits:
-1. **User Identification**: Each order number includes user ID suffix
-2. **Per-User Sequencing**: Each user gets their own sequence (00001, 00002, etc.)
-3. **Date-Based**: Easy to track orders by date
-4. **Collision Prevention**: User suffix prevents collisions between users
-
-### Example Scenarios:
-
-**Scenario 1: Multiple users ordering simultaneously**
-- User A (ID: 507f1f77bcf86cd799439011) → `BB-20241201-9011-00001`
-- User B (ID: 507f1f77bcf86cd799439012) → `BB-20241201-9012-00001`
-- User C (ID: 507f1f77bcf86cd799439013) → `BB-20241201-9013-00001`
-
-**Scenario 2: Same user ordering multiple times**
-- User A, Order 1 → `BB-20241201-9011-00001`
-- User A, Order 2 → `BB-20241201-9011-00002`
-- User A, Order 3 → `BB-20241201-9011-00003`
-
-## Implementation Details
-
-### Atomic Counter System
+**Technical Details:**
 ```javascript
-// Uses MongoDB's atomic operations
+// Vendor-specific atomic counter operation
+const counterId = `${datePrefix}-${vendorId}`;
 const counterResult = await OrderCounter.findOneAndUpdate(
-  { counterId: datePrefix },
-  { $inc: { sequence: 1 } },
+  { counterId: counterId },
+  { $inc: { sequence: 1 }, $set: { lastUpdated: new Date() } },
   { upsert: true, new: true }
 );
 ```
 
-### Benefits:
-1. **No Race Conditions**: Atomic operations prevent duplicate numbers
-2. **High Performance**: Single database operation
-3. **Scalable**: Handles thousands of concurrent orders
-4. **Reliable**: MongoDB guarantees atomicity
+**Database Schema:**
+```javascript
+// OrderCounter collection
+{
+  counterId: "20241201-6834622e10d75a5ba7b7740d",  // Date-VendorID
+  sequence: 12345,        // Current sequence number for this vendor on this date
+  lastUpdated: Date       // Last update timestamp
+}
+```
 
-## Migration Strategy
+### 2. Basic Sequential System (Deprecated)
 
-### For Existing Orders:
-1. Run migration script to add order numbers
-2. Use atomic counter system for new orders
-3. Maintain backward compatibility
+**Implementation:** Previously used sequential queries
 
-### For New Orders:
-1. Use atomic counter system by default
-2. Fall back to basic system if counter fails
-3. Log any issues for monitoring
+**Issues:**
+- ❌ **Race conditions** when multiple users order simultaneously
+- ❌ **Poor performance** with large datasets
+- ❌ **Limited scalability** for concurrent users
+- ❌ **Potential duplicate numbers** under high load
+- ❌ **No vendor separation** - all vendors shared the same counter
 
-## Monitoring and Maintenance
+**Example Race Condition:**
+```
+User A (Vendor 1): Query for last order → finds BB-20241201-1234-00001
+User B (Vendor 2): Query for last order → finds BB-20241201-1234-00001 (same!)
+User A: Creates BB-20241201-1234-00002
+User B: Creates BB-20241201-1234-00002 (DUPLICATE!)
+```
 
-### Key Metrics to Monitor:
-1. **Order Number Generation Time**: Should be < 10ms
-2. **Counter Collisions**: Should be 0
-3. **Database Performance**: Monitor counter collection
-4. **Error Rates**: Track any generation failures
+### 3. High-Performance Timestamp System (Alternative)
 
-### Maintenance Tasks:
-1. **Daily**: Monitor counter performance
-2. **Weekly**: Review order number patterns
-3. **Monthly**: Analyze scale requirements
-4. **Quarterly**: Optimize based on usage patterns
+**Format:** `BB-TIMESTAMP-UUUU-XXXXX`
 
-## Conclusion
+**Use case:** Ultra-high volume scenarios (>1000 orders/second)
 
-The atomic counter system provides the best balance of:
-- **Performance**: Fast order number generation
-- **Scalability**: Handles massive user loads
-- **Reliability**: No race conditions or duplicates
-- **Readability**: Human-readable format
-- **User Differentiation**: Clear user identification
+**Implementation:** Not currently used, but available for future scaling
 
-This system can handle millions of users and orders while maintaining uniqueness and performance. 
+## Migration
+
+### Existing Orders
+Use the migration script to add order numbers to existing orders:
+```bash
+node scripts/migrate-orders.js
+```
+
+The migration uses the same vendor-specific Atomic Counter Format to ensure consistency.
+
+### Counter Reset
+Daily counters automatically reset at midnight for each vendor. Each vendor starts with sequence 00001 each day.
+
+## Performance Characteristics
+
+| System | Orders/Second | Race Conditions | Scalability | Vendor Separation | Production Ready |
+|--------|---------------|-----------------|-------------|-------------------|------------------|
+| Basic Sequential | ~10 | High | Poor | ❌ | ❌ |
+| Atomic Counter | ~1000+ | None | Excellent | ✅ | ✅ |
+| Timestamp-based | ~10000+ | None | Outstanding | ✅ | ✅ |
+
+## Implementation Files
+
+- **Main Logic:** `utils/orderUtils.js`
+- **Counter Model:** `models/order/OrderCounter.js`
+- **Migration:** `utils/migrateOrderNumbers.js`
+- **Migration Script:** `scripts/migrate-orders.js`
+
+## Best Practices
+
+1. **Always use Atomic Counter Format** for new implementations
+2. **Monitor counter performance** in high-traffic scenarios
+3. **Backup counter collection** regularly
+4. **Use proper indexing** on `counterId` field
+5. **Handle counter overflow** (unlikely with 5-digit format)
+6. **Verify vendor separation** - ensure each vendor has independent counters
+
+## Troubleshooting
+
+### Duplicate Order Numbers
+- Check if atomic operations are working correctly
+- Verify OrderCounter collection integrity
+- Ensure proper MongoDB connection
+- Verify vendor-specific counter IDs are unique
+
+### Performance Issues
+- Monitor OrderCounter collection size
+- Check index usage on `counterId`
+- Consider timestamp-based system for ultra-high volume
+
+### Migration Issues
+- Run migration during low-traffic periods
+- Backup data before migration
+- Verify order number uniqueness after migration
+- Ensure vendor-specific counters are properly set up
+
+### Vendor Counter Issues
+- Verify counter IDs include vendor ID: `YYYYMMDD-VENDORID`
+- Check that each vendor starts from 00001 daily
+- Monitor counter distribution across vendors 

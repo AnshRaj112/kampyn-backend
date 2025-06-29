@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const { Cluster_Order } = require("../../config/db");
 
 const orderCounterSchema = new mongoose.Schema({
-  // Counter identifier: "YYYYMMDD" for daily counters
+  // Counter identifier: "YYYYMMDD-VENDORID" for vendor-specific daily counters
   counterId: {
     type: String,
     required: true,
