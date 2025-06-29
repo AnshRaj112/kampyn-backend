@@ -326,7 +326,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
     produces.map((p) => [p._id.toString(), p])
   );
 
-  // 5) Assemble each order’s detailed items
+  // 5) Assemble each order's detailed items
   return orders.map((order) => {
     const detailedItems = order.items.map(({ itemId, kind, quantity }) => {
       const key = itemId.toString();
@@ -352,9 +352,88 @@ async function getOrdersWithDetails(vendorId, orderType) {
   });
 }
 
+/**
+ * Fetches a single order with detailed item information
+ */
+async function getOrderWithDetails(orderId) {
+  try {
+    // 1) Fetch the order
+    const order = await Order.findById(orderId, {
+      orderType: 1,
+      status: 1,
+      collectorName: 1,
+      collectorPhone: 1,
+      address: 1,
+      total: 1,
+      items: 1,
+      createdAt: 1,
+      vendorId: 1,
+    }).lean();
+
+    if (!order) {
+      console.log(`Order not found: ${orderId}`);
+      return null;
+    }
+
+    // 2) Gather all itemIds by kind
+    const retailIds = [];
+    const produceIds = [];
+    if (order.items && Array.isArray(order.items)) {
+      order.items.forEach(({ itemId, kind }) => {
+        if (kind === "Retail") retailIds.push(itemId);
+        else if (kind === "Produce") produceIds.push(itemId);
+      });
+    }
+
+    // 3) Batch-fetch details in parallel
+    const [retails, produces] = await Promise.all([
+      retailIds.length > 0 ? Retail.find({ _id: { $in: retailIds } }, "name price unit").lean() : [],
+      produceIds.length > 0 ? Produce.find({ _id: { $in: produceIds } }, "name price unit").lean() : [],
+    ]);
+
+    // 4) Build lookup maps
+    const retailMap = Object.fromEntries(
+      retails.map((r) => [r._id.toString(), r])
+    );
+    const produceMap = Object.fromEntries(
+      produces.map((p) => [p._id.toString(), p])
+    );
+
+    // 5) Assemble detailed items
+    const detailedItems = (order.items || []).map(({ itemId, kind, quantity }) => {
+      const key = itemId.toString();
+      const doc = kind === "Retail" ? retailMap[key] : produceMap[key];
+      return {
+        name: doc ? doc.name : "Unknown Item",
+        price: doc ? doc.price : 0,
+        unit: doc ? doc.unit : "",
+        type: kind.toLowerCase(),
+        quantity: quantity || 1,
+      };
+    });
+
+    return {
+      orderId: order._id,
+      orderType: order.orderType,
+      status: order.status,
+      createdAt: order.createdAt,
+      collectorName: order.collectorName,
+      collectorPhone: order.collectorPhone,
+      address: order.address,
+      total: order.total,
+      vendorId: order.vendorId,
+      items: detailedItems,
+    };
+  } catch (error) {
+    console.error(`Error in getOrderWithDetails for order ${orderId}:`, error);
+    return null;
+  }
+}
+
 module.exports = {
   createOrderForUser,
   verifyAndProcessPaymentWithOrderId,
   postPaymentProcessing,
   getOrdersWithDetails,
+  getOrderWithDetails,
 };
