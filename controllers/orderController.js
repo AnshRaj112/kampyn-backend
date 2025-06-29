@@ -115,15 +115,15 @@ exports.deliverOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
 
-    // 1) flip status
+    // 1) flip status - handle both "completed" and "onTheWay" statuses
     const order = await Order.findOneAndUpdate(
-      { _id: orderId, status: "completed" },
+      { _id: orderId, status: { $in: ["completed", "onTheWay"] } },
       { $set: { status: "delivered" } },
       { new: true }
     );
 
     if (!order) {
-      return res.status(400).json({ message: "No completed order found." });
+      return res.status(400).json({ message: "No completed or on-the-way order found." });
     }
 
     // 2) move in User doc
@@ -148,13 +148,13 @@ exports.deliverOrder = async (req, res) => {
 exports.startDelivery = async (req, res) => {
   const { orderId } = req.params;
   try {
-    const order = await Order.findByIdAndUpdate(
-      orderId,
+    const order = await Order.findOneAndUpdate(
+      { _id: orderId, status: "completed" }, // only target completed orders
       { status: "onTheWay" },
       { new: true }
     );
     if (!order)
-      return res.status(404).json({ success: false, message: "Not found" });
+      return res.status(404).json({ success: false, message: "No completed order found." });
     res.json({ success: true, data: order });
   } catch (err) {
     console.error(err);
@@ -415,8 +415,36 @@ exports.getUserActiveOrders = async (req, res) => {
 
     console.log(`User found: ${user.fullName}, active orders count: ${user.activeOrders?.length || 0}`);
 
-    // 2) If no active orders, return empty array
-    if (!user.activeOrders || user.activeOrders.length === 0) {
+    // 2) Clean up delivered orders - move them from activeOrders to pastOrders if they're not already there
+    if (user.activeOrders && user.activeOrders.length > 0) {
+      console.log(`Checking ${user.activeOrders.length} active orders for delivered status`);
+      
+      const activeOrderIds = user.activeOrders.map(id => id.toString());
+      const deliveredOrders = await Order.find(
+        { _id: { $in: activeOrderIds }, status: "delivered" }
+      ).lean();
+      
+      if (deliveredOrders.length > 0) {
+        console.log(`Found ${deliveredOrders.length} delivered orders in active orders, moving to past orders`);
+        
+        const deliveredOrderIds = deliveredOrders.map(order => order._id);
+        await User.updateOne(
+          { _id: userId },
+          {
+            $pull: { activeOrders: { $in: deliveredOrderIds } },
+            $push: { pastOrders: { $each: deliveredOrderIds } }
+          }
+        );
+        
+        console.log(`Moved ${deliveredOrders.length} delivered orders to past orders`);
+      }
+    }
+
+    // 3) Fetch updated user data after cleanup
+    const updatedUser = await User.findById(userId).lean();
+
+    // 4) If no active orders, return empty array
+    if (!updatedUser.activeOrders || updatedUser.activeOrders.length === 0) {
       console.log('No active orders found');
       return res.json({
         success: true,
@@ -424,29 +452,29 @@ exports.getUserActiveOrders = async (req, res) => {
       });
     }
 
-    // 3) Fetch orders from the Order database using the IDs
-    const orderIds = user.activeOrders.map(id => id.toString());
+    // 5) Fetch orders from the Order database using the IDs
+    const orderIds = updatedUser.activeOrders.map(id => id.toString());
     console.log(`Fetching orders with IDs:`, orderIds);
 
     const orders = await Order.find({ _id: { $in: orderIds } }).lean();
 
     console.log(`Found ${orders.length} orders in database`);
 
-    // 4) Get vendor details for all orders
+    // 6) Get vendor details for all orders
     const vendorIds = [...new Set(orders.map(order => order.vendorId).filter(Boolean))];
     console.log(`Fetching vendors with IDs:`, vendorIds);
     
     const vendors = await Vendor.find({ _id: { $in: vendorIds } }, 'fullName uniID').lean();
     const vendorMap = Object.fromEntries(vendors.map(v => [v._id.toString(), v]));
     
-    // 5) Get college details for all vendors
+    // 7) Get college details for all vendors
     const collegeIds = [...new Set(vendors.map(v => v.uniID).filter(Boolean))];
     console.log(`Fetching colleges with IDs:`, collegeIds);
     
     const colleges = await Uni.find({ _id: { $in: collegeIds } }, 'fullName shortName').lean();
     const collegeMap = Object.fromEntries(colleges.map(c => [c._id.toString(), c]));
     
-    // 6) Attach vendor and college details to orders
+    // 8) Attach vendor and college details to orders
     const ordersWithVendors = orders.map(order => {
       const vendor = order.vendorId ? vendorMap[order.vendorId.toString()] : null;
       const college = vendor && vendor.uniID ? collegeMap[vendor.uniID.toString()] : null;
@@ -463,7 +491,7 @@ exports.getUserActiveOrders = async (req, res) => {
       return result;
     });
 
-    // 7) Filter orders by college if specified
+    // 9) Filter orders by college if specified
     let filteredOrders = ordersWithVendors;
     if (collegeId) {
       filteredOrders = ordersWithVendors.filter(order => 
@@ -474,7 +502,7 @@ exports.getUserActiveOrders = async (req, res) => {
       console.log(`Orders after college filter: ${filteredOrders.length}`);
     }
 
-    // 8) Get detailed order information with items
+    // 10) Get detailed order information with items
     console.log(`Processing ${filteredOrders.length} orders for detailed information`);
     const detailedOrders = await Promise.all(
       filteredOrders.map(async (order, index) => {
