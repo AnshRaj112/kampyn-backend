@@ -20,4 +20,10 @@ router.patch("/:orderId/onTheWay", orderController.startDelivery);
 // 4. get past orders for a user
 router.get("/past/:userId", orderController.getPastOrders);
 
+// 5. get active orders for a user
+router.get("/user-active/:userId", orderController.getUserActiveOrders);
+
+// 6. cleanup delivered orders that are still in active orders
+router.post("/cleanup-delivered/:userId", orderController.cleanupDeliveredOrders);
+
 module.exports = router;
