@@ -32,7 +32,7 @@ exports.placeOrderHandler = async (req, res) => {
     }
 
     // Call createOrderForUser with the new signature
-    const { orderId, razorpayOptions } = await orderUtils.createOrderForUser({
+    const { orderId, orderNumber, razorpayOptions } = await orderUtils.createOrderForUser({
       userId,
       orderType,
       collectorName,
@@ -43,10 +43,30 @@ exports.placeOrderHandler = async (req, res) => {
     return res.status(201).json({
       success: true,
       orderId,
+      orderNumber,
       razorpayOptions,
     });
   } catch (err) {
     console.error("Error in placeOrderHandler:", err);
+    
+    // Handle specific error cases
+    if (err.message.includes("already have a pending order")) {
+      return res.status(409).json({ 
+        success: false, 
+        message: err.message,
+        errorType: "DUPLICATE_ORDER"
+      });
+    }
+    
+    if (err.code === 11000) {
+      // MongoDB duplicate key error
+      return res.status(409).json({ 
+        success: false, 
+        message: "Order number already exists. Please try again.",
+        errorType: "DUPLICATE_ORDER_NUMBER"
+      });
+    }
+    
     return res.status(400).json({ success: false, message: err.message });
   }
 };
@@ -290,6 +310,7 @@ exports.getPastOrders = async (req, res) => {
             return {
               _id: order._id,
               orderId: order._id,
+              orderNumber: order.orderNumber || 'Unknown',
               orderType: order.orderType || 'unknown',
               status: order.status || 'unknown',
               createdAt: order.createdAt,
@@ -307,6 +328,7 @@ exports.getPastOrders = async (req, res) => {
           return {
             _id: order._id,
             orderId: order._id,
+            orderNumber: order.orderNumber || 'Unknown',
             orderType: order.orderType || 'unknown',
             status: order.status || 'unknown',
             createdAt: order.createdAt,
@@ -521,6 +543,7 @@ exports.getUserActiveOrders = async (req, res) => {
             return {
               _id: order._id,
               orderId: order._id,
+              orderNumber: order.orderNumber || 'Unknown',
               orderType: order.orderType || 'unknown',
               status: order.status || 'unknown',
               createdAt: order.createdAt,
@@ -538,6 +561,7 @@ exports.getUserActiveOrders = async (req, res) => {
           return {
             _id: order._id,
             orderId: order._id,
+            orderNumber: order.orderNumber || 'Unknown',
             orderType: order.orderType || 'unknown',
             status: order.status || 'unknown',
             createdAt: order.createdAt,
@@ -565,6 +589,40 @@ exports.getUserActiveOrders = async (req, res) => {
     });
   } catch (err) {
     console.error("Error in getUserActiveOrders:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
+ * GET /orders/vendor-past/:vendorId
+ * Get past orders for a vendor
+ */
+exports.getVendorPastOrders = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+
+    console.log(`Fetching past orders for vendor: ${vendorId}`);
+
+    // 1) Fetch vendor name
+    const vendor = await Vendor.findById(vendorId, "fullName").lean();
+    if (!vendor) {
+      console.log(`Vendor not found: ${vendorId}`);
+      return res.status(404).json({ message: "Vendor not found." });
+    }
+
+    // 2) Fetch all past orders (completed, delivered, failed) + item details
+    const orders = await orderUtils.getVendorPastOrdersWithDetails(vendorId);
+
+    console.log(`Found ${orders.length} past orders for vendor`);
+
+    // 3) Return combined payload
+    return res.json({
+      vendorId: vendor._id,
+      vendorName: vendor.fullName,
+      orders, // array of { orderId, orderType, status, collectorName, collectorPhone, items }
+    });
+  } catch (err) {
+    console.error("Error in getVendorPastOrders:", err);
     return res.status(500).json({ message: "Server error." });
   }
 };

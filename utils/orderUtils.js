@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 
 const Order = require("../models/order/Order");
+const OrderCounter = require("../models/order/OrderCounter");
 const User = require("../models/account/User");
 const Vendor = require("../models/account/Vendor");
 const InventoryReport = require("../models/inventory/InventoryReport");
@@ -24,6 +25,86 @@ const razorpay = new Razorpay({
   key_secret: razorpayKeySecret,
 });
 
+/**
+ * Generates a unique order number with user identification
+ * Format: BB-YYYYMMDD-UUUU-XXXXX 
+ * Where: BB = BitesBay, UUUU = User ID (last 4 chars), XXXXX = 5-digit sequential number
+ */
+async function generateUniqueOrderNumber(userId) {
+  const today = new Date();
+  const datePrefix = today.getFullYear().toString() + 
+                    (today.getMonth() + 1).toString().padStart(2, '0') + 
+                    today.getDate().toString().padStart(2, '0');
+  
+  // Get last 4 characters of user ID for identification
+  const userSuffix = userId.toString().slice(-4).toUpperCase();
+  
+  const baseOrderNumber = `BB-${datePrefix}-${userSuffix}-`;
+  
+  // Find the highest order number for this user on this date
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  
+  const lastOrder = await Order.findOne({
+    orderNumber: { $regex: `^${baseOrderNumber}` },
+    createdAt: { $gte: todayStart, $lt: todayEnd }
+  }).sort({ orderNumber: -1 }).select('orderNumber').lean();
+  
+  let sequenceNumber = 1;
+  if (lastOrder) {
+    const lastSequence = parseInt(lastOrder.orderNumber.split('-')[3]);
+    sequenceNumber = lastSequence + 1;
+  }
+  
+  return `${baseOrderNumber}${sequenceNumber.toString().padStart(5, '0')}`;
+}
+
+/**
+ * Alternative: High-performance order number generation for massive scale
+ * Uses atomic counter and timestamp for better performance
+ * Format: BB-TIMESTAMP-UUUU-XXXXX
+ * Where: TIMESTAMP = Unix timestamp (10 digits), UUUU = User ID (last 4 chars), XXXXX = Atomic counter (5 digits)
+ */
+async function generateHighPerformanceOrderNumber(userId) {
+  // Get last 4 characters of user ID for identification
+  const userSuffix = userId.toString().slice(-4).toUpperCase();
+  
+  // Use current timestamp (10 digits)
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  
+  // Get atomic counter for this user (you can implement a separate counter collection)
+  // For now, we'll use a simple approach with microsecond precision
+  const microTime = Date.now().toString().slice(-5);
+  
+  return `BB-${timestamp}-${userSuffix}-${microTime}`;
+}
+
+/**
+ * High-performance order number generation using atomic counters
+ * Format: BB-YYYYMMDD-UUUU-XXXXX
+ * Uses atomic counter to prevent race conditions and handle massive scale
+ */
+async function generateAtomicOrderNumber(userId) {
+  const today = new Date();
+  const datePrefix = today.getFullYear().toString() + 
+                    (today.getMonth() + 1).toString().padStart(2, '0') + 
+                    today.getDate().toString().padStart(2, '0');
+  
+  // Get last 4 characters of user ID for identification
+  const userSuffix = userId.toString().slice(-4).toUpperCase();
+  
+  // Use atomic counter to get next sequence number
+  const counterResult = await OrderCounter.findOneAndUpdate(
+    { counterId: datePrefix },
+    { $inc: { sequence: 1 }, $set: { lastUpdated: new Date() } },
+    { upsert: true, new: true }
+  );
+  
+  const sequenceNumber = counterResult.sequence.toString().padStart(5, '0');
+  
+  return `BB-${datePrefix}-${userSuffix}-${sequenceNumber}`;
+}
+
 async function createOrderForUser({
   userId,
   orderType,
@@ -31,6 +112,16 @@ async function createOrderForUser({
   collectorPhone,
   address,
 }) {
+  // Check if user already has a pending order to prevent duplicates
+  const existingPendingOrder = await Order.findOne({
+    userId,
+    status: "pendingPayment"
+  }).lean();
+  
+  if (existingPendingOrder) {
+    throw new Error("You already have a pending order. Please complete or cancel it before placing a new one.");
+  }
+
   const user = await User.findById(userId).select("cart vendorId").lean();
   if (!user) throw new Error("User not found");
   if (!user.cart || !user.cart.length) throw new Error("Cart is empty");
@@ -110,7 +201,11 @@ async function createOrderForUser({
     finalTotal += totalProduceUnits * PRODUCE_SURCHARGE;
   if (orderType === "delivery") finalTotal += DELIVERY_CHARGE;
 
+  // Generate unique order number using atomic counter for better performance
+  const orderNumber = await generateAtomicOrderNumber(userId);
+
   const newOrder = await Order.create({
+    orderNumber,
     userId,
     orderType,
     collectorName,
@@ -133,6 +228,7 @@ async function createOrderForUser({
 
   return {
     orderId: newOrder._id,
+    orderNumber: newOrder.orderNumber,
     razorpayOptions: {
       key: razorpayKeyId,
       amount: razorpayOrder.amount,
@@ -286,15 +382,17 @@ async function getOrdersWithDetails(vendorId, orderType) {
   // 1) Fetch the orders
   const filter = {
     vendorId,
-    status: { $in: ["completed", "inProgress"] },
+    status: { $in: ["completed", "inProgress", "onTheWay"] },
   };
 
   if (orderType) filter.orderType = orderType;
   const orders = await Order.find(filter, {
+    orderNumber: 1,
     orderType: 1,
     status: 1,
     collectorName: 1,
     collectorPhone: 1,
+    address: 1,
     items: 1,
     createdAt: 1,
   })
@@ -342,11 +440,13 @@ async function getOrdersWithDetails(vendorId, orderType) {
 
     return {
       orderId: order._id,
+      orderNumber: order.orderNumber,
       orderType: order.orderType,
       status: order.status,
       createdAt: order.createdAt,
       collectorName: order.collectorName,
       collectorPhone: order.collectorPhone,
+      address: order.address,
       items: detailedItems,
     };
   });
@@ -359,6 +459,7 @@ async function getOrderWithDetails(orderId) {
   try {
     // 1) Fetch the order
     const order = await Order.findById(orderId, {
+      orderNumber: 1,
       orderType: 1,
       status: 1,
       collectorName: 1,
@@ -414,6 +515,7 @@ async function getOrderWithDetails(orderId) {
 
     return {
       orderId: order._id,
+      orderNumber: order.orderNumber,
       orderType: order.orderType,
       status: order.status,
       createdAt: order.createdAt,
@@ -430,10 +532,90 @@ async function getOrderWithDetails(orderId) {
   }
 }
 
+/**
+ * Fetches all past orders for a vendor (completed, delivered, failed),
+ * populating item details *in two queries* instead of N per-item calls.
+ */
+async function getVendorPastOrdersWithDetails(vendorId) {
+  // 1) Fetch the past orders
+  const filter = {
+    vendorId,
+    status: { $in: ["completed", "delivered", "failed"] },
+  };
+
+  const orders = await Order.find(filter, {
+    orderNumber: 1,
+    orderType: 1,
+    status: 1,
+    collectorName: 1,
+    collectorPhone: 1,
+    address: 1,
+    total: 1,
+    items: 1,
+    createdAt: 1,
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (orders.length === 0) return [];
+
+  // 2) Gather all itemIds by kind
+  const retailIds = new Set();
+  const produceIds = new Set();
+  orders.forEach((o) =>
+    o.items.forEach(({ itemId, kind }) =>
+      (kind === "Retail" ? retailIds : produceIds).add(itemId.toString())
+    )
+  );
+
+  // 3) Batch-fetch details in parallel
+  const [retails, produces] = await Promise.all([
+    Retail.find({ _id: { $in: [...retailIds] } }, "name price unit").lean(),
+    Produce.find({ _id: { $in: [...produceIds] } }, "name price unit").lean(),
+  ]);
+
+  // 4) Build lookup maps
+  const retailMap = Object.fromEntries(
+    retails.map((r) => [r._id.toString(), r])
+  );
+  const produceMap = Object.fromEntries(
+    produces.map((p) => [p._id.toString(), p])
+  );
+
+  // 5) Assemble each order's detailed items
+  return orders.map((order) => {
+    const detailedItems = order.items.map(({ itemId, kind, quantity }) => {
+      const key = itemId.toString();
+      const doc = kind === "Retail" ? retailMap[key] : produceMap[key];
+      return {
+        name: doc ? doc.name : "Unknown Item",
+        price: doc ? doc.price : 0,
+        unit: doc ? doc.unit : "",
+        type: kind.toLowerCase(),
+        quantity: quantity || 1,
+      };
+    });
+
+    return {
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      orderType: order.orderType,
+      status: order.status,
+      createdAt: order.createdAt,
+      collectorName: order.collectorName,
+      collectorPhone: order.collectorPhone,
+      address: order.address,
+      total: order.total,
+      items: detailedItems,
+    };
+  });
+}
+
 module.exports = {
   createOrderForUser,
   verifyAndProcessPaymentWithOrderId,
   postPaymentProcessing,
   getOrdersWithDetails,
   getOrderWithDetails,
+  getVendorPastOrdersWithDetails,
 };
