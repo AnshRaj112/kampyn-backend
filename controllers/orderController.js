@@ -98,7 +98,16 @@ exports.completeOrder = async (req, res) => {
         .json({ message: "No active in-progress order found." });
     }
 
-    return res.json({ message: "Order marked as completed." });
+    // Move order from activeOrders to pastOrders when completed
+    await User.updateOne(
+      { _id: result.userId },
+      {
+        $pull: { activeOrders: result._id },
+        $push: { pastOrders: result._id },
+      }
+    );
+
+    return res.json({ message: "Order marked as completed and moved to past orders." });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Server error." });
@@ -180,8 +189,37 @@ exports.getPastOrders = async (req, res) => {
 
     console.log(`User found: ${user.fullName}, past orders count: ${user.pastOrders?.length || 0}`);
 
-    // 2) If no past orders, return empty array
-    if (!user.pastOrders || user.pastOrders.length === 0) {
+    // 2) Clean up delivered orders - move them from activeOrders to pastOrders if they're not already there
+    if (user.activeOrders && user.activeOrders.length > 0) {
+      console.log(`Checking ${user.activeOrders.length} active orders for delivered status`);
+      
+      const activeOrderIds = user.activeOrders.map(id => id.toString());
+      const deliveredOrders = await Order.find(
+        { _id: { $in: activeOrderIds }, status: "delivered" }
+      ).lean();
+      
+      if (deliveredOrders.length > 0) {
+        console.log(`Found ${deliveredOrders.length} delivered orders in active orders, moving to past orders`);
+        
+        const deliveredOrderIds = deliveredOrders.map(order => order._id);
+        await User.updateOne(
+          { _id: userId },
+          {
+            $pull: { activeOrders: { $in: deliveredOrderIds } },
+            $push: { pastOrders: { $each: deliveredOrderIds } }
+          }
+        );
+        
+        console.log(`Moved ${deliveredOrders.length} delivered orders to past orders`);
+      }
+    }
+
+    // 3) Fetch updated user data after cleanup
+    const updatedUser = await User.findById(userId).lean();
+    const pastOrderIds = updatedUser.pastOrders || [];
+
+    // 4) If no past orders, return empty array
+    if (pastOrderIds.length === 0) {
       console.log('No past orders found');
       return res.json({
         success: true,
@@ -189,8 +227,211 @@ exports.getPastOrders = async (req, res) => {
       });
     }
 
+    // 5) Fetch orders from the Order database using the IDs
+    const orderIds = pastOrderIds.map(id => id.toString());
+    console.log(`Fetching orders with IDs:`, orderIds);
+
+    const orders = await Order.find({ _id: { $in: orderIds } }).lean();
+
+    console.log(`Found ${orders.length} orders in database`);
+
+    // 6) Get vendor details for all orders
+    const vendorIds = [...new Set(orders.map(order => order.vendorId).filter(Boolean))];
+    console.log(`Fetching vendors with IDs:`, vendorIds);
+    
+    const vendors = await Vendor.find({ _id: { $in: vendorIds } }, 'fullName uniID').lean();
+    const vendorMap = Object.fromEntries(vendors.map(v => [v._id.toString(), v]));
+    
+    // 7) Get college details for all vendors
+    const collegeIds = [...new Set(vendors.map(v => v.uniID).filter(Boolean))];
+    console.log(`Fetching colleges with IDs:`, collegeIds);
+    
+    const colleges = await Uni.find({ _id: { $in: collegeIds } }, 'fullName shortName').lean();
+    const collegeMap = Object.fromEntries(colleges.map(c => [c._id.toString(), c]));
+    
+    // 8) Attach vendor and college details to orders
+    const ordersWithVendors = orders.map(order => {
+      const vendor = order.vendorId ? vendorMap[order.vendorId.toString()] : null;
+      const college = vendor && vendor.uniID ? collegeMap[vendor.uniID.toString()] : null;
+      
+      const result = {
+        ...order,
+        vendorId: vendor ? {
+          ...vendor,
+          college: college
+        } : null
+      };
+      
+      console.log(`Order ${order._id} vendor data:`, result.vendorId);
+      return result;
+    });
+
+    // 9) Filter orders by college if specified
+    let filteredOrders = ordersWithVendors;
+    if (collegeId) {
+      filteredOrders = ordersWithVendors.filter(order => 
+        order.vendorId && 
+        order.vendorId.uniID && 
+        order.vendorId.uniID.toString() === collegeId
+      );
+      console.log(`Orders after college filter: ${filteredOrders.length}`);
+    }
+
+    // 10) Get detailed order information with items
+    console.log(`Processing ${filteredOrders.length} orders for detailed information`);
+    const detailedOrders = await Promise.all(
+      filteredOrders.map(async (order, index) => {
+        try {
+          console.log(`Processing order ${index + 1}/${filteredOrders.length}: ${order._id}`);
+          const orderDetails = await orderUtils.getOrderWithDetails(order._id);
+          if (orderDetails) {
+            return {
+              ...order,
+              ...orderDetails,
+              vendorId: order.vendorId // Preserve the vendor info we built with college details
+            };
+          } else {
+            console.log(`No details found for order: ${order._id}`);
+            // If order details not found, return basic order info
+            return {
+              _id: order._id,
+              orderId: order._id,
+              orderType: order.orderType || 'unknown',
+              status: order.status || 'unknown',
+              createdAt: order.createdAt,
+              collectorName: order.collectorName || 'Unknown',
+              collectorPhone: order.collectorPhone || 'Unknown',
+              address: order.address || '',
+              total: order.total || 0,
+              vendorId: order.vendorId, // Preserve the vendor info we built
+              items: []
+            };
+          }
+        } catch (error) {
+          console.error(`Error getting details for order ${order._id}:`, error);
+          // Return basic order info if details fetch fails
+          return {
+            _id: order._id,
+            orderId: order._id,
+            orderType: order.orderType || 'unknown',
+            status: order.status || 'unknown',
+            createdAt: order.createdAt,
+            collectorName: order.collectorName || 'Unknown',
+            collectorPhone: order.collectorPhone || 'Unknown',
+            address: order.address || '',
+            total: order.total || 0,
+            vendorId: order.vendorId, // Preserve the vendor info we built
+            items: []
+          };
+        }
+      })
+    );
+
+    console.log(`Successfully processed ${detailedOrders.length} orders`);
+
+    // Debug: Log the first order to see the structure
+    if (detailedOrders.length > 0) {
+      console.log('Sample order vendor data:', detailedOrders[0].vendorId);
+    }
+
+    return res.json({
+      success: true,
+      orders: detailedOrders
+    });
+  } catch (err) {
+    console.error("Error in getPastOrders:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
+ * Clean up delivered orders - move them from activeOrders to pastOrders
+ * This function can be called to fix data inconsistencies
+ */
+exports.cleanupDeliveredOrders = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    console.log(`Cleaning up delivered orders for user: ${userId}`);
+
+    // 1) Fetch user
+    const user = await User.findById(userId).lean();
+
+    if (!user) {
+      console.log(`User not found: ${userId}`);
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    if (!user.activeOrders || user.activeOrders.length === 0) {
+      console.log('No active orders to check');
+      return res.json({ message: "No active orders to check." });
+    }
+
+    // 2) Find delivered orders in active orders
+    const activeOrderIds = user.activeOrders.map(id => id.toString());
+    const deliveredOrders = await Order.find(
+      { _id: { $in: activeOrderIds }, status: "delivered" }
+    ).lean();
+
+    if (deliveredOrders.length === 0) {
+      console.log('No delivered orders found in active orders');
+      return res.json({ message: "No delivered orders found in active orders." });
+    }
+
+    // 3) Move delivered orders to past orders
+    const deliveredOrderIds = deliveredOrders.map(order => order._id);
+    await User.updateOne(
+      { _id: userId },
+      {
+        $pull: { activeOrders: { $in: deliveredOrderIds } },
+        $push: { pastOrders: { $each: deliveredOrderIds } }
+      }
+    );
+
+    console.log(`Moved ${deliveredOrders.length} delivered orders to past orders`);
+
+    return res.json({ 
+      message: `Successfully moved ${deliveredOrders.length} delivered orders to past orders.`,
+      movedOrders: deliveredOrderIds
+    });
+  } catch (err) {
+    console.error("Error in cleanupDeliveredOrders:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
+ * GET /orders/active/:userId
+ * Get active orders for a user
+ */
+exports.getUserActiveOrders = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { collegeId } = req.query; // Optional college filter
+
+    console.log(`Fetching active orders for user: ${userId}, college filter: ${collegeId || 'none'}`);
+
+    // 1) Fetch user to get active order IDs
+    const user = await User.findById(userId).lean();
+
+    if (!user) {
+      console.log(`User not found: ${userId}`);
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    console.log(`User found: ${user.fullName}, active orders count: ${user.activeOrders?.length || 0}`);
+
+    // 2) If no active orders, return empty array
+    if (!user.activeOrders || user.activeOrders.length === 0) {
+      console.log('No active orders found');
+      return res.json({
+        success: true,
+        orders: []
+      });
+    }
+
     // 3) Fetch orders from the Order database using the IDs
-    const orderIds = user.pastOrders.map(id => id.toString());
+    const orderIds = user.activeOrders.map(id => id.toString());
     console.log(`Fetching orders with IDs:`, orderIds);
 
     const orders = await Order.find({ _id: { $in: orderIds } }).lean();
@@ -301,7 +542,7 @@ exports.getPastOrders = async (req, res) => {
       orders: detailedOrders
     });
   } catch (err) {
-    console.error("Error in getPastOrders:", err);
+    console.error("Error in getUserActiveOrders:", err);
     return res.status(500).json({ message: "Server error." });
   }
 };
