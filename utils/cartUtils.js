@@ -229,33 +229,37 @@ async function addToCart(userId, itemId, kind, qty, vendorIdFromController) {
 * - If delta > 0, re-validate via _validateAndFetch(user, itemId, kind, newQty, user.vendorId).
 * - If delta < 0, ensure entry exists; decrement or remove if newQty=0.
 * - If cart becomes empty, unset vendorId.
+* - If item not in cart and delta > 0 and vendorId is provided, add the item using addToCart logic.
 */
-async function changeQuantity(userId, itemId, kind, delta) {
+async function changeQuantity(userId, itemId, kind, delta, vendorId = null) {
  const user = await User.findById(userId).select("cart vendorId");
  if (!user) {
    throw new Error("User not found");
  }
-
 
  const oItemId = toObjectId(itemId);
  const entryIndex = user.cart.findIndex(
    (e) => e.itemId.toString() === itemId.toString() && e.kind === kind
  );
 
-
+ // If decreasing and item not in cart
  if (entryIndex === -1 && delta < 0) {
    throw new Error("Item not in cart");
  }
 
-
  const currentQty = entryIndex >= 0 ? user.cart[entryIndex].quantity : 0;
  const newQty = currentQty + delta;
-
 
  if (newQty < 0) {
    throw new Error("Quantity cannot go below zero");
  }
 
+ // If increasing and item not in cart, and vendorId is provided, use addToCart logic
+ if (delta > 0 && entryIndex === -1 && vendorId) {
+   // Use addToCart logic to add the item with quantity = delta
+   await module.exports.addToCart(userId, itemId, kind, delta, vendorId);
+   return;
+ }
 
  // If increasing, re-validate (stock, max, one-vendor-per-cart)
  if (delta > 0) {
@@ -267,7 +271,6 @@ async function changeQuantity(userId, itemId, kind, delta) {
      user.vendorId.toString()
    );
 
-
    const MAX_ALLOWED = MAX_QTY[kind];
    if (newQty > MAX_ALLOWED) {
      throw new Error(
@@ -276,7 +279,6 @@ async function changeQuantity(userId, itemId, kind, delta) {
    }
  }
 
-
  // Apply the change
  if (entryIndex >= 0) {
    if (newQty === 0) {
@@ -284,17 +286,12 @@ async function changeQuantity(userId, itemId, kind, delta) {
    } else {
      user.cart[entryIndex].quantity = newQty;
    }
- } else {
-   // if entry didn't exist and delta>0, push new
-   user.cart.push({ itemId: oItemId, kind, quantity: newQty });
  }
-
 
  // If cart is now empty, unset vendorId
  if (user.cart.length === 0) {
    user.vendorId = undefined;
  }
-
 
  await user.save();
 }

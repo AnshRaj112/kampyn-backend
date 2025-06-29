@@ -16,4 +16,8 @@ router.patch("/:orderId/complete", orderController.completeOrder);
 // 3. change status from completed to delivered (moves in user pastOrders)
 router.patch("/:orderId/deliver", orderController.deliverOrder);
 router.patch("/:orderId/onTheWay", orderController.startDelivery);
+
+// 4. get past orders for a user
+router.get("/past/:userId", orderController.getPastOrders);
+
 module.exports = router;

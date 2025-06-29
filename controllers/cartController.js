@@ -33,7 +33,7 @@ exports.addToCart = async (req, res) => {
    }
 
 
-   // 4) Delegate all “inventory,” “one-vendor-per-cart,” and “save” logic into cartUtils
+   // 4) Delegate all "inventory," "one-vendor-per-cart," and "save" logic into cartUtils
    //    We pass exactly the same vendorId that the client sent.
    await cartUtils.addToCart(userId, itemId, kind, Number(quantity), vendorId);
 
@@ -67,11 +67,11 @@ exports.getCart = async (req, res) => {
 exports.increaseOne = async (req, res) => {
  try {
    const { userId } = req.params;
-   const { itemId, kind } = req.body;
+   const { itemId, kind, vendorId } = req.body;
    if (!itemId || !kind) {
      return res.status(400).json({ message: "itemId and kind are required." });
    }
-   await cartUtils.changeQuantity(userId, itemId, kind, +1);
+   await cartUtils.changeQuantity(userId, itemId, kind, +1, vendorId);
    return res.status(200).json({ message: "Quantity increased." });
  } catch (err) {
    console.error("Increase one error:", err.message);
