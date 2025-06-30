@@ -5,10 +5,20 @@
 
 class AtomicCache {
   constructor() {
-    this.cache = new Map();
     this.locks = new Map();
     this.cleanupInterval = null;
     this.startCleanup();
+    
+    // Handle graceful shutdown
+    process.on('exit', () => this.stopCleanup());
+    process.on('SIGINT', () => {
+      this.stopCleanup();
+      process.exit(0);
+    });
+    process.on('SIGTERM', () => {
+      this.stopCleanup();
+      process.exit(0);
+    });
   }
 
   /**
@@ -208,6 +218,7 @@ class AtomicCache {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
+      console.log("Cache cleanup stopped");
     }
   }
 
@@ -217,7 +228,8 @@ class AtomicCache {
   getStats() {
     return {
       activeLocks: this.locks.size,
-      totalCacheEntries: this.cache.size
+      lockKeys: Array.from(this.locks.keys()),
+      timestamp: new Date()
     };
   }
 
@@ -225,7 +237,44 @@ class AtomicCache {
    * Clear all locks (for testing/debugging)
    */
   clearAllLocks() {
+    const count = this.locks.size;
     this.locks.clear();
+    return count;
+  }
+
+  /**
+   * Get detailed lock information for debugging
+   */
+  getDetailedStats() {
+    const now = Date.now();
+    const activeLocks = [];
+    const expiredLocks = [];
+    
+    for (const [key, lock] of this.locks.entries()) {
+      const lockInfo = {
+        key,
+        userId: lock.userId,
+        acquiredAt: lock.acquiredAt,
+        expiresAt: lock.expiresAt,
+        remainingTime: lock.expiresAt - now,
+        isExpired: lock.expiresAt <= now
+      };
+      
+      if (lock.expiresAt <= now) {
+        expiredLocks.push(lockInfo);
+      } else {
+        activeLocks.push(lockInfo);
+      }
+    }
+    
+    return {
+      totalLocks: this.locks.size,
+      activeLocks: activeLocks.length,
+      expiredLocks: expiredLocks.length,
+      activeLockDetails: activeLocks,
+      expiredLockDetails: expiredLocks,
+      timestamp: new Date()
+    };
   }
 }
 

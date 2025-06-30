@@ -18,6 +18,7 @@ The Cache Locking System is an in-memory solution that prevents race conditions 
    - In-memory cache with atomic operations
    - Lock management with TTL (Time To Live)
    - Automatic cleanup of expired locks
+   - Graceful shutdown handling
 
 2. **Order Processing Integration** (`utils/orderUtils.js`)
    - Integrates locks into the order creation process
@@ -31,9 +32,16 @@ The Cache Locking System is an in-memory solution that prevents race conditions 
    - Periodic cleanup of expired orders and locks
    - Manual cleanup utilities for admin use
 
-5. **Admin Management** (`routes/adminRoutes.js`)
-   - Monitoring and management endpoints
+5. **Admin Authentication System** (`models/account/Admin.js`, `controllers/auth/adminAuthController.js`)
+   - Secure admin authentication with JWT tokens
+   - Role-based access control (super_admin, admin, moderator)
+   - Permission-based authorization
+   - Account lockout protection
+
+6. **Admin Management** (`routes/adminRoutes.js`)
+   - Protected monitoring and management endpoints
    - Statistics and manual lock operations
+   - System health monitoring
 
 ## How It Works
 
@@ -69,7 +77,53 @@ The Cache Locking System is an in-memory solution that prevents race conditions 
 4. Associated locks are automatically released
 ```
 
+## Admin Authentication System
+
+### Setup
+
+1. **Create Super Admin**:
+   ```bash
+   npm run create-admin
+   ```
+
+2. **Default Credentials**:
+   - Email: `admin@kiitbites.com`
+   - Password: `SuperAdmin123!`
+   - **⚠️ Change password after first login!**
+
+### Admin Roles & Permissions
+
+#### Roles
+- **super_admin**: Full system access
+- **admin**: Standard administrative access
+- **moderator**: Limited administrative access
+
+#### Permissions
+- `viewLocks`: View lock information
+- `releaseLocks`: Release locks for specific orders
+- `clearAllLocks`: Emergency lock clearing (super admin only)
+- `viewStats`: View system statistics
+- `manageUsers`: User management (future)
+- `manageVendors`: Vendor management (future)
+- `systemSettings`: System configuration (future)
+
+### Authentication Flow
+
+1. **Login**: `POST /api/admin/auth/login`
+2. **Token Storage**: JWT stored in HTTP-only cookie
+3. **Route Protection**: All admin routes require authentication
+4. **Permission Checking**: Routes check specific permissions
+5. **Logout**: `POST /api/admin/auth/logout`
+
 ## API Endpoints
+
+### Admin Authentication
+- **POST** `/api/admin/auth/login` - Admin login
+- **POST** `/api/admin/auth/logout` - Admin logout
+- **GET** `/api/admin/auth/profile` - Get admin profile
+- **PUT** `/api/admin/auth/profile` - Update admin profile
+- **PUT** `/api/admin/auth/change-password` - Change password
+- **POST** `/api/admin/auth/refresh-token` - Refresh token
 
 ### Order Placement
 - **POST** `/order/:userId` - Places order with automatic locking
@@ -77,12 +131,15 @@ The Cache Locking System is an in-memory solution that prevents race conditions 
 ### Payment Verification
 - **POST** `/payment/verify` - Verifies payment and releases locks
 
-### Admin Management
+### Admin Management (Protected)
 - **GET** `/admin/locks/stats` - Get lock statistics
+- **GET** `/admin/locks/detailed-stats` - Get detailed lock information
 - **POST** `/admin/locks/release/:orderId` - Force release locks for order
 - **POST** `/admin/locks/cleanup` - Manual cleanup trigger
 - **POST** `/admin/locks/clear-all` - Emergency: clear all locks
 - **GET** `/admin/locks/items/:itemId` - Get lock info for specific item
+- **GET** `/admin/system/health` - System health information
+- **GET** `/admin/auth/me` - Current admin information
 
 ## Configuration
 
@@ -96,7 +153,40 @@ The Cache Locking System is an in-memory solution that prevents race conditions 
 - **Order Cleanup**: Every 5 minutes (automatic)
 - **Configurable**: In `index.js` - `startPeriodicCleanup()`
 
+### Admin Security
+- **JWT Expiry**: 24 hours
+- **Account Lockout**: 5 failed attempts, 2-hour lockout
+- **Password Requirements**: Minimum 8 characters
+- **Cookie Security**: HTTP-only, secure in production
+
 ## Usage Examples
+
+### Admin Login
+
+```bash
+curl -X POST http://localhost:5001/api/admin/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@kiitbites.com",
+    "password": "SuperAdmin123!"
+  }'
+```
+
+### Get Lock Statistics (Authenticated)
+
+```bash
+curl -X GET http://localhost:5001/admin/locks/stats \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  --cookie "adminToken=YOUR_ADMIN_TOKEN"
+```
+
+### Force Release Locks
+
+```bash
+curl -X POST http://localhost:5001/admin/locks/release/orderId123 \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  --cookie "adminToken=YOUR_ADMIN_TOKEN"
+```
 
 ### Basic Lock Operations
 
@@ -157,14 +247,17 @@ npm run test-locks
 - Lock expiration
 - Concurrent access prevention
 - Statistics and monitoring
+- Admin authentication
 
 ## Monitoring and Debugging
 
 ### Logs to Watch
 ```
 🔒 Cache locking system initialized with periodic cleanup
+🔐 Admin authentication system ready
 Cleaned up 3 expired locks
 Periodic cleanup: Cleaned up 2 expired orders and released 5 locks
+Cache cleanup stopped
 ```
 
 ### Common Issues
@@ -184,6 +277,11 @@ Periodic cleanup: Cleaned up 2 expired orders and released 5 locks
    - Check for lock contention
    - Consider adjusting TTL values
 
+4. **Admin Authentication Issues**
+   - Verify JWT_SECRET is set in environment
+   - Check cookie settings in production
+   - Ensure admin account is active
+
 ## Best Practices
 
 ### For Developers
@@ -191,12 +289,22 @@ Periodic cleanup: Cleaned up 2 expired orders and released 5 locks
 2. Use appropriate TTL values for your use case
 3. Monitor lock statistics regularly
 4. Test concurrent scenarios thoroughly
+5. Use admin authentication for all admin operations
 
 ### For Operations
 1. Monitor lock statistics via admin endpoints
 2. Set up alerts for high lock counts
 3. Regular review of cleanup logs
 4. Have emergency procedures for lock clearing
+5. Regularly rotate admin passwords
+6. Monitor admin login attempts
+
+### For Security
+1. Use strong admin passwords
+2. Enable HTTPS in production
+3. Regularly audit admin permissions
+4. Monitor failed login attempts
+5. Use least privilege principle for admin roles
 
 ## Performance Characteristics
 
@@ -209,6 +317,7 @@ Periodic cleanup: Cleaned up 2 expired orders and released 5 locks
 - Lock acquisition: <1ms
 - Lock release: <1ms
 - Cart reservation: <5ms for typical carts
+- Admin authentication: <50ms
 
 ### Scalability
 - Supports thousands of concurrent locks
@@ -218,9 +327,12 @@ Periodic cleanup: Cleaned up 2 expired orders and released 5 locks
 ## Security Considerations
 
 1. **Lock Ownership**: Only the user who acquired a lock can release it
-2. **Admin Access**: Admin endpoints should be protected with authentication
+2. **Admin Access**: All admin endpoints require authentication and authorization
 3. **TTL Protection**: Locks automatically expire to prevent deadlocks
-4. **Audit Trail**: All lock operations are logged
+4. **Audit Trail**: All lock operations are logged with admin information
+5. **Account Protection**: Admin accounts lock after failed attempts
+6. **Token Security**: JWT tokens stored in HTTP-only cookies
+7. **Permission-Based Access**: Granular permissions for different admin functions
 
 ## Future Enhancements
 
@@ -229,24 +341,41 @@ Periodic cleanup: Cleaned up 2 expired orders and released 5 locks
 3. **Advanced Analytics**: Detailed lock usage analytics
 4. **WebSocket Notifications**: Real-time lock status updates
 5. **Machine Learning**: Predictive lock management
+6. **Admin Dashboard**: Web-based admin interface
+7. **Audit Logging**: Comprehensive audit trail
+8. **Multi-Factor Authentication**: Enhanced admin security
 
 ## Troubleshooting
 
 ### Emergency Procedures
 
-1. **Clear All Locks** (Use with caution):
+1. **Clear All Locks** (Super Admin only):
    ```bash
-   curl -X POST http://localhost:5001/admin/locks/clear-all
+   curl -X POST http://localhost:5001/admin/locks/clear-all \
+     -H "Authorization: Bearer SUPER_ADMIN_TOKEN" \
+     --cookie "adminToken=SUPER_ADMIN_TOKEN"
    ```
 
 2. **Force Release Specific Order**:
    ```bash
-   curl -X POST http://localhost:5001/admin/locks/release/orderId123
+   curl -X POST http://localhost:5001/admin/locks/release/orderId123 \
+     -H "Authorization: Bearer ADMIN_TOKEN" \
+     --cookie "adminToken=ADMIN_TOKEN"
    ```
 
 3. **Manual Cleanup**:
    ```bash
-   curl -X POST http://localhost:5001/admin/locks/cleanup
+   curl -X POST http://localhost:5001/admin/locks/cleanup \
+     -H "Authorization: Bearer ADMIN_TOKEN" \
+     --cookie "adminToken=ADMIN_TOKEN"
+   ```
+
+4. **Reset Admin Password** (Database operation):
+   ```javascript
+   // Connect to database and update admin password
+   const admin = await Admin.findOne({ email: 'admin@kiitbites.com' });
+   admin.password = 'NewPassword123!';
+   await admin.save();
    ```
 
 ### Common Error Messages
@@ -254,6 +383,9 @@ Periodic cleanup: Cleaned up 2 expired orders and released 5 locks
 - `"Item is currently being processed by another user"` - Normal lock contention
 - `"Failed to release locks"` - Check order status and retry
 - `"Lock not found"` - Lock may have expired or been cleared
+- `"Access denied. No token provided"` - Admin authentication required
+- `"Access denied. Required permission: viewLocks"` - Insufficient permissions
+- `"Account is temporarily locked"` - Too many failed login attempts
 
 ## Support
 
@@ -261,4 +393,13 @@ For issues related to the cache locking system:
 1. Check the logs for error messages
 2. Use admin endpoints to diagnose issues
 3. Run the test suite to verify functionality
-4. Review this documentation for configuration options 
+4. Review this documentation for configuration options
+5. Check admin authentication status
+6. Verify permissions for admin operations
+
+For admin authentication issues:
+1. Verify admin account exists and is active
+2. Check JWT_SECRET environment variable
+3. Review cookie settings in production
+4. Monitor login attempts and account lockouts
+5. Use the create-admin script to reset super admin if needed 
