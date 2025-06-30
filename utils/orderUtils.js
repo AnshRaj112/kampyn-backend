@@ -681,4 +681,5 @@ module.exports = {
   getOrdersWithDetails,
   getOrderWithDetails,
   getVendorPastOrdersWithDetails,
+  generateOrderNumber,
 };

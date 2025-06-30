@@ -56,6 +56,7 @@ const orderSchema = new mongoose.Schema({
     ref: "Vendor",
     required: true,
   },
+  isGuest: { type: Boolean, default: false }, // Flag for guest orders created by vendors
   createdAt: { type: Date, default: Date.now },
 });
 

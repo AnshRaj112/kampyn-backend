@@ -18,7 +18,7 @@
     "bcryptjs": "^3.0.2",
     "bullmq": "^5.52.1",
     "cloudinary": "^2.6.0",
-    "cookie-parser": "^1.4.6",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "debug": "^4.4.1",
