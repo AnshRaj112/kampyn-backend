@@ -16,6 +16,8 @@ const orderRoutes = require("./routes/orderRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const paymentRoutes = require("./routes/paymentRoute");
 const inventoryReportRoutes = require("./routes/inventoryReportRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -81,6 +83,7 @@ app.use("/order", orderRoutes);
 app.use("/payment", paymentRoutes);
 app.use("/api/vendor", vendorRoutes);
 app.use("/inventoryreport", inventoryReportRoutes);
+app.use("/admin", adminRoutes); // 🔒 Admin routes for lock management
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling
@@ -100,8 +103,10 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // ✅ Start Server
-app.listen(PORT, () =>
-  console.log(
-    `🚀 Server running on port ${PORT}`
-  )
-);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  
+  // 🔒 Start periodic cleanup of expired orders and locks
+  startPeriodicCleanup(5 * 60 * 1000); // 5 minutes
+  console.log("🔒 Cache locking system initialized with periodic cleanup");
+});

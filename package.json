@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "nodemon index.js",
     "dev": "nodemon index.js",
-    "migrate-orders": "node scripts/migrate-orders.js"
+    "migrate-orders": "node scripts/migrate-orders.js",
+    "test-locks": "node scripts/test-locking-system.js"
   },
   "keywords": [],
   "author": "",

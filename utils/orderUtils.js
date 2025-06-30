@@ -11,6 +11,7 @@ const Vendor = require("../models/account/Vendor");
 const InventoryReport = require("../models/inventory/InventoryReport");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
+const { atomicCache } = require("./cacheUtils");
 
 const PRODUCE_SURCHARGE = 5;
 const DELIVERY_CHARGE = 50;
@@ -170,109 +171,127 @@ async function createOrderForUser({
     throw new Error("Address is required for delivery orders.");
   }
 
-  const vendor = await Vendor.findById(user.vendorId)
-    .select("retailInventory produceInventory")
-    .lean();
-  if (!vendor) throw new Error(`Vendor ${user.vendorId} not found.`);
-
-  const retailMap = new Map();
-  (vendor.retailInventory || []).forEach((e) =>
-    retailMap.set(String(e.itemId), e.quantity)
-  );
-  const produceMap = new Map();
-  (vendor.produceInventory || []).forEach((e) =>
-    produceMap.set(String(e.itemId), e.isAvailable)
-  );
-
-  const retailIds = [],
-    produceIds = [];
-  user.cart.forEach(({ itemId, kind }) => {
-    if (kind === "Retail") retailIds.push(itemId);
-    else if (kind === "Produce") produceIds.push(itemId);
-  });
-
-  const [retailDocs, produceDocs] = await Promise.all([
-    Retail.find({ _id: { $in: retailIds } })
-      .select("price")
-      .lean(),
-    Produce.find({ _id: { $in: produceIds } })
-      .select("price")
-      .lean(),
-  ]);
-  const retailPriceMap = new Map(
-    retailDocs.map((d) => [String(d._id), d.price])
-  );
-  const producePriceMap = new Map(
-    produceDocs.map((d) => [String(d._id), d.price])
-  );
-
-  let baseTotal = 0,
-    totalProduceUnits = 0;
-  const itemsForOrder = [];
-
-  for (const { itemId, kind, quantity } of user.cart) {
-    const key = String(itemId);
-    if (kind === "Retail") {
-      const avail = retailMap.get(key) ?? 0;
-      if (avail < quantity)
-        throw new Error(`Insufficient stock for Retail item ${itemId}.`);
-      const price = retailPriceMap.get(key);
-      if (price == null)
-        throw new Error(`Retail item ${itemId} missing price.`);
-      baseTotal += price * quantity;
-    } else {
-      const avail = produceMap.get(key);
-      if (avail !== "Y")
-        throw new Error(`Produce item ${itemId} not available.`);
-      const price = producePriceMap.get(key);
-      if (price == null)
-        throw new Error(`Produce item ${itemId} missing price.`);
-      baseTotal += price * quantity;
-      totalProduceUnits += quantity;
-    }
-    itemsForOrder.push({ itemId, kind, quantity });
+  // 🔒 ATOMIC LOCK: Reserve all items in cart to prevent race conditions
+  const reservationResult = await atomicCache.reserveItemsInCart(user.cart, userId, user.vendorId);
+  
+  if (!reservationResult.success) {
+    // Release any partial locks and return error
+    const errorMessage = reservationResult.failedItems.length === 1 
+      ? `Item "${reservationResult.failedItems[0].itemId}" is currently being processed by another user. Please try again.`
+      : `${reservationResult.failedItems.length} items are currently being processed by another user. Please try again.`;
+    
+    throw new Error(errorMessage);
   }
 
-  let finalTotal = baseTotal;
-  if (orderType !== "dinein")
-    finalTotal += totalProduceUnits * PRODUCE_SURCHARGE;
-  if (orderType === "delivery") finalTotal += DELIVERY_CHARGE;
+  try {
+    const vendor = await Vendor.findById(user.vendorId)
+      .select("retailInventory produceInventory")
+      .lean();
+    if (!vendor) throw new Error(`Vendor ${user.vendorId} not found.`);
 
-  // Generate unique order number using ultra-high performance system for maximum scalability
-  const orderNumber = await generateUltraHighPerformanceOrderNumberWithDailyReset(userId, user.vendorId);
+    const retailMap = new Map();
+    (vendor.retailInventory || []).forEach((e) =>
+      retailMap.set(String(e.itemId), e.quantity)
+    );
+    const produceMap = new Map();
+    (vendor.produceInventory || []).forEach((e) =>
+      produceMap.set(String(e.itemId), e.isAvailable)
+    );
 
-  const newOrder = await Order.create({
-    orderNumber,
-    userId,
-    orderType,
-    collectorName,
-    collectorPhone,
-    items: itemsForOrder,
-    total: finalTotal,
-    address: orderType === "delivery" ? address : "",
-    reservationExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
-    status: "pendingPayment",
-    vendorId: user.vendorId,
-  });
+    const retailIds = [],
+      produceIds = [];
+    user.cart.forEach(({ itemId, kind }) => {
+      if (kind === "Retail") retailIds.push(itemId);
+      else if (kind === "Produce") produceIds.push(itemId);
+    });
 
-  const receiptId = newOrder._id.toString();
-  const razorpayOrder = await razorpay.orders.create({
-    amount: finalTotal * 100,
-    currency: "INR",
-    receipt: receiptId,
-    payment_capture: 1,
-  });
+    const [retailDocs, produceDocs] = await Promise.all([
+      Retail.find({ _id: { $in: retailIds } })
+        .select("price")
+        .lean(),
+      Produce.find({ _id: { $in: produceIds } })
+        .select("price")
+        .lean(),
+    ]);
+    const retailPriceMap = new Map(
+      retailDocs.map((d) => [String(d._id), d.price])
+    );
+    const producePriceMap = new Map(
+      produceDocs.map((d) => [String(d._id), d.price])
+    );
 
-  return {
-    orderId: newOrder._id,
-    orderNumber: newOrder.orderNumber,
-    razorpayOptions: {
-      key: razorpayKeyId,
-      amount: razorpayOrder.amount,
-      currency: razorpayOrder.currency,
-      order_id: razorpayOrder.id,
-    },
-  };
+    let baseTotal = 0,
+      totalProduceUnits = 0;
+    const itemsForOrder = [];
+
+    for (const { itemId, kind, quantity } of user.cart) {
+      const key = String(itemId);
+      if (kind === "Retail") {
+        const avail = retailMap.get(key) ?? 0;
+        if (avail < quantity)
+          throw new Error(`Insufficient stock for Retail item ${itemId}.`);
+        const price = retailPriceMap.get(key);
+        if (price == null)
+          throw new Error(`Retail item ${itemId} missing price.`);
+        baseTotal += price * quantity;
+      } else {
+        const avail = produceMap.get(key);
+        if (avail !== "Y")
+          throw new Error(`Produce item ${itemId} not available.`);
+        const price = producePriceMap.get(key);
+        if (price == null)
+          throw new Error(`Produce item ${itemId} missing price.`);
+        baseTotal += price * quantity;
+        totalProduceUnits += quantity;
+      }
+      itemsForOrder.push({ itemId, kind, quantity });
+    }
+
+    let finalTotal = baseTotal;
+    if (orderType !== "dinein")
+      finalTotal += totalProduceUnits * PRODUCE_SURCHARGE;
+    if (orderType === "delivery") finalTotal += DELIVERY_CHARGE;
+
+    // Generate unique order number using ultra-high performance system for maximum scalability
+    const orderNumber = await generateUltraHighPerformanceOrderNumberWithDailyReset(userId, user.vendorId);
+
+    const newOrder = await Order.create({
+      orderNumber,
+      userId,
+      orderType,
+      collectorName,
+      collectorPhone,
+      items: itemsForOrder,
+      total: finalTotal,
+      address: orderType === "delivery" ? address : "",
+      reservationExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      status: "pendingPayment",
+      vendorId: user.vendorId,
+    });
+
+    const receiptId = newOrder._id.toString();
+    const razorpayOrder = await razorpay.orders.create({
+      amount: finalTotal * 100,
+      currency: "INR",
+      receipt: receiptId,
+      payment_capture: 1,
+    });
+
+    return {
+      orderId: newOrder._id,
+      orderNumber: newOrder.orderNumber,
+      razorpayOptions: {
+        key: razorpayKeyId,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        order_id: razorpayOrder.id,
+      },
+    };
+  } catch (error) {
+    // If any error occurs during order creation, release all locks
+    atomicCache.releaseOrderLocks(user.cart, userId);
+    throw error;
+  }
 }
 
 async function verifyAndProcessPaymentWithOrderId({
@@ -296,6 +315,13 @@ async function verifyAndProcessPaymentWithOrderId({
       { _id: ourOrderId },
       { $set: { status: "failedPayment" } }
     );
+    
+    // 🔓 RELEASE LOCKS: Release locks when payment fails
+    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+    if (lockReleaseResult.failed.length > 0) {
+      console.warn(`Failed to release locks for failed payment items: ${lockReleaseResult.failed.join(', ')}`);
+    }
+    
     return { success: false, msg: "Invalid signature, payment failed" };
   }
 
