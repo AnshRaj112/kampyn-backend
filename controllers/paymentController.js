@@ -4,6 +4,7 @@ const Order = require("../models/order/Order");
 const Payment = require("../models/order/Payment"); // ← import the Payment model
 const orderUtils = require("../utils/orderUtils");
 const paymentUtils = require("../utils/paymentUtils");
+const { atomicCache } = require("../utils/cacheUtils");
 
 /**
  * POST /payments/verify
@@ -55,7 +56,7 @@ async function verifyPaymentHandler(req, res, next) {
     // 3. Create a new Payment document in the payment collection:
     //    • orderId → reference to the Order._id
     //    • userId  → comes from order.userId
-    //    • amount  → the order’s total
+    //    • amount  → the order's total
     //    • status  → "paid"
     //    • paymentMethod → "razorpay"
     //    • razorpayOrderId, razorpayPaymentId → from Razorpay
@@ -69,13 +70,20 @@ async function verifyPaymentHandler(req, res, next) {
       razorpayPaymentId: razorpay_payment_id,
     });
 
-    // 4. Update the Order to store this payment’s ObjectId and set status = "inProgress"
+    // 4. Update the Order to store this payment's ObjectId and set status = "inProgress"
     order.status = "inProgress";
     order.paymentId = paymentDoc._id;
     await order.save();
 
     // 5. Run post-payment logic (inventory updates, user.cart → pastOrders, vendor.activeOrders, etc.)
     await orderUtils.postPaymentProcessing(order);
+
+    // 🔓 RELEASE LOCKS: After successful payment, release all item locks
+    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+    
+    if (lockReleaseResult.failed.length > 0) {
+      console.warn(`Failed to release locks for items: ${lockReleaseResult.failed.join(', ')}`);
+    }
 
     return res.json({
       success: true,

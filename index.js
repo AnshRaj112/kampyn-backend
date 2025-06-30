@@ -1,9 +1,11 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const userAuthRoutes = require("./routes/auth/userAuthRoutes");
 const uniAuthRoutes = require("./routes/auth/uniAuthRoutes");
 const vendorAuthRoutes = require("./routes/auth/vendorAuthRoutes");
+const adminAuthRoutes = require("./routes/auth/adminAuthRoutes");
 const foodRoutes = require("./routes/foodRoutes");
 const contactRoute = require("./routes/contactRoute");
 const teamRoutes = require("./routes/teamRoutes");
@@ -16,11 +18,14 @@ const orderRoutes = require("./routes/orderRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const paymentRoutes = require("./routes/paymentRoute");
 const inventoryReportRoutes = require("./routes/inventoryReportRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
 app.use(express.json()); // ✅ Parses incoming JSON data
 app.use(express.urlencoded({ extended: true })); // ✅ Parses form data
+app.use(cookieParser()); // 🔒 Parse cookies for admin authentication
 
 // ✅ Load environment variables
 // const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
@@ -69,6 +74,7 @@ app.use(cors({
 app.use("/api/user/auth", userAuthRoutes);
 app.use("/api/uni/auth", uniAuthRoutes);
 app.use("/api/vendor/auth", vendorAuthRoutes);
+app.use("/api/admin/auth", adminAuthRoutes); // 🔒 Admin authentication routes
 app.use("/api/foods", foodRoutes);
 app.use("/contact", contactRoute);
 app.use("/team", teamRoutes);
@@ -81,6 +87,7 @@ app.use("/order", orderRoutes);
 app.use("/payment", paymentRoutes);
 app.use("/api/vendor", vendorRoutes);
 app.use("/inventoryreport", inventoryReportRoutes);
+app.use("/admin", adminRoutes); // 🔒 Admin routes for lock management
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling
@@ -100,8 +107,11 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // ✅ Start Server
-app.listen(PORT, () =>
-  console.log(
-    `🚀 Server running on port ${PORT}`
-  )
-);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  
+  // 🔒 Start periodic cleanup of expired orders and locks
+  startPeriodicCleanup(5 * 60 * 1000); // 5 minutes
+  console.log("🔒 Cache locking system initialized with periodic cleanup");
+  console.log("🔐 Admin authentication system ready");
+});
