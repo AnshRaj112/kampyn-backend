@@ -5,8 +5,12 @@ const router = express.Router();
 const orderController = require("../controllers/orderController");
 //const authMiddleware = require("../middlewares/authMiddleware"); // your JWT‐based auth
 
+// Guest order endpoint for vendors (must come before /:userId route)
+router.post("/guest", orderController.createGuestOrder);
+
 // Place an order (creates Order in DB + returns Razorpay options)
 router.post("/:userId", orderController.placeOrderHandler);
+
 // 1. get current active order for a vendor (specify type: dinein|takeaway|delivery)
 router.get("/active/:vendorId/:orderType", orderController.getActiveOrders);
 

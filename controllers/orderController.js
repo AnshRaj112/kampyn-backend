@@ -626,3 +626,121 @@ exports.getVendorPastOrders = async (req, res) => {
     return res.status(500).json({ message: "Server error." });
   }
 };
+
+/**
+ * POST /orders/guest
+ * Creates a guest order for vendors
+ * Expects:
+ *   Body JSON:
+ *     {
+ *       vendorId: String,
+ *       items: Array,
+ *       total: Number,
+ *       collectorName: String,
+ *       collectorPhone: String,
+ *       orderType: "cash",
+ *       isGuest: Boolean
+ *     }
+ */
+exports.createGuestOrder = async (req, res) => {
+  try {
+    const { vendorId, items, total, collectorName, collectorPhone, orderType, isGuest } = req.body;
+
+    // Basic validation
+    if (!vendorId || !items || !total || !collectorName || !collectorPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "vendorId, items, total, collectorName, and collectorPhone are required.",
+      });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Items array must not be empty.",
+      });
+    }
+
+    // Check if vendor exists
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found.",
+      });
+    }
+
+    // Check if user exists with the provided phone number
+    let userId = null;
+    let isNewUser = false;
+    const existingUser = await User.findOne({ phone: collectorPhone });
+    
+    if (existingUser) {
+      userId = existingUser._id;
+    } else {
+      // Create a guest user account
+      const guestUser = new User({
+        fullName: collectorName,
+        phone: collectorPhone,
+        email: `guest_${Date.now()}@kiitbites.com`, // Temporary email
+        password: "guest_password", // Temporary password
+        type: "user-standard",
+        isVerified: true,
+        uniID: vendor.uniID,
+      });
+      
+      const savedGuestUser = await guestUser.save();
+      userId = savedGuestUser._id;
+      isNewUser = true;
+    }
+
+    // Generate order number using the valid userId
+    const orderNumber = await orderUtils.generateOrderNumber(userId, vendorId);
+
+    // Create the order
+    const newOrder = await Order.create({
+      orderNumber,
+      userId,
+      orderType: "cash",
+      collectorName,
+      collectorPhone,
+      items: items.map(item => ({
+        itemId: item.itemId,
+        kind: item.kind,
+        quantity: item.quantity
+      })),
+      total,
+      status: "inProgress", // Start directly as in progress since it's cash payment
+      vendorId,
+      isGuest: true,
+    });
+
+    // If user exists, add to their active orders
+    if (existingUser) {
+      await User.findByIdAndUpdate(userId, {
+        $push: { activeOrders: newOrder._id }
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      orderId: newOrder._id,
+      orderNumber: newOrder.orderNumber,
+      message: "Guest order created successfully",
+      isNewUser,
+    });
+
+  } catch (err) {
+    console.error("Error in createGuestOrder:", err);
+    
+    if (err.code === 11000) {
+      return res.status(409).json({ 
+        success: false, 
+        message: "Order number already exists. Please try again.",
+        errorType: "DUPLICATE_ORDER_NUMBER"
+      });
+    }
+    
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
