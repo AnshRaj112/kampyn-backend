@@ -18,6 +18,8 @@ const orderRoutes = require("./routes/orderRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const paymentRoutes = require("./routes/paymentRoute");
 const inventoryReportRoutes = require("./routes/inventoryReportRoutes");
+const vendorCartRoutes = require("./routes/vendorCartRoutes");
+const billingInfoRoutes = require("./routes/billingInfoRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
 //const tempRoutes = require("./routes/tempRoutes");
@@ -87,6 +89,8 @@ app.use("/order", orderRoutes);
 app.use("/payment", paymentRoutes);
 app.use("/api/vendor", vendorRoutes);
 app.use("/inventoryreport", inventoryReportRoutes);
+app.use("/vendorcart", vendorCartRoutes);
+app.use("/billinginfo", billingInfoRoutes);
 app.use("/admin", adminRoutes); // 🔒 Admin routes for lock management
 //app.use("/temp", tempRoutes);
 
