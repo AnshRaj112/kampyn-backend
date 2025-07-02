@@ -45,6 +45,28 @@ exports.addItem = async (req, res) => {
     const item = new ItemModel(req.body);
     await item.save();
 
+    // Add the new item to all vendors in the same university
+    const vendors = await Vendor.find({ uniID: uniId });
+    if (category.toLowerCase() === 'retail') {
+      await Promise.all(vendors.map(vendor => {
+        // Only add if not already present
+        if (!vendor.retailInventory.some(inv => inv.itemId.equals(item._id))) {
+          vendor.retailInventory.push({ itemId: item._id, quantity: 0 });
+          return vendor.save();
+        }
+        return Promise.resolve();
+      }));
+    } else if (category.toLowerCase() === 'produce') {
+      await Promise.all(vendors.map(vendor => {
+        // Only add if not already present
+        if (!vendor.produceInventory.some(inv => inv.itemId.equals(item._id))) {
+          vendor.produceInventory.push({ itemId: item._id, isAvailable: 'Y' });
+          return vendor.save();
+        }
+        return Promise.resolve();
+      }));
+    }
+
     res.status(201).json({ message: "Item added successfully", item });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -58,7 +80,7 @@ exports.getItemsByTypeAndUni = async (req, res) => {
 
     const ItemModel = getModel(category);
     const items = await ItemModel.find({ type, uniId })
-      .select("name price image type isSpecial")
+      .select("name price image type")
       .lean();
     res.status(200).json(items);
   } catch (error) {
@@ -84,7 +106,7 @@ exports.getItemsByUniId = async (req, res) => {
 
     const [items, total] = await Promise.all([
       ItemModel.find({ uniId })
-        .select("name price image type isSpecial")
+        .select("name price image type")
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -107,7 +129,9 @@ exports.updateItem = async (req, res) => {
   try {
     const { category, id } = req.params;
     const ItemModel = getModel(category);
-    const updatedItem = await ItemModel.findByIdAndUpdate(id, req.body, {
+    const updateData = { ...req.body };
+    delete updateData.isSpecial;
+    const updatedItem = await ItemModel.findByIdAndUpdate(id, updateData, {
       new: true,
     });
 

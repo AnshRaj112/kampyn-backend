@@ -104,9 +104,9 @@ async function getItemsForVendorId(vendorId) {
   const produceMap = new Map(produceDocs.map((doc) => [String(doc._id), doc]));
 
   // 7. Build the minimal response arrays:
-  //    • For each retail entry: include itemId, name, price, quantity.
+  //    • For each retail entry: include itemId, name, price, quantity, isSpecial.
   const retailItems = retailEntries
-    .map(({ itemId, quantity }) => {
+    .map(({ itemId, quantity, isSpecial }) => {
       const doc = retailMap.get(String(itemId));
       if (!doc) return null; // If not found in DB, skip
       return {
@@ -116,13 +116,14 @@ async function getItemsForVendorId(vendorId) {
         quantity, // how many units left
         image: doc.image,
         type: doc.type,
+        isSpecial, // from vendor's inventory
       };
     })
     .filter(Boolean);
 
-  //    • For produce: include itemId, name, price
+  //    • For produce: include itemId, name, price, isSpecial
   const produceItems = produceEntries
-    .map(({ itemId }) => {
+    .map(({ itemId, isAvailable, isSpecial }) => {
       const doc = produceMap.get(String(itemId));
       if (!doc) return null;
       return {
@@ -131,6 +132,8 @@ async function getItemsForVendorId(vendorId) {
         price: doc.price,
         image: doc.image,
         type: doc.type,
+        isAvailable,
+        isSpecial, // from vendor's inventory
       };
     })
     .filter(Boolean);
@@ -226,12 +229,12 @@ async function getRetailItemsForVendorId(vendorId) {
     _id: { $in: retailItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name price isSpecial type")
+    .select("name price type") // no longer select isSpecial from item
     .lean();
 
   const retailMap = new Map(retailDocs.map((d) => [String(d._id), d]));
   const retailItems = retailEntries
-    .map(({ itemId, quantity }) => {
+    .map(({ itemId, quantity, isSpecial }) => {
       const doc = retailMap.get(String(itemId));
       if (!doc) return null;
       return {
@@ -240,7 +243,7 @@ async function getRetailItemsForVendorId(vendorId) {
         price: doc.price,
         quantity,
         type: doc.type,
-        isSpecial: doc.isSpecial,
+        isSpecial, // from vendor's inventory
       };
     })
     .filter(Boolean);
@@ -264,12 +267,12 @@ async function getProduceItemsForVendorId(vendorId) {
     _id: { $in: produceItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name price isSpecial type")
+    .select("name price type") // no longer select isSpecial from item
     .lean();
 
   const produceMap = new Map(produceDocs.map((d) => [String(d._id), d]));
   const produceItems = produceEntries
-    .map(({ itemId, isAvailable }) => {
+    .map(({ itemId, isAvailable, isSpecial }) => {
       const doc = produceMap.get(String(itemId));
       if (!doc) return null;
       return {
@@ -278,7 +281,7 @@ async function getProduceItemsForVendorId(vendorId) {
         price: doc.price,
         isAvailable,
         type: doc.type,
-        isSpecial: doc.isSpecial,
+        isSpecial, // from vendor's inventory
       };
     })
     .filter(Boolean);

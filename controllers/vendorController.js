@@ -100,3 +100,58 @@ exports.updateVendorAvailability = async (req, res) => {
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
+
+// Delete a vendor from a university and the Vendor collection
+exports.deleteVendor = async (req, res) => {
+  try {
+    const { uniId, vendorId } = req.params;
+    if (!uniId || !vendorId) {
+      return res.status(400).json({ error: "Missing 'uniId' or 'vendorId' in path." });
+    }
+
+    // Remove vendor from university's vendors array
+    const uniUpdate = await Uni.updateOne(
+      { _id: uniId },
+      { $pull: { vendors: { vendorId } } }
+    );
+    if (uniUpdate.modifiedCount === 0) {
+      return res.status(404).json({ error: "Vendor not found in university." });
+    }
+
+    // Delete the vendor document
+    const vendorDelete = await Vendor.deleteOne({ _id: vendorId, uniID: uniId });
+    if (vendorDelete.deletedCount === 0) {
+      return res.status(404).json({ error: "Vendor document not found." });
+    }
+
+    res.status(200).json({ success: true, message: "Vendor deleted successfully." });
+  } catch (err) {
+    console.error("Error in deleteVendor:", err);
+    res.status(500).json({ error: "Server error", details: err.message });
+  }
+};
+
+// Update isSpecial for a specific item in a vendor's inventory
+exports.updateItemSpecialStatus = async (req, res) => {
+  try {
+    const { vendorId, itemId, kind } = req.params;
+    const { isSpecial } = req.body;
+    if (!vendorId || !itemId || !kind) {
+      return res.status(400).json({ error: "Missing vendorId, itemId, or kind in path." });
+    }
+    if (!["Y", "N"].includes(isSpecial)) {
+      return res.status(400).json({ error: "Invalid isSpecial value. Must be 'Y' or 'N'." });
+    }
+    const inventoryField = kind === "retail" ? "retailInventory" : "produceInventory";
+    const updateResult = await Vendor.updateOne(
+      { _id: vendorId, [`${inventoryField}.itemId`]: itemId },
+      { $set: { [`${inventoryField}.$.isSpecial`]: isSpecial } }
+    );
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({ error: "Vendor or item not found in inventory." });
+    }
+    res.status(200).json({ success: true, message: `isSpecial updated to ${isSpecial}` });
+  } catch (err) {
+    res.status(500).json({ error: "Server error", details: err.message });
+  }
+};

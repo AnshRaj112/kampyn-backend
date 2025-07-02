@@ -22,6 +22,7 @@ const vendorCartRoutes = require("./routes/vendorCartRoutes");
 const billingInfoRoutes = require("./routes/billingInfoRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
+const configRoutes = require("./routes/configRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -80,7 +81,7 @@ app.use("/api/admin/auth", adminAuthRoutes); // 🔒 Admin authentication routes
 app.use("/api/foods", foodRoutes);
 app.use("/contact", contactRoute);
 app.use("/team", teamRoutes);
-app.use("/items", itemRoutes);
+app.use("/api/item", itemRoutes);
 app.use("/foodcourts", foodCourtRoutes);
 app.use("/cart", cartRoutes);
 app.use("/inventory", inventoryRoutes);
@@ -92,6 +93,7 @@ app.use("/inventoryreport", inventoryReportRoutes);
 app.use("/vendorcart", vendorCartRoutes);
 app.use("/billinginfo", billingInfoRoutes);
 app.use("/admin", adminRoutes); // 🔒 Admin routes for lock management
+app.use("/api", configRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling

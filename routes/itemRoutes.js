@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const itemController = require("../controllers/itemController");
+const Retail = require('../models/item/Retail');
+const Produce = require('../models/item/Produce');
 
 router.get(
   "/getvendors/:vendorId/retail",
@@ -43,5 +45,15 @@ router.get("/getvendors/:vendorId", itemController.getItemsByVendor);
 
 // Get vendors for a specific item
 router.get("/vendors/:itemId", itemController.getVendorsForItem);
+
+router.get('/types/retail', (req, res) => {
+  const retailTypes = Retail.schema.path('type').enumValues;
+  res.json({ types: retailTypes });
+});
+
+router.get('/types/produce', (req, res) => {
+  const produceTypes = Produce.schema.path('type').enumValues;
+  res.json({ types: produceTypes });
+});
 
 module.exports = router;
