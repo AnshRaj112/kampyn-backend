@@ -744,3 +744,26 @@ exports.createGuestOrder = async (req, res) => {
     return res.status(400).json({ success: false, message: err.message });
   }
 };
+
+/**
+ * GET /api/order/vendor/:vendorId/active
+ * Returns all active orders for a vendor
+ */
+exports.getActiveOrdersByVendor = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    if (!vendorId) return res.status(400).json({ error: "Missing vendorId" });
+
+    // Find all active orders for this vendor
+    const orders = await Order.find({
+      vendorId,
+      status: { $in: ["pendingPayment", "inProgress", "onTheWay"] }
+    })
+      .select("_id orderNumber status createdAt items")
+      .lean();
+
+    res.json({ orders });
+  } catch (err) {
+    res.status(500).json({ error: "Server error", details: err.message });
+  }
+};
