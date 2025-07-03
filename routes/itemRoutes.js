@@ -3,6 +3,7 @@ const router = express.Router();
 const itemController = require("../controllers/itemController");
 const Retail = require('../models/item/Retail');
 const Produce = require('../models/item/Produce');
+const { getAllSpecialsByUniId } = require('../controllers/itemController');
 
 router.get(
   "/getvendors/:vendorId/retail",
@@ -45,6 +46,9 @@ router.get("/getvendors/:vendorId", itemController.getItemsByVendor);
 
 // Get vendors for a specific item
 router.get("/vendors/:itemId", itemController.getVendorsForItem);
+
+// Get individual item by id in a category
+router.get("/:category/item/:id", itemController.getItemById);
 
 router.get('/types/retail', (req, res) => {
   const retailTypes = Retail.schema.path('type').enumValues;

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { getVendorsByUni, getVendorsWithAvailability, updateVendorAvailability, updateItemSpecialStatus } = require("../controllers/vendorController");
+const { getVendorsByUni, getVendorsWithAvailability, updateVendorAvailability, updateItemSpecialStatus, updateItemAvailableStatus } = require("../controllers/vendorController");
 
 // Get all vendors for a specific university
 router.get("/list/uni/:uniId", getVendorsByUni);
@@ -16,5 +16,8 @@ router.delete("/delete/uni/:uniId/vendor/:vendorId", require("../controllers/ven
 
 // Add route for updating isSpecial for a vendor's item
 router.patch("/:vendorId/item/:itemId/:kind/special", updateItemSpecialStatus);
+
+// Add route for updating isAvailable for a vendor's item
+router.patch("/:vendorId/item/:itemId/:kind/available", updateItemAvailableStatus);
 
 module.exports = router;

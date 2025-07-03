@@ -11,7 +11,7 @@ exports.getVendorsByUni = async (req, res) => {
     }
 
     const vendors = await Vendor.find({ uniID: uniId })
-      .select("_id fullName")
+      .select("_id fullName retailInventory produceInventory")
       .lean();
     res.status(200).json(vendors);
   } catch (err) {
@@ -151,6 +151,34 @@ exports.updateItemSpecialStatus = async (req, res) => {
       return res.status(404).json({ error: "Vendor or item not found in inventory." });
     }
     res.status(200).json({ success: true, message: `isSpecial updated to ${isSpecial}` });
+  } catch (err) {
+    res.status(500).json({ error: "Server error", details: err.message });
+  }
+};
+
+// Update isAvailable for a specific item in a vendor's inventory
+exports.updateItemAvailableStatus = async (req, res) => {
+  try {
+    const { vendorId, itemId, kind } = req.params;
+    const { isAvailable } = req.body;
+    if (!vendorId || !itemId || !kind) {
+      return res.status(400).json({ error: "Missing vendorId, itemId, or kind in path." });
+    }
+    if (!["Y", "N"].includes(isAvailable)) {
+      return res.status(400).json({ error: "Invalid isAvailable value. Must be 'Y' or 'N'." });
+    }
+    if (kind !== "produce") {
+      return res.status(400).json({ error: "isAvailable can only be updated for produce items." });
+    }
+    const inventoryField = "produceInventory";
+    const updateResult = await Vendor.updateOne(
+      { _id: vendorId, [`${inventoryField}.itemId`]: itemId },
+      { $set: { [`${inventoryField}.$.isAvailable`]: isAvailable } }
+    );
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({ error: "Vendor or item not found in inventory." });
+    }
+    res.status(200).json({ success: true, message: `isAvailable updated to ${isAvailable}` });
   } catch (err) {
     res.status(500).json({ error: "Server error", details: err.message });
   }

@@ -526,3 +526,20 @@ exports.getVendorsForItem = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Get individual item by id
+exports.getItemById = async (req, res) => {
+  try {
+    const { category, id } = req.params;
+    const ItemModel = getModel(category);
+    const item = await ItemModel.findById(id).lean();
+
+    if (!item) {
+      return res.status(404).json({ error: "Item not found" });
+    }
+
+    res.status(200).json(item);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
