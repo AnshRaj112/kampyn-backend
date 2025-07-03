@@ -187,3 +187,27 @@ exports.reduceRetailInventory = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+exports.updateRetailAvailability = async (req, res) => {
+  try {
+    const { vendorId, itemId, isAvailable } = req.body;
+    if (!vendorId || !itemId || !["Y", "N"].includes(isAvailable)) {
+      return res.status(400).json({ message: "Missing or invalid fields" });
+    }
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+    const retailEntry = vendor.retailInventory.find(
+      (i) => i.itemId.toString() === itemId
+    );
+    if (!retailEntry) {
+      return res.status(404).json({ message: "Retail item not found in inventory" });
+    }
+    retailEntry.isAvailable = isAvailable;
+    vendor.markModified("retailInventory");
+    await vendor.save();
+    return res.status(200).json({ message: "Retail item availability updated" });
+  } catch (error) {
+    console.error("Error updating retail availability:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};

@@ -25,6 +25,12 @@ const vendorSchema = new mongoose.Schema(
           default: "N",
           required: true,
         },
+        isAvailable: {
+          type: String,
+          enum: ["Y", "N"],
+          default: "Y",
+          required: true,
+        },
         _id: false,
       },
     ],
