@@ -5,6 +5,8 @@ const {
   generateDailyReportForUni,
   getInventoryReport,
 } = require("../utils/inventoryReportUtils");
+const InventoryReport = require("../models/inventory/InventoryReport");
+const mongoose = require("mongoose");
 
 /**
  * POST /inventory/report/vendor/:vendorId
@@ -71,8 +73,31 @@ async function getVendorReport(req, res, next) {
   }
 }
 
+/**
+ * GET /inventoryreport/vendor/:vendorId/dates
+ * Returns all dates for which a report exists for this vendor
+ */
+async function getVendorReportDates(req, res) {
+  try {
+    const { vendorId } = req.params;
+    // Validate vendorId
+    if (!mongoose.Types.ObjectId.isValid(vendorId)) {
+      return res.status(400).json({ error: "Invalid vendorId" });
+    }
+    // Ensure vendorId is an ObjectId
+    const reports = await InventoryReport.find({ vendorId: new mongoose.Types.ObjectId(vendorId) }).select("date -_id").lean();
+    // Format date as YYYY-MM-DD string
+    const dates = [...new Set(reports.map(r => r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)))].sort((a, b) => b.localeCompare(a));
+    res.json({ dates });
+  } catch (err) {
+    console.error("Error in getVendorReportDates:", err);
+    res.status(500).json({ error: "Server error", details: err.message });
+  }
+}
+
 module.exports = {
   postVendorReport,
   postUniReport,
   getVendorReport,
+  getVendorReportDates,
 };

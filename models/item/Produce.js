@@ -21,7 +21,6 @@ const produceSchema = new mongoose.Schema({
   unit: { type: String, required: true },
   price: { type: Number, required: true },
   image: { type: String, required: true },
-  isSpecial: { type: String, enum: ["Y", "N"], required: true, default: "N" },
 });
 produceSchema.index({ uniId: 1, type: 1 });
 produceSchema.post("findOneAndDelete", async function (doc) {

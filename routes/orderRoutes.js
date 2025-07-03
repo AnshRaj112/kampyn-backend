@@ -33,4 +33,7 @@ router.get("/vendor-past/:vendorId", orderController.getVendorPastOrders);
 // 7. cleanup delivered orders that are still in active orders
 router.post("/cleanup-delivered/:userId", orderController.cleanupDeliveredOrders);
 
+// Get all active orders for a vendor
+router.get("/vendor/:vendorId/active", orderController.getActiveOrdersByVendor);
+
 module.exports = router;
