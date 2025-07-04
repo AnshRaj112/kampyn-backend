@@ -50,7 +50,8 @@ async function cleanupExpiredOrders() {
     // Find all expired pending orders
     const expiredOrders = await Order.find({
       status: "pendingPayment",
-      reservationExpiresAt: { $lt: now }
+      reservationExpiresAt: { $lt: now },
+      deleted: false
     }).select("_id items userId").lean();
     
     if (expiredOrders.length === 0) {
