@@ -5,6 +5,11 @@ const Vendor = require("../models/account/Vendor");
 const User = require("../models/account/User");
 const Order = require("../models/order/Order");
 const Uni = require("../models/account/Uni");
+const mongoose = require("mongoose");
+const { atomicCache } = require("../utils/cacheUtils");
+
+// Import the shared atomic cancellation function
+const { cancelOrderAtomically } = require("../utils/orderUtils");
 /**
  * POST /orders/:userId
  * Expects:
@@ -765,5 +770,121 @@ exports.getActiveOrdersByVendor = async (req, res) => {
     res.json({ orders });
   } catch (err) {
     res.status(500).json({ error: "Server error", details: err.message });
+  }
+};
+
+/**
+ * POST /orders/:orderId/cancel
+ * Cancel a pending order and release item locks
+ */
+exports.cancelOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    console.log(`Cancelling order: ${orderId}`);
+
+    // 1) Find the order
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      console.log(`Order not found: ${orderId}`);
+      return res.status(404).json({ message: "Order not found." });
+    }
+
+    // 2) Check if order can be cancelled (only pendingPayment orders)
+    if (order.status !== "pendingPayment") {
+      console.log(`Order ${orderId} cannot be cancelled - status is ${order.status}`);
+      return res.status(400).json({ 
+        message: `Order cannot be cancelled. Current status: ${order.status}` 
+      });
+    }
+
+    // 3) Use database transaction for atomic cancellation
+    const session = await mongoose.startSession();
+    try {
+      const { locksReleased, failedLocks } = await session.withTransaction(async () => {
+        return await cancelOrderAtomically(orderId, order, session);
+      });
+      
+      console.log(`Order ${orderId} cancelled successfully with transaction`);
+      return res.json({
+        success: true,
+        message: "Order cancelled successfully",
+        locksReleased: locksReleased,
+        failedLocks: failedLocks
+      });
+    } catch (error) {
+      console.error(`Failed to cancel order ${orderId} atomically:`, error);
+      return res.status(500).json({ 
+        message: "Failed to cancel order. Please try again.",
+        error: error.message 
+      });
+    } finally {
+      await session.endSession();
+    }
+
+  } catch (err) {
+    console.error("Error in cancelOrder:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
+ * POST /orders/:orderId/cancel-manual
+ * Manually cancel a pending order (for users who need to cancel manually)
+ */
+exports.cancelOrderManual = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { userId } = req.body; // User ID for verification
+    
+    console.log(`Manual cancellation requested for order: ${orderId} by user: ${userId}`);
+
+    // 1) Find the order and verify ownership
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      console.log(`Order not found: ${orderId}`);
+      return res.status(404).json({ message: "Order not found." });
+    }
+
+    if (order.userId.toString() !== userId) {
+      console.log(`User ${userId} not authorized to cancel order ${orderId}`);
+      return res.status(403).json({ message: "Not authorized to cancel this order." });
+    }
+
+    // 2) Check if order can be cancelled (only pendingPayment orders)
+    if (order.status !== "pendingPayment") {
+      console.log(`Order ${orderId} cannot be cancelled - status is ${order.status}`);
+      return res.status(400).json({ 
+        message: `Order cannot be cancelled. Current status: ${order.status}` 
+      });
+    }
+
+    // 3) Use database transaction for atomic cancellation
+    const session = await mongoose.startSession();
+    try {
+      const { locksReleased, failedLocks } = await session.withTransaction(async () => {
+        return await cancelOrderAtomically(orderId, order, session);
+      });
+      
+      console.log(`Order ${orderId} manually cancelled successfully with transaction`);
+      return res.json({
+        success: true,
+        message: "Order cancelled successfully",
+        locksReleased: locksReleased,
+        failedLocks: failedLocks
+      });
+    } catch (error) {
+      console.error(`Failed to manually cancel order ${orderId} atomically:`, error);
+      return res.status(500).json({ 
+        message: "Failed to cancel order. Please try again.",
+        error: error.message 
+      });
+    } finally {
+      await session.endSession();
+    }
+
+  } catch (err) {
+    console.error("Error in cancelOrderManual:", err);
+    return res.status(500).json({ message: "Server error." });
   }
 };

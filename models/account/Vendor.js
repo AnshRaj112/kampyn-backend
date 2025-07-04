@@ -10,7 +10,7 @@ const vendorSchema = new mongoose.Schema(
     password: { type: String, required: true }, // hash in pre-save
     location: { type: String },
     uniID: { type: mongoose.Schema.Types.ObjectId, ref: "Uni" },
-
+    isVerified: { type: Boolean, default: false },
     retailInventory: [
       {
         itemId: {

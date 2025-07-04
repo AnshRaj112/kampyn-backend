@@ -1,5 +1,29 @@
 const Order = require("../models/order/Order");
+const User = require("../models/account/User");
+const Vendor = require("../models/account/Vendor");
 const { atomicCache } = require("./cacheUtils");
+const mongoose = require("mongoose");
+
+// Import the shared atomic cancellation function
+const { cancelOrderAtomically } = require("./orderUtils");
+
+/**
+ * Atomic order cleanup with database transaction
+ * Uses the shared cancelOrderAtomically function for consistency
+ */
+async function cleanupOrderAtomically(order, session) {
+  try {
+    // Use the shared atomic cancellation function
+    const result = await cancelOrderAtomically(order._id, order, session);
+    
+    console.log(`Order ${order._id} cleaned up atomically. Released ${result.locksReleased} locks`);
+    
+    return result;
+  } catch (error) {
+    console.error(`Error in atomic order cleanup for ${order._id}:`, error);
+    throw error;
+  }
+}
 
 /**
  * Cleanup utility for expired orders and locks
@@ -8,11 +32,20 @@ const { atomicCache } = require("./cacheUtils");
 
 /**
  * Clean up expired pending orders and release their locks
- * This should be run periodically (e.g., every 5 minutes)
+ * This should be run periodically (e.g., every 10 minutes)
+ * 
+ * Changes made to fix order deletion issue:
+ * 1. Fixed status inconsistency: "failedPayment" -> "failed"
+ * 2. Move failed orders from activeOrders to pastOrders for users
+ * 3. Remove failed orders from vendor's activeOrders
+ * 4. Increased expiration time from 10 to 30 minutes
+ * 5. Added better logging for debugging
  */
 async function cleanupExpiredOrders() {
   try {
     const now = new Date();
+    
+    console.log(`🔍 Checking for expired orders at ${now.toISOString()}`);
     
     // Find all expired pending orders
     const expiredOrders = await Order.find({
@@ -29,24 +62,30 @@ async function cleanupExpiredOrders() {
     
     for (const order of expiredOrders) {
       try {
-        // Update order status to failed
-        await Order.updateOne(
-          { _id: order._id },
-          { $set: { status: "failed" } }
-        );
-        
-        // Release locks for all items in the order
-        const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
-        totalLocksReleased += lockReleaseResult.released.length;
-        
-        if (lockReleaseResult.failed.length > 0) {
+        // Use database transaction for atomic cleanup
+        const session = await mongoose.startSession();
+        try {
+          const result = await session.withTransaction(async () => {
+            // Get vendor ID for the order
+            const orderWithVendor = await Order.findById(order._id).select("vendorId").lean();
+            if (orderWithVendor && orderWithVendor.vendorId) {
+              order.vendorId = orderWithVendor.vendorId;
+            }
+            
+            return await cleanupOrderAtomically(order, session);
+          });
+          
+          totalLocksReleased += result.locksReleased;
+          console.log(`Cleaned up expired order ${order._id} atomically. Released ${result.locksReleased} locks`);
+        } catch (error) {
+          console.error(`Failed to cleanup order ${order._id} atomically:`, error);
           failedCleanups.push({
             orderId: order._id,
-            failedItems: lockReleaseResult.failed
+            error: error.message
           });
+        } finally {
+          await session.endSession();
         }
-        
-        console.log(`Cleaned up expired order ${order._id}, released ${lockReleaseResult.released.length} locks`);
       } catch (error) {
         console.error(`Failed to cleanup order ${order._id}:`, error);
         failedCleanups.push({
@@ -121,7 +160,7 @@ async function getLockStatistics() {
 /**
  * Start periodic cleanup (call this when the server starts)
  */
-function startPeriodicCleanup(intervalMs = 5 * 60 * 1000) { // 5 minutes default
+function startPeriodicCleanup(intervalMs = 10 * 60 * 1000) { // 10 minutes default
   const cleanupInterval = setInterval(async () => {
     try {
       const result = await cleanupExpiredOrders();

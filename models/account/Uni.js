@@ -7,6 +7,7 @@ const uniSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     phone: { type: String, unique: true },
     password: { type: String, required: true },
+    isVerified: { type: Boolean, default: false },
     vendors: [
       {
         vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },
