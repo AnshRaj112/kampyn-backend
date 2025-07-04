@@ -33,6 +33,12 @@ router.get("/vendor-past/:vendorId", orderController.getVendorPastOrders);
 // 7. cleanup delivered orders that are still in active orders
 router.post("/cleanup-delivered/:userId", orderController.cleanupDeliveredOrders);
 
+// 8. cancel a pending order and release locks
+router.post("/:orderId/cancel", orderController.cancelOrder);
+
+// 9. manually cancel a pending order (for users)
+router.post("/:orderId/cancel-manual", orderController.cancelOrderManual);
+
 // Get all active orders for a vendor
 router.get("/vendor/:vendorId/active", orderController.getActiveOrdersByVendor);
 

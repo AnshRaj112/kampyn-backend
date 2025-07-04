@@ -767,3 +767,137 @@ exports.getActiveOrdersByVendor = async (req, res) => {
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
+
+/**
+ * POST /orders/:orderId/cancel
+ * Cancel a pending order and release item locks
+ */
+exports.cancelOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    console.log(`Cancelling order: ${orderId}`);
+
+    // 1) Find the order
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      console.log(`Order not found: ${orderId}`);
+      return res.status(404).json({ message: "Order not found." });
+    }
+
+    // 2) Check if order can be cancelled (only pendingPayment orders)
+    if (order.status !== "pendingPayment") {
+      console.log(`Order ${orderId} cannot be cancelled - status is ${order.status}`);
+      return res.status(400).json({ 
+        message: `Order cannot be cancelled. Current status: ${order.status}` 
+      });
+    }
+
+    // 3) Update order status to failed
+    await Order.updateOne(
+      { _id: orderId },
+      { $set: { status: "failed" } }
+    );
+
+    // 4) Move order from activeOrders to pastOrders for user
+    await User.updateOne(
+      { _id: order.userId },
+      {
+        $pull: { activeOrders: orderId },
+        $push: { pastOrders: orderId }
+      }
+    );
+
+    // 5) Remove order from vendor's activeOrders
+    await Vendor.updateOne(
+      { _id: order.vendorId },
+      { $pull: { activeOrders: orderId } }
+    );
+
+    // 6) Release item locks
+    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+    
+    console.log(`Order ${orderId} cancelled successfully. Released ${lockReleaseResult.released.length} locks`);
+
+    return res.json({
+      success: true,
+      message: "Order cancelled successfully",
+      locksReleased: lockReleaseResult.released.length,
+      failedLocks: lockReleaseResult.failed.length
+    });
+
+  } catch (err) {
+    console.error("Error in cancelOrder:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
+ * POST /orders/:orderId/cancel-manual
+ * Manually cancel a pending order (for users who need to cancel manually)
+ */
+exports.cancelOrderManual = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { userId } = req.body; // User ID for verification
+    
+    console.log(`Manual cancellation requested for order: ${orderId} by user: ${userId}`);
+
+    // 1) Find the order and verify ownership
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      console.log(`Order not found: ${orderId}`);
+      return res.status(404).json({ message: "Order not found." });
+    }
+
+    if (order.userId.toString() !== userId) {
+      console.log(`User ${userId} not authorized to cancel order ${orderId}`);
+      return res.status(403).json({ message: "Not authorized to cancel this order." });
+    }
+
+    // 2) Check if order can be cancelled (only pendingPayment orders)
+    if (order.status !== "pendingPayment") {
+      console.log(`Order ${orderId} cannot be cancelled - status is ${order.status}`);
+      return res.status(400).json({ 
+        message: `Order cannot be cancelled. Current status: ${order.status}` 
+      });
+    }
+
+    // 3) Update order status to failed
+    await Order.updateOne(
+      { _id: orderId },
+      { $set: { status: "failed" } }
+    );
+
+    // 4) Move order from activeOrders to pastOrders for user
+    await User.updateOne(
+      { _id: order.userId },
+      {
+        $pull: { activeOrders: orderId },
+        $push: { pastOrders: orderId }
+      }
+    );
+
+    // 5) Remove order from vendor's activeOrders
+    await Vendor.updateOne(
+      { _id: order.vendorId },
+      { $pull: { activeOrders: orderId } }
+    );
+
+    // 6) Release item locks
+    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+    
+    console.log(`Order ${orderId} manually cancelled successfully. Released ${lockReleaseResult.released.length} locks`);
+
+    return res.json({
+      success: true,
+      message: "Order cancelled successfully",
+      locksReleased: lockReleaseResult.released.length,
+      failedLocks: lockReleaseResult.failed.length
+    });
+
+  } catch (err) {
+    console.error("Error in cancelOrderManual:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};

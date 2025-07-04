@@ -264,7 +264,7 @@ async function createOrderForUser({
       items: itemsForOrder,
       total: finalTotal,
       address: orderType === "delivery" ? address : "",
-      reservationExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      reservationExpiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
       status: "pendingPayment",
       vendorId: user.vendorId,
     });
@@ -313,7 +313,22 @@ async function verifyAndProcessPaymentWithOrderId({
   if (generatedSig !== razorpay_signature) {
     await Order.updateOne(
       { _id: ourOrderId },
-      { $set: { status: "failedPayment" } }
+      { $set: { status: "failed" } }
+    );
+    
+    // Move failed order from activeOrders to pastOrders for user
+    await User.updateOne(
+      { _id: order.userId },
+      {
+        $pull: { activeOrders: ourOrderId },
+        $push: { pastOrders: ourOrderId }
+      }
+    );
+    
+    // Remove failed order from vendor's activeOrders
+    await Vendor.updateOne(
+      { _id: order.vendorId },
+      { $pull: { activeOrders: ourOrderId } }
     );
     
     // 🔓 RELEASE LOCKS: Release locks when payment fails

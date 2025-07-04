@@ -117,7 +117,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   
   // 🔒 Start periodic cleanup of expired orders and locks
-  startPeriodicCleanup(5 * 60 * 1000); // 5 minutes
+  startPeriodicCleanup(10 * 60 * 1000); // 10 minutes
   console.log("🔒 Cache locking system initialized with periodic cleanup");
   console.log("🔐 Admin authentication system ready");
 });
