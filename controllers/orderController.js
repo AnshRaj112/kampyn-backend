@@ -214,7 +214,7 @@ exports.getPastOrders = async (req, res) => {
       
       const activeOrderIds = user.activeOrders.map(id => id.toString());
       const deliveredOrders = await Order.find(
-        { _id: { $in: activeOrderIds }, status: "delivered" }
+        { _id: { $in: activeOrderIds }, status: "delivered", deleted: false }
       ).lean();
       
       if (deliveredOrders.length > 0) {
@@ -250,7 +250,7 @@ exports.getPastOrders = async (req, res) => {
     const orderIds = pastOrderIds.map(id => id.toString());
     console.log(`Fetching orders with IDs:`, orderIds);
 
-    const orders = await Order.find({ _id: { $in: orderIds } }).lean();
+    const orders = await Order.find({ _id: { $in: orderIds }, deleted: false }).lean();
 
     console.log(`Found ${orders.length} orders in database`);
 
@@ -391,7 +391,7 @@ exports.cleanupDeliveredOrders = async (req, res) => {
     // 2) Find delivered orders in active orders
     const activeOrderIds = user.activeOrders.map(id => id.toString());
     const deliveredOrders = await Order.find(
-      { _id: { $in: activeOrderIds }, status: "delivered" }
+      { _id: { $in: activeOrderIds }, status: "delivered", deleted: false }
     ).lean();
 
     if (deliveredOrders.length === 0) {
@@ -448,7 +448,7 @@ exports.getUserActiveOrders = async (req, res) => {
       
       const activeOrderIds = user.activeOrders.map(id => id.toString());
       const deliveredOrders = await Order.find(
-        { _id: { $in: activeOrderIds }, status: "delivered" }
+        { _id: { $in: activeOrderIds }, status: "delivered", deleted: false }
       ).lean();
       
       if (deliveredOrders.length > 0) {
@@ -483,7 +483,7 @@ exports.getUserActiveOrders = async (req, res) => {
     const orderIds = updatedUser.activeOrders.map(id => id.toString());
     console.log(`Fetching orders with IDs:`, orderIds);
 
-    const orders = await Order.find({ _id: { $in: orderIds } }).lean();
+    const orders = await Order.find({ _id: { $in: orderIds }, deleted: false }).lean();
 
     console.log(`Found ${orders.length} orders in database`);
 
@@ -762,7 +762,8 @@ exports.getActiveOrdersByVendor = async (req, res) => {
     // Find all active orders for this vendor
     const orders = await Order.find({
       vendorId,
-      status: { $in: ["pendingPayment", "inProgress", "onTheWay"] }
+      status: { $in: ["pendingPayment", "inProgress", "onTheWay"] },
+      deleted: false
     })
       .select("_id orderNumber status createdAt items")
       .lean();
@@ -784,7 +785,7 @@ exports.cancelOrder = async (req, res) => {
     console.log(`Cancelling order: ${orderId}`);
 
     // 1) Find the order
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findOne({ _id: orderId }).lean();
     if (!order) {
       console.log(`Order not found: ${orderId}`);
       return res.status(404).json({ message: "Order not found." });
@@ -798,24 +799,44 @@ exports.cancelOrder = async (req, res) => {
       });
     }
 
-    // 3) Use database transaction for atomic cancellation
+    // 3) Use database transaction for atomic hard delete
     const session = await mongoose.startSession();
     try {
       const { locksReleased, failedLocks } = await session.withTransaction(async () => {
-        return await cancelOrderAtomically(orderId, order, session);
+        // Remove order from user and vendor
+        await User.updateOne(
+          { _id: order.userId },
+          {
+            $pull: { activeOrders: orderId, pastOrders: orderId }
+          },
+          { session }
+        );
+        await Vendor.updateOne(
+          { _id: order.vendorId },
+          { $pull: { activeOrders: orderId } },
+          { session }
+        );
+        // Delete the order
+        await Order.deleteOne({ _id: orderId }, { session });
+        // Release item locks
+        const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+        return {
+          locksReleased: lockReleaseResult.released.length,
+          failedLocks: lockReleaseResult.failed.length
+        };
       });
       
-      console.log(`Order ${orderId} cancelled successfully with transaction`);
+      console.log(`Order ${orderId} hard deleted successfully with transaction`);
       return res.json({
         success: true,
-        message: "Order cancelled successfully",
+        message: "Order cancelled and deleted successfully",
         locksReleased: locksReleased,
         failedLocks: failedLocks
       });
     } catch (error) {
-      console.error(`Failed to cancel order ${orderId} atomically:`, error);
+      console.error(`Failed to hard delete order ${orderId} atomically:`, error);
       return res.status(500).json({ 
-        message: "Failed to cancel order. Please try again.",
+        message: "Failed to cancel and delete order. Please try again.",
         error: error.message 
       });
     } finally {
@@ -840,7 +861,7 @@ exports.cancelOrderManual = async (req, res) => {
     console.log(`Manual cancellation requested for order: ${orderId} by user: ${userId}`);
 
     // 1) Find the order and verify ownership
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findOne({ _id: orderId }).lean();
     if (!order) {
       console.log(`Order not found: ${orderId}`);
       return res.status(404).json({ message: "Order not found." });
@@ -859,24 +880,44 @@ exports.cancelOrderManual = async (req, res) => {
       });
     }
 
-    // 3) Use database transaction for atomic cancellation
+    // 3) Use database transaction for atomic hard delete
     const session = await mongoose.startSession();
     try {
       const { locksReleased, failedLocks } = await session.withTransaction(async () => {
-        return await cancelOrderAtomically(orderId, order, session);
+        // Remove order from user and vendor
+        await User.updateOne(
+          { _id: order.userId },
+          {
+            $pull: { activeOrders: orderId, pastOrders: orderId }
+          },
+          { session }
+        );
+        await Vendor.updateOne(
+          { _id: order.vendorId },
+          { $pull: { activeOrders: orderId } },
+          { session }
+        );
+        // Delete the order
+        await Order.deleteOne({ _id: orderId }, { session });
+        // Release item locks
+        const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+        return {
+          locksReleased: lockReleaseResult.released.length,
+          failedLocks: lockReleaseResult.failed.length
+        };
       });
       
-      console.log(`Order ${orderId} manually cancelled successfully with transaction`);
+      console.log(`Order ${orderId} manually hard deleted successfully with transaction`);
       return res.json({
         success: true,
-        message: "Order cancelled successfully",
+        message: "Order cancelled and deleted successfully",
         locksReleased: locksReleased,
         failedLocks: failedLocks
       });
     } catch (error) {
-      console.error(`Failed to manually cancel order ${orderId} atomically:`, error);
+      console.error(`Failed to manually hard delete order ${orderId} atomically:`, error);
       return res.status(500).json({ 
-        message: "Failed to cancel order. Please try again.",
+        message: "Failed to cancel and delete order. Please try again.",
         error: error.message 
       });
     } finally {

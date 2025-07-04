@@ -58,6 +58,7 @@ const orderSchema = new mongoose.Schema({
   },
   isGuest: { type: Boolean, default: false }, // Flag for guest orders created by vendors
   createdAt: { type: Date, default: Date.now },
+  deleted: { type: Boolean, default: false }, // Soft-delete flag
 });
 
 // Ensure _id is unique (MongoDB default, but explicit for clarity)

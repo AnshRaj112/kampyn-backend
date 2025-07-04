@@ -40,7 +40,8 @@ async function migrateOrderNumbers() {
     
     // Find all orders without orderNumber
     const ordersWithoutNumber = await Order.find({ 
-      orderNumber: { $exists: false } 
+      orderNumber: { $exists: false },
+      deleted: false
     }).sort({ createdAt: 1 }).lean();
     
     console.log(`Found ${ordersWithoutNumber.length} orders without orderNumber`);

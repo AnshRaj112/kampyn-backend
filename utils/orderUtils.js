@@ -498,6 +498,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
   const filter = {
     vendorId,
     status: { $in: ["completed", "inProgress", "onTheWay"] },
+    deleted: false
   };
 
   if (orderType) filter.orderType = orderType;
@@ -656,6 +657,7 @@ async function getVendorPastOrdersWithDetails(vendorId) {
   const filter = {
     vendorId,
     status: { $in: ["completed", "delivered", "failed"] },
+    deleted: false
   };
 
   const orders = await Order.find(filter, {
