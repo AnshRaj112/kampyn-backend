@@ -121,6 +121,71 @@ When users cancelled payments in Razorpay, the item locks remained active, preve
 2. **Immediate Retry**: Users can immediately try ordering again after cancellation
 3. **Manual Option**: Users can manually cancel stuck orders if needed
 4. **Better UX**: Clear feedback when cancellation succeeds or fails
+5. **Data Consistency**: All database operations are atomic - they either all succeed or all fail
+
+## Database Transaction Fix
+
+### Problem Description
+The original implementation performed multiple database operations sequentially without proper transaction handling. If any operation failed, the system could be left in an inconsistent state.
+
+### Root Causes Identified
+
+1. **Sequential Operations**: Multiple database updates were performed one after another
+2. **No Rollback**: If one operation failed, previous operations were not rolled back
+3. **Inconsistent State**: System could be left with partial updates
+
+### Fixes Implemented
+
+#### 1. **Atomic Cancellation Functions**
+- **Files**: 
+  - `utils/orderUtils.js`
+  - `controllers/orderController.js`
+  - `utils/orderCleanupUtils.js`
+- **Changes**:
+  - Added `cancelOrderAtomically()` helper functions
+  - Wrapped all database operations in MongoDB transactions
+  - Ensured all operations succeed or fail together
+
+#### 2. **Transaction Handling**
+- **Pattern**: Used `session.withTransaction()` for atomic operations
+- **Benefits**:
+  - All operations succeed or fail together
+  - Automatic rollback on failure
+  - Data consistency guaranteed
+  - Better error handling and recovery
+
+#### 3. **Error Recovery**
+- **Fallback Mechanisms**: Added fallback lock release even if database operations fail
+- **Session Management**: Proper session cleanup with `finally` blocks
+- **Detailed Logging**: Better error tracking and debugging
+
+#### 4. **Testing**
+- **File**: `scripts/test-atomic-transactions.js` (new)
+- **Purpose**: Verify atomic transaction functionality and data consistency
+
+### Technical Implementation
+
+```javascript
+// Example of atomic cancellation pattern
+const session = await mongoose.startSession();
+try {
+  await session.withTransaction(async () => {
+    await cancelOrderAtomically(orderId, order, session);
+  });
+} catch (error) {
+  // Handle transaction failure
+} finally {
+  await session.endSession();
+}
+```
+
+### Expected Behavior After Transaction Fix
+
+1. **Data Consistency**: All database operations are atomic
+2. **No Partial States**: System never left in inconsistent state
+3. **Automatic Rollback**: Failed operations are automatically rolled back
+4. **Better Reliability**: System is more robust against failures
+5. **Easier Debugging**: Clear transaction boundaries and error handling
 
 ## Future Improvements
 

@@ -27,6 +27,52 @@ const razorpay = new Razorpay({
 });
 
 /**
+ * Atomic order cancellation with database transaction
+ * Ensures all operations succeed or fail together
+ */
+async function cancelOrderAtomically(orderId, order, session) {
+  try {
+    // 1) Update order status to failed
+    await Order.updateOne(
+      { _id: orderId },
+      { $set: { status: "failed" } },
+      { session }
+    );
+
+    // 2) Move order from activeOrders to pastOrders for user
+    await User.updateOne(
+      { _id: order.userId },
+      {
+        $pull: { activeOrders: orderId },
+        $push: { pastOrders: orderId }
+      },
+      { session }
+    );
+
+    // 3) Remove order from vendor's activeOrders
+    await Vendor.updateOne(
+      { _id: order.vendorId },
+      { $pull: { activeOrders: orderId } },
+      { session }
+    );
+
+    // 4) Release item locks (outside transaction since it's in-memory cache)
+    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+    
+    console.log(`Order ${orderId} cancelled atomically. Released ${lockReleaseResult.released.length} locks`);
+    
+    return {
+      success: true,
+      locksReleased: lockReleaseResult.released.length,
+      failedLocks: lockReleaseResult.failed.length
+    };
+  } catch (error) {
+    console.error(`Error in atomic order cancellation for ${orderId}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Atomic Counter Format (Recommended for Production)
  * Generates unique order numbers using MongoDB atomic operations
  * Format: BB-YYYYMMDD-UUUU-XXXXX
@@ -311,33 +357,24 @@ async function verifyAndProcessPaymentWithOrderId({
     .digest("hex");
 
   if (generatedSig !== razorpay_signature) {
-    await Order.updateOne(
-      { _id: ourOrderId },
-      { $set: { status: "failed" } }
-    );
-    
-    // Move failed order from activeOrders to pastOrders for user
-    await User.updateOne(
-      { _id: order.userId },
-      {
-        $pull: { activeOrders: ourOrderId },
-        $push: { pastOrders: ourOrderId }
-      }
-    );
-    
-    // Remove failed order from vendor's activeOrders
-    await Vendor.updateOne(
-      { _id: order.vendorId },
-      { $pull: { activeOrders: ourOrderId } }
-    );
-    
-    // 🔓 RELEASE LOCKS: Release locks when payment fails
-    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
-    if (lockReleaseResult.failed.length > 0) {
-      console.warn(`Failed to release locks for failed payment items: ${lockReleaseResult.failed.join(', ')}`);
+    // Use database transaction for atomic cancellation
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await cancelOrderAtomically(ourOrderId, order, session);
+      });
+      
+      console.log(`Payment failed for order ${ourOrderId} - cancelled atomically`);
+      return { success: false, msg: "Invalid signature, payment failed" };
+    } catch (error) {
+      console.error(`Failed to cancel order ${ourOrderId} atomically:`, error);
+      // Fallback: try to release locks even if database operations failed
+      const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+      console.warn(`Fallback lock release for order ${ourOrderId}: ${lockReleaseResult.released.length} released, ${lockReleaseResult.failed.length} failed`);
+      return { success: false, msg: "Invalid signature, payment failed" };
+    } finally {
+      await session.endSession();
     }
-    
-    return { success: false, msg: "Invalid signature, payment failed" };
   }
 
   await Order.updateOne(

@@ -2,6 +2,53 @@ const Order = require("../models/order/Order");
 const User = require("../models/account/User");
 const Vendor = require("../models/account/Vendor");
 const { atomicCache } = require("./cacheUtils");
+const mongoose = require("mongoose");
+
+/**
+ * Atomic order cleanup with database transaction
+ * Ensures all operations succeed or fail together
+ */
+async function cleanupOrderAtomically(order, session) {
+  try {
+    // 1) Update order status to failed
+    await Order.updateOne(
+      { _id: order._id },
+      { $set: { status: "failed" } },
+      { session }
+    );
+
+    // 2) Move failed order from activeOrders to pastOrders for user
+    await User.updateOne(
+      { _id: order.userId },
+      {
+        $pull: { activeOrders: order._id },
+        $push: { pastOrders: order._id }
+      },
+      { session }
+    );
+
+    // 3) Remove failed order from vendor's activeOrders
+    await Vendor.updateOne(
+      { _id: order.vendorId },
+      { $pull: { activeOrders: order._id } },
+      { session }
+    );
+
+    // 4) Release item locks (outside transaction since it's in-memory cache)
+    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+    
+    console.log(`Order ${order._id} cleaned up atomically. Released ${lockReleaseResult.released.length} locks`);
+    
+    return {
+      success: true,
+      locksReleased: lockReleaseResult.released.length,
+      failedLocks: lockReleaseResult.failed.length
+    };
+  } catch (error) {
+    console.error(`Error in atomic order cleanup for ${order._id}:`, error);
+    throw error;
+  }
+}
 
 /**
  * Cleanup utility for expired orders and locks
@@ -40,42 +87,30 @@ async function cleanupExpiredOrders() {
     
     for (const order of expiredOrders) {
       try {
-        // Update order status to failed
-        await Order.updateOne(
-          { _id: order._id },
-          { $set: { status: "failed" } }
-        );
-        
-        // Move failed order from activeOrders to pastOrders for user
-        await User.updateOne(
-          { _id: order.userId },
-          {
-            $pull: { activeOrders: order._id },
-            $push: { pastOrders: order._id }
-          }
-        );
-        
-        // Remove failed order from vendor's activeOrders
-        const orderWithVendor = await Order.findById(order._id).select("vendorId").lean();
-        if (orderWithVendor && orderWithVendor.vendorId) {
-          await Vendor.updateOne(
-            { _id: orderWithVendor.vendorId },
-            { $pull: { activeOrders: order._id } }
-          );
-        }
-        
-        // Release locks for all items in the order
-        const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
-        totalLocksReleased += lockReleaseResult.released.length;
-        
-        if (lockReleaseResult.failed.length > 0) {
+        // Use database transaction for atomic cleanup
+        const session = await mongoose.startSession();
+        try {
+          await session.withTransaction(async () => {
+            // Get vendor ID for the order
+            const orderWithVendor = await Order.findById(order._id).select("vendorId").lean();
+            if (orderWithVendor && orderWithVendor.vendorId) {
+              order.vendorId = orderWithVendor.vendorId;
+            }
+            
+            await cleanupOrderAtomically(order, session);
+          });
+          
+          totalLocksReleased += 1; // Will be updated by the atomic function
+          console.log(`Cleaned up expired order ${order._id} atomically`);
+        } catch (error) {
+          console.error(`Failed to cleanup order ${order._id} atomically:`, error);
           failedCleanups.push({
             orderId: order._id,
-            failedItems: lockReleaseResult.failed
+            error: error.message
           });
+        } finally {
+          await session.endSession();
         }
-        
-        console.log(`Cleaned up expired order ${order._id}, moved to past orders, released ${lockReleaseResult.released.length} locks`);
       } catch (error) {
         console.error(`Failed to cleanup order ${order._id}:`, error);
         failedCleanups.push({
