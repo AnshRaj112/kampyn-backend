@@ -72,12 +72,31 @@ async function cleanupExpiredOrders() {
             if (orderWithVendor && orderWithVendor.vendorId) {
               order.vendorId = orderWithVendor.vendorId;
             }
-            
-            return await cleanupOrderAtomically(order, session);
+            // Atomic delete: only delete if status is still 'pendingPayment'
+            const deleteResult = await Order.deleteOne({ _id: order._id, status: "pendingPayment" }, { session });
+            if (deleteResult.deletedCount === 0) {
+              console.warn(`SKIP: Order ${order._id} was not deleted because status changed.`);
+              return { locksReleased: 0 };
+            }
+            // Remove from user and vendor
+            await User.updateOne(
+              { _id: order.userId },
+              { $pull: { activeOrders: order._id, pastOrders: order._id } },
+              { session }
+            );
+            await Vendor.updateOne(
+              { _id: order.vendorId },
+              { $pull: { activeOrders: order._id } },
+              { session }
+            );
+            // Release item locks
+            const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+            return { locksReleased: lockReleaseResult.released.length };
           });
-          
           totalLocksReleased += result.locksReleased;
-          console.log(`Cleaned up expired order ${order._id} atomically. Released ${result.locksReleased} locks`);
+          if (result.locksReleased > 0) {
+            console.log(`Cleaned up expired order ${order._id} atomically. Released ${result.locksReleased} locks`);
+          }
         } catch (error) {
           console.error(`Failed to cleanup order ${order._id} atomically:`, error);
           failedCleanups.push({
