@@ -360,11 +360,11 @@ async function verifyAndProcessPaymentWithOrderId({
     // Use database transaction for atomic cancellation
     const session = await mongoose.startSession();
     try {
-      await session.withTransaction(async () => {
-        await cancelOrderAtomically(ourOrderId, order, session);
+      const { locksReleased, failedLocks } = await session.withTransaction(async () => {
+        return await cancelOrderAtomically(ourOrderId, order, session);
       });
       
-      console.log(`Payment failed for order ${ourOrderId} - cancelled atomically`);
+      console.log(`Payment failed for order ${ourOrderId} - cancelled atomically. Released ${locksReleased} locks`);
       return { success: false, msg: "Invalid signature, payment failed" };
     } catch (error) {
       console.error(`Failed to cancel order ${ourOrderId} atomically:`, error);
@@ -734,4 +734,5 @@ module.exports = {
   getOrderWithDetails,
   getVendorPastOrdersWithDetails,
   generateOrderNumber,
+  cancelOrderAtomically,
 };

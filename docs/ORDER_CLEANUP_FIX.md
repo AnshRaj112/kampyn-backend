@@ -138,13 +138,15 @@ The original implementation performed multiple database operations sequentially 
 
 #### 1. **Atomic Cancellation Functions**
 - **Files**: 
-  - `utils/orderUtils.js`
-  - `controllers/orderController.js`
-  - `utils/orderCleanupUtils.js`
+  - `utils/orderUtils.js` (shared function)
+  - `controllers/orderController.js` (imports shared function)
+  - `utils/orderCleanupUtils.js` (imports shared function)
 - **Changes**:
-  - Added `cancelOrderAtomically()` helper functions
+  - Created single `cancelOrderAtomically()` helper function in `orderUtils.js`
+  - Removed code duplication by importing shared function
   - Wrapped all database operations in MongoDB transactions
   - Ensured all operations succeed or fail together
+  - Proper return value handling for accurate lock counting
 
 #### 2. **Transaction Handling**
 - **Pattern**: Used `session.withTransaction()` for atomic operations
@@ -166,12 +168,14 @@ The original implementation performed multiple database operations sequentially 
 ### Technical Implementation
 
 ```javascript
-// Example of atomic cancellation pattern
+// Example of atomic cancellation pattern with return value capture
 const session = await mongoose.startSession();
 try {
-  await session.withTransaction(async () => {
-    await cancelOrderAtomically(orderId, order, session);
+  const { locksReleased, failedLocks } = await session.withTransaction(async () => {
+    return await cancelOrderAtomically(orderId, order, session);
   });
+  
+  console.log(`Released ${locksReleased} locks, ${failedLocks} failed`);
 } catch (error) {
   // Handle transaction failure
 } finally {

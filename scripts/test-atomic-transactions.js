@@ -62,6 +62,12 @@ async function testAtomicTransactions() {
       // 4) Release item locks (outside transaction since it's in-memory cache)
       const lockReleaseResult = atomicCache.releaseOrderLocks(testOrder.items, testOrder.userId);
       console.log(`✅ Order cancelled atomically. Released ${lockReleaseResult.released.length} locks`);
+      
+      // Test 5: Verify the return value structure
+      console.log(`📊 Lock release result:`, {
+        released: lockReleaseResult.released.length,
+        failed: lockReleaseResult.failed.length
+      });
 
     } catch (error) {
       console.error('❌ Transaction failed:', error);

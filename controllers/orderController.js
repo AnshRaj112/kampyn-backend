@@ -8,51 +8,8 @@ const Uni = require("../models/account/Uni");
 const mongoose = require("mongoose");
 const { atomicCache } = require("../utils/cacheUtils");
 
-/**
- * Atomic order cancellation with database transaction
- * Ensures all operations succeed or fail together
- */
-async function cancelOrderAtomically(orderId, order, session) {
-  try {
-    // 1) Update order status to failed
-    await Order.updateOne(
-      { _id: orderId },
-      { $set: { status: "failed" } },
-      { session }
-    );
-
-    // 2) Move order from activeOrders to pastOrders for user
-    await User.updateOne(
-      { _id: order.userId },
-      {
-        $pull: { activeOrders: orderId },
-        $push: { pastOrders: orderId }
-      },
-      { session }
-    );
-
-    // 3) Remove order from vendor's activeOrders
-    await Vendor.updateOne(
-      { _id: order.vendorId },
-      { $pull: { activeOrders: orderId } },
-      { session }
-    );
-
-    // 4) Release item locks (outside transaction since it's in-memory cache)
-    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
-    
-    console.log(`Order ${orderId} cancelled atomically. Released ${lockReleaseResult.released.length} locks`);
-    
-    return {
-      success: true,
-      locksReleased: lockReleaseResult.released.length,
-      failedLocks: lockReleaseResult.failed.length
-    };
-  } catch (error) {
-    console.error(`Error in atomic order cancellation for ${orderId}:`, error);
-    throw error;
-  }
-}
+// Import the shared atomic cancellation function
+const { cancelOrderAtomically } = require("../utils/orderUtils");
 /**
  * POST /orders/:userId
  * Expects:
@@ -844,16 +801,16 @@ exports.cancelOrder = async (req, res) => {
     // 3) Use database transaction for atomic cancellation
     const session = await mongoose.startSession();
     try {
-      await session.withTransaction(async () => {
-        await cancelOrderAtomically(orderId, order, session);
+      const { locksReleased, failedLocks } = await session.withTransaction(async () => {
+        return await cancelOrderAtomically(orderId, order, session);
       });
       
       console.log(`Order ${orderId} cancelled successfully with transaction`);
       return res.json({
         success: true,
         message: "Order cancelled successfully",
-        locksReleased: 0, // Will be updated by the atomic function
-        failedLocks: 0
+        locksReleased: locksReleased,
+        failedLocks: failedLocks
       });
     } catch (error) {
       console.error(`Failed to cancel order ${orderId} atomically:`, error);
@@ -905,16 +862,16 @@ exports.cancelOrderManual = async (req, res) => {
     // 3) Use database transaction for atomic cancellation
     const session = await mongoose.startSession();
     try {
-      await session.withTransaction(async () => {
-        await cancelOrderAtomically(orderId, order, session);
+      const { locksReleased, failedLocks } = await session.withTransaction(async () => {
+        return await cancelOrderAtomically(orderId, order, session);
       });
       
       console.log(`Order ${orderId} manually cancelled successfully with transaction`);
       return res.json({
         success: true,
         message: "Order cancelled successfully",
-        locksReleased: 0, // Will be updated by the atomic function
-        failedLocks: 0
+        locksReleased: locksReleased,
+        failedLocks: failedLocks
       });
     } catch (error) {
       console.error(`Failed to manually cancel order ${orderId} atomically:`, error);

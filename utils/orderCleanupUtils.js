@@ -4,46 +4,21 @@ const Vendor = require("../models/account/Vendor");
 const { atomicCache } = require("./cacheUtils");
 const mongoose = require("mongoose");
 
+// Import the shared atomic cancellation function
+const { cancelOrderAtomically } = require("./orderUtils");
+
 /**
  * Atomic order cleanup with database transaction
- * Ensures all operations succeed or fail together
+ * Uses the shared cancelOrderAtomically function for consistency
  */
 async function cleanupOrderAtomically(order, session) {
   try {
-    // 1) Update order status to failed
-    await Order.updateOne(
-      { _id: order._id },
-      { $set: { status: "failed" } },
-      { session }
-    );
-
-    // 2) Move failed order from activeOrders to pastOrders for user
-    await User.updateOne(
-      { _id: order.userId },
-      {
-        $pull: { activeOrders: order._id },
-        $push: { pastOrders: order._id }
-      },
-      { session }
-    );
-
-    // 3) Remove failed order from vendor's activeOrders
-    await Vendor.updateOne(
-      { _id: order.vendorId },
-      { $pull: { activeOrders: order._id } },
-      { session }
-    );
-
-    // 4) Release item locks (outside transaction since it's in-memory cache)
-    const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
+    // Use the shared atomic cancellation function
+    const result = await cancelOrderAtomically(order._id, order, session);
     
-    console.log(`Order ${order._id} cleaned up atomically. Released ${lockReleaseResult.released.length} locks`);
+    console.log(`Order ${order._id} cleaned up atomically. Released ${result.locksReleased} locks`);
     
-    return {
-      success: true,
-      locksReleased: lockReleaseResult.released.length,
-      failedLocks: lockReleaseResult.failed.length
-    };
+    return result;
   } catch (error) {
     console.error(`Error in atomic order cleanup for ${order._id}:`, error);
     throw error;
@@ -90,18 +65,18 @@ async function cleanupExpiredOrders() {
         // Use database transaction for atomic cleanup
         const session = await mongoose.startSession();
         try {
-          await session.withTransaction(async () => {
+          const result = await session.withTransaction(async () => {
             // Get vendor ID for the order
             const orderWithVendor = await Order.findById(order._id).select("vendorId").lean();
             if (orderWithVendor && orderWithVendor.vendorId) {
               order.vendorId = orderWithVendor.vendorId;
             }
             
-            await cleanupOrderAtomically(order, session);
+            return await cleanupOrderAtomically(order, session);
           });
           
-          totalLocksReleased += 1; // Will be updated by the atomic function
-          console.log(`Cleaned up expired order ${order._id} atomically`);
+          totalLocksReleased += result.locksReleased;
+          console.log(`Cleaned up expired order ${order._id} atomically. Released ${result.locksReleased} locks`);
         } catch (error) {
           console.error(`Failed to cleanup order ${order._id} atomically:`, error);
           failedCleanups.push({
