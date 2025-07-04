@@ -40,11 +40,16 @@ async function verifyPaymentHandler(req, res, next) {
     }
 
     // 2. Signature is valid → create the Order in DB
-    // The frontend should send cart, vendorId, orderType, collectorName, collectorPhone, address, finalTotal
-    const { userId, cart, vendorId, orderType, collectorName, collectorPhone, address, finalTotal } = req.body;
-    if (!userId || !cart || !vendorId || !orderType || !collectorName || !collectorPhone || !finalTotal) {
-      return res.status(400).json({ success: false, message: "Missing required order info in payment verification." });
+    // Retrieve order details from temporary storage using razorpay_order_id
+    const orderDetails = orderUtils.getPendingOrderDetails(razorpay_order_id);
+    if (!orderDetails) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Order details not found. Payment may have expired or order was already processed." 
+      });
     }
+
+    const { userId, cart, vendorId, orderType, collectorName, collectorPhone, address, finalTotal } = orderDetails;
 
     // 3. Create a new Payment document in the payment collection:
     const paymentDoc = await Payment.create({
@@ -71,7 +76,10 @@ async function verifyPaymentHandler(req, res, next) {
       paymentDocId: paymentDoc._id,
     });
 
-    // 5. Run post-payment logic (inventory updates, user.cart → pastOrders, vendor.activeOrders, etc.)
+    // 5. Clean up temporary order details
+    orderUtils.removePendingOrderDetails(razorpay_order_id);
+
+    // 6. Run post-payment logic (inventory updates, user.cart → pastOrders, vendor.activeOrders, etc.)
     await orderUtils.postPaymentProcessing(order);
 
     // 🔓 RELEASE LOCKS: After successful payment, release all item locks

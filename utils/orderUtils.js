@@ -13,6 +13,9 @@ const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const { atomicCache } = require("./cacheUtils");
 
+// Temporary storage for order details during payment flow
+const pendingOrderDetails = new Map();
+
 const PRODUCE_SURCHARGE = 5;
 const DELIVERY_CHARGE = 50;
 
@@ -240,6 +243,27 @@ async function generateRazorpayOrderForUser({
     payment_capture: 1,
   });
 
+  // Store order details for payment verification
+  pendingOrderDetails.set(razorpayOrder.id, {
+    userId,
+    cart: user.cart,
+    vendorId: user.vendorId,
+    orderType,
+    collectorName,
+    collectorPhone,
+    address,
+    finalTotal,
+    timestamp: Date.now()
+  });
+
+  // Clean up old entries (older than 30 minutes)
+  const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+  for (const [key, value] of pendingOrderDetails.entries()) {
+    if (value.timestamp < thirtyMinutesAgo) {
+      pendingOrderDetails.delete(key);
+    }
+  }
+
   return {
     razorpayOptions: {
       key: razorpayKeyId,
@@ -301,6 +325,16 @@ async function createOrderAfterPayment({
     { $push: { activeOrders: newOrder._id } }
   );
   return newOrder;
+}
+
+// Get pending order details from temporary storage
+function getPendingOrderDetails(razorpayOrderId) {
+  return pendingOrderDetails.get(razorpayOrderId);
+}
+
+// Remove pending order details from temporary storage
+function removePendingOrderDetails(razorpayOrderId) {
+  return pendingOrderDetails.delete(razorpayOrderId);
 }
 
 async function verifyAndProcessPaymentWithOrderId({
@@ -692,6 +726,9 @@ async function getVendorPastOrdersWithDetails(vendorId) {
 }
 
 module.exports = {
+  generateOrderNumber,
+  generateTimeBasedOrderNumber,
+  generateUltraHighPerformanceOrderNumberWithDailyReset,
   generateRazorpayOrderForUser,
   createOrderAfterPayment,
   verifyAndProcessPaymentWithOrderId,
@@ -699,6 +736,7 @@ module.exports = {
   getOrdersWithDetails,
   getOrderWithDetails,
   getVendorPastOrdersWithDetails,
-  generateOrderNumber,
   cancelOrderAtomically,
+  getPendingOrderDetails,
+  removePendingOrderDetails,
 };
