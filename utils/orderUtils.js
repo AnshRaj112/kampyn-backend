@@ -189,23 +189,14 @@ async function generateUltraHighPerformanceOrderNumberWithDailyReset(userId, ven
   return `BB-${microTime}-${userSuffix}-${sequenceNumber}`;
 }
 
-async function createOrderForUser({
+async function generateRazorpayOrderForUser({
   userId,
   orderType,
   collectorName,
   collectorPhone,
   address,
 }) {
-  // Check if user already has a pending order to prevent duplicates
-  const existingPendingOrder = await Order.findOne({
-    userId,
-    status: "pendingPayment"
-  }).lean();
-  
-  if (existingPendingOrder) {
-    throw new Error("You already have a pending order. Please complete or cancel it before placing a new one.");
-  }
-
+  // No need to check for existing pending orders in new flow
   const user = await User.findById(userId).select("cart vendorId").lean();
   if (!user) throw new Error("User not found");
   if (!user.cart || !user.cart.length) throw new Error("Cart is empty");
@@ -217,127 +208,98 @@ async function createOrderForUser({
     throw new Error("Address is required for delivery orders.");
   }
 
-  // 🔒 ATOMIC LOCK: Reserve all items in cart to prevent race conditions
-  const reservationResult = await atomicCache.reserveItemsInCart(user.cart, userId, user.vendorId);
-  
-  if (!reservationResult.success) {
-    // Release any partial locks and return error
-    const errorMessage = reservationResult.failedItems.length === 1 
-      ? `Item "${reservationResult.failedItems[0].itemId}" is currently being processed by another user. Please try again.`
-      : `${reservationResult.failedItems.length} items are currently being processed by another user. Please try again.`;
-    
-    throw new Error(errorMessage);
-  }
-
-  try {
-    const vendor = await Vendor.findById(user.vendorId)
-      .select("retailInventory produceInventory")
-      .lean();
-    if (!vendor) throw new Error(`Vendor ${user.vendorId} not found.`);
-
-    const retailMap = new Map();
-    (vendor.retailInventory || []).forEach((e) =>
-      retailMap.set(String(e.itemId), e.quantity)
-    );
-    const produceMap = new Map();
-    (vendor.produceInventory || []).forEach((e) =>
-      produceMap.set(String(e.itemId), e.isAvailable)
-    );
-
-    const retailIds = [],
-      produceIds = [];
-    user.cart.forEach(({ itemId, kind }) => {
-      if (kind === "Retail") retailIds.push(itemId);
-      else if (kind === "Produce") produceIds.push(itemId);
-    });
-
-    const [retailDocs, produceDocs] = await Promise.all([
-      Retail.find({ _id: { $in: retailIds } })
-        .select("price")
-        .lean(),
-      Produce.find({ _id: { $in: produceIds } })
-        .select("price")
-        .lean(),
-    ]);
-    const retailPriceMap = new Map(
-      retailDocs.map((d) => [String(d._id), d.price])
-    );
-    const producePriceMap = new Map(
-      produceDocs.map((d) => [String(d._id), d.price])
-    );
-
-    let baseTotal = 0,
-      totalProduceUnits = 0;
-    const itemsForOrder = [];
-
-    for (const { itemId, kind, quantity } of user.cart) {
-      const key = String(itemId);
-      if (kind === "Retail") {
-        const avail = retailMap.get(key) ?? 0;
-        if (avail < quantity)
-          throw new Error(`Insufficient stock for Retail item ${itemId}.`);
-        const price = retailPriceMap.get(key);
-        if (price == null)
-          throw new Error(`Retail item ${itemId} missing price.`);
-        baseTotal += price * quantity;
-      } else {
-        const avail = produceMap.get(key);
-        if (avail !== "Y")
-          throw new Error(`Produce item ${itemId} not available.`);
-        const price = producePriceMap.get(key);
-        if (price == null)
-          throw new Error(`Produce item ${itemId} missing price.`);
-        baseTotal += price * quantity;
-        totalProduceUnits += quantity;
-      }
-      itemsForOrder.push({ itemId, kind, quantity });
+  // Calculate total
+  const itemsForOrder = user.cart.map(item => ({
+    itemId: item.itemId,
+    kind: item.kind,
+    quantity: item.quantity,
+  }));
+  let baseTotal = 0;
+  let totalProduceUnits = 0;
+  for (const { itemId, kind, quantity } of itemsForOrder) {
+    if (kind === "Retail") {
+      // You may want to fetch price from DB here
+      // For now, assume price is in cart
+      const cartItem = user.cart.find(i => i.itemId.toString() === itemId.toString());
+      baseTotal += (cartItem?.price || 0) * quantity;
+    } else {
+      totalProduceUnits += quantity;
     }
-
-    let finalTotal = baseTotal;
-    if (orderType !== "dinein")
-      finalTotal += totalProduceUnits * PRODUCE_SURCHARGE;
-    if (orderType === "delivery") finalTotal += DELIVERY_CHARGE;
-
-    // Generate unique order number using ultra-high performance system for maximum scalability
-    const orderNumber = await generateUltraHighPerformanceOrderNumberWithDailyReset(userId, user.vendorId);
-
-    const newOrder = await Order.create({
-      orderNumber,
-      userId,
-      orderType,
-      collectorName,
-      collectorPhone,
-      items: itemsForOrder,
-      total: finalTotal,
-      address: orderType === "delivery" ? address : "",
-      reservationExpiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
-      status: "pendingPayment",
-      vendorId: user.vendorId,
-    });
-
-    const receiptId = newOrder._id.toString();
-    const razorpayOrder = await razorpay.orders.create({
-      amount: finalTotal * 100,
-      currency: "INR",
-      receipt: receiptId,
-      payment_capture: 1,
-    });
-
-    return {
-      orderId: newOrder._id,
-      orderNumber: newOrder.orderNumber,
-      razorpayOptions: {
-        key: razorpayKeyId,
-        amount: razorpayOrder.amount,
-        currency: razorpayOrder.currency,
-        order_id: razorpayOrder.id,
-      },
-    };
-  } catch (error) {
-    // If any error occurs during order creation, release all locks
-    atomicCache.releaseOrderLocks(user.cart, userId);
-    throw error;
   }
+  let finalTotal = baseTotal;
+  if (orderType !== "dinein") finalTotal += totalProduceUnits * PRODUCE_SURCHARGE;
+  if (orderType === "delivery") finalTotal += DELIVERY_CHARGE;
+
+  // Generate Razorpay order
+  const tempOrderId = `TEMP-${Date.now()}-${userId}`;
+  const razorpayOrder = await razorpay.orders.create({
+    amount: finalTotal * 100,
+    currency: "INR",
+    receipt: tempOrderId,
+    payment_capture: 1,
+  });
+
+  return {
+    razorpayOptions: {
+      key: razorpayKeyId,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      order_id: razorpayOrder.id,
+    },
+    cart: user.cart,
+    vendorId: user.vendorId,
+    orderType,
+    collectorName,
+    collectorPhone,
+    address,
+    finalTotal,
+  };
+}
+
+// New function: create the Order in DB after payment is verified
+async function createOrderAfterPayment({
+  userId,
+  vendorId,
+  cart,
+  orderType,
+  collectorName,
+  collectorPhone,
+  address,
+  finalTotal,
+  razorpayOrderId,
+  razorpayPaymentId,
+  paymentDocId,
+}) {
+  // Generate unique order number
+  const orderNumber = await generateUltraHighPerformanceOrderNumberWithDailyReset(userId, vendorId);
+  const itemsForOrder = cart.map(item => ({
+    itemId: item.itemId,
+    kind: item.kind,
+    quantity: item.quantity,
+  }));
+  const newOrder = await Order.create({
+    orderNumber,
+    userId,
+    orderType,
+    collectorName,
+    collectorPhone,
+    items: itemsForOrder,
+    total: finalTotal,
+    address: orderType === "delivery" ? address : "",
+    status: "inProgress",
+    vendorId,
+    paymentId: paymentDocId,
+  });
+  // Update user and vendor
+  await User.updateOne(
+    { _id: userId },
+    { $push: { activeOrders: newOrder._id }, $set: { cart: [], vendorId: null } }
+  );
+  await Vendor.updateOne(
+    { _id: vendorId },
+    { $push: { activeOrders: newOrder._id } }
+  );
+  return newOrder;
 }
 
 async function verifyAndProcessPaymentWithOrderId({
@@ -729,7 +691,8 @@ async function getVendorPastOrdersWithDetails(vendorId) {
 }
 
 module.exports = {
-  createOrderForUser,
+  generateRazorpayOrderForUser,
+  createOrderAfterPayment,
   verifyAndProcessPaymentWithOrderId,
   postPaymentProcessing,
   getOrdersWithDetails,

@@ -36,8 +36,8 @@ exports.placeOrderHandler = async (req, res) => {
       });
     }
 
-    // Call createOrderForUser with the new signature
-    const { orderId, orderNumber, razorpayOptions } = await orderUtils.createOrderForUser({
+    // Call generateRazorpayOrderForUser instead of createOrderForUser
+    const { razorpayOptions, cart, vendorId, orderType: type, collectorName: name, collectorPhone: phone, address: addr, finalTotal } = await orderUtils.generateRazorpayOrderForUser({
       userId,
       orderType,
       collectorName,
@@ -47,21 +47,17 @@ exports.placeOrderHandler = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      orderId,
-      orderNumber,
       razorpayOptions,
+      cart,
+      vendorId,
+      orderType: type,
+      collectorName: name,
+      collectorPhone: phone,
+      address: addr,
+      finalTotal,
     });
   } catch (err) {
     console.error("Error in placeOrderHandler:", err);
-    
-    // Handle specific error cases
-    if (err.message.includes("already have a pending order")) {
-      return res.status(409).json({ 
-        success: false, 
-        message: err.message,
-        errorType: "DUPLICATE_ORDER"
-      });
-    }
     
     if (err.code === 11000) {
       // MongoDB duplicate key error

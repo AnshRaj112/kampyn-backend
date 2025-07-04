@@ -72,12 +72,16 @@ async function cleanupExpiredOrders() {
             if (orderWithVendor && orderWithVendor.vendorId) {
               order.vendorId = orderWithVendor.vendorId;
             }
+            // Extra logging: fetch and log the current status before delete
+            const currentOrder = await Order.findById(order._id).lean();
+            console.log(`[CLEANUP] Attempting to delete order ${order._id} with status '${currentOrder ? currentOrder.status : 'unknown'}' at ${new Date().toISOString()}`);
             // Atomic delete: only delete if status is still 'pendingPayment'
             const deleteResult = await Order.deleteOne({ _id: order._id, status: "pendingPayment" }, { session });
             if (deleteResult.deletedCount === 0) {
-              console.warn(`SKIP: Order ${order._id} was not deleted because status changed.`);
+              console.warn(`[CLEANUP] SKIP: Order ${order._id} was not deleted because status changed (current status: '${currentOrder ? currentOrder.status : 'unknown'}').`);
               return { locksReleased: 0 };
             }
+            console.log(`[CLEANUP] SUCCESS: Order ${order._id} deleted from DB (status was '${currentOrder ? currentOrder.status : 'unknown'}').`);
             // Remove from user and vendor
             await User.updateOne(
               { _id: order.userId },
