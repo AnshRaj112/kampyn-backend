@@ -363,12 +363,12 @@ async function getCartDetails(userId) {
  const [retailDocs, produceDocs] = await Promise.all([
    retailIds.length
      ? Retail.find({ _id: { $in: retailIds } })
-         .select("name image unit price type")
+         .select("name image unit price type packable")
          .lean()
      : [],
    produceIds.length
      ? Produce.find({ _id: { $in: produceIds } })
-         .select("name image unit price type")
+         .select("name image unit price type packable")
          .lean()
      : [],
  ]);
@@ -395,6 +395,7 @@ async function getCartDetails(userId) {
        quantity: e.quantity,
        kind: e.kind,
        type: doc.type,
+       packable: doc.packable,
        totalPrice: doc.price * e.quantity,
      };
    })

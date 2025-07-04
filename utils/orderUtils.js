@@ -8,6 +8,7 @@ const Order = require("../models/order/Order");
 const OrderCounter = require("../models/order/OrderCounter");
 const User = require("../models/account/User");
 const Vendor = require("../models/account/Vendor");
+const Uni = require("../models/account/Uni");
 const InventoryReport = require("../models/inventory/InventoryReport");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
@@ -16,8 +17,9 @@ const { atomicCache } = require("./cacheUtils");
 // Temporary storage for order details during payment flow
 const pendingOrderDetails = new Map();
 
-const PRODUCE_SURCHARGE = 5;
-const DELIVERY_CHARGE = 50;
+// Default charges (fallback if university charges not found)
+const DEFAULT_PRODUCE_SURCHARGE = 5;
+const DEFAULT_DELIVERY_CHARGE = 50;
 
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -204,6 +206,11 @@ async function generateRazorpayOrderForUser({
   if (!user) throw new Error("User not found");
   if (!user.cart || !user.cart.length) throw new Error("Cart is empty");
 
+  // Get populated cart details with price information
+  const cartUtils = require("./cartUtils");
+  const cartDetails = await cartUtils.getCartDetails(userId);
+  const populatedCart = cartDetails.cart;
+
   if (!["takeaway", "delivery", "dinein"].includes(orderType)) {
     throw new Error(`Invalid orderType "${orderType}".`);
   }
@@ -211,42 +218,85 @@ async function generateRazorpayOrderForUser({
     throw new Error("Address is required for delivery orders.");
   }
 
-  // Calculate total
-  const itemsForOrder = user.cart.map(item => ({
-    itemId: item.itemId,
-    kind: item.kind,
-    quantity: item.quantity,
-  }));
-  let baseTotal = 0;
-  let totalProduceUnits = 0;
-  for (const { itemId, kind, quantity } of itemsForOrder) {
-    if (kind === "Retail") {
-      // You may want to fetch price from DB here
-      // For now, assume price is in cart
-      const cartItem = user.cart.find(i => i.itemId.toString() === itemId.toString());
-      baseTotal += (cartItem?.price || 0) * quantity;
-    } else {
-      totalProduceUnits += quantity;
+  // Get vendor to find university
+  const vendor = await Vendor.findById(user.vendorId).select('uniID').lean();
+  if (!vendor) throw new Error("Vendor not found");
+  
+  // Get university charges
+  const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge').lean();
+  const packingCharge = university?.packingCharge ?? DEFAULT_PRODUCE_SURCHARGE;
+  const deliveryCharge = university?.deliveryCharge ?? DEFAULT_DELIVERY_CHARGE;
+  
+  // Calculate total - use the same logic as frontend
+  let itemTotal = 0;
+  let packableItemsTotal = 0;
+  
+  for (const cartItem of populatedCart) {
+    const itemPrice = cartItem.price || 0;
+    const itemQuantity = cartItem.quantity || 0;
+    const itemTotalPrice = itemPrice * itemQuantity;
+    
+    itemTotal += itemTotalPrice;
+    
+    // Check if item is packable (produce items are packable by default)
+    const isPackable = cartItem.packable === true || cartItem.kind === "Produce";
+    if (isPackable) {
+      packableItemsTotal += itemQuantity;
     }
   }
-  let finalTotal = baseTotal;
-  if (orderType !== "dinein") finalTotal += totalProduceUnits * PRODUCE_SURCHARGE;
-  if (orderType === "delivery") finalTotal += DELIVERY_CHARGE;
+  
+  // Calculate packaging and delivery charges
+  const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
+  const delivery = (orderType === "delivery") ? deliveryCharge : 0;
+  
+  const finalTotal = itemTotal + packaging + delivery;
+  
+  console.log("💰 Backend Order Calculation:", {
+    itemTotal,
+    packableItemsTotal,
+    packaging,
+    delivery,
+    finalTotal,
+    orderType,
+    packingCharge,
+    deliveryCharge,
+    cartItems: populatedCart.map(item => ({
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      packable: item.packable,
+      kind: item.kind
+    }))
+  });
 
   // Generate Razorpay order
   const shortUserId = userId.toString().slice(-6);
   const tempOrderId = `T${Date.now()}-${shortUserId}`; // always < 40 chars
+  
+  console.log("💳 Creating Razorpay order with amount:", {
+    finalTotal,
+    amountInPaise: finalTotal * 100,
+    currency: "INR",
+    receipt: tempOrderId
+  });
+  
   const razorpayOrder = await razorpay.orders.create({
     amount: finalTotal * 100,
     currency: "INR",
     receipt: tempOrderId,
     payment_capture: 1,
   });
+  
+  console.log("💳 Razorpay order created:", {
+    razorpayOrderId: razorpayOrder.id,
+    amount: razorpayOrder.amount,
+    currency: razorpayOrder.currency
+  });
 
   // Store order details for payment verification
   pendingOrderDetails.set(razorpayOrder.id, {
     userId,
-    cart: user.cart,
+    cart: populatedCart,
     vendorId: user.vendorId,
     orderType,
     collectorName,
@@ -271,7 +321,7 @@ async function generateRazorpayOrderForUser({
       currency: razorpayOrder.currency,
       order_id: razorpayOrder.id,
     },
-    cart: user.cart,
+    cart: populatedCart,
     vendorId: user.vendorId,
     orderType,
     collectorName,

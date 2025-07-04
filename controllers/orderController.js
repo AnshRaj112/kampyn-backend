@@ -362,6 +362,57 @@ exports.getPastOrders = async (req, res) => {
 };
 
 /**
+ * GET /orders/:orderId
+ * Get a specific order by ID with full details
+ */
+exports.getOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({ message: "Order ID is required." });
+    }
+
+    console.log(`Fetching order details for orderId: ${orderId}`);
+
+    // Get order details using the existing utility function
+    const orderDetails = await orderUtils.getOrderWithDetails(orderId);
+    
+    if (!orderDetails) {
+      return res.status(404).json({ message: "Order not found." });
+    }
+
+    // Get vendor details
+    const vendor = await Vendor.findById(orderDetails.vendorId).select('fullName uniID').lean();
+    
+    // Get college details if vendor has uniID
+    let college = null;
+    if (vendor && vendor.uniID) {
+      college = await Uni.findById(vendor.uniID).select('fullName shortName').lean();
+    }
+
+    // Build the response with vendor and college details
+    const response = {
+      ...orderDetails,
+      vendorId: vendor ? {
+        ...vendor,
+        college: college
+      } : null
+    };
+
+    console.log(`Successfully fetched order details for orderId: ${orderId}`);
+
+    return res.json({
+      success: true,
+      order: response
+    });
+  } catch (err) {
+    console.error("Error in getOrderById:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
  * Clean up delivered orders - move them from activeOrders to pastOrders
  * This function can be called to fix data inconsistencies
  */
@@ -780,6 +831,12 @@ exports.cancelOrder = async (req, res) => {
     
     console.log(`Cancelling order: ${orderId}`);
 
+    // Validate orderId
+    if (!orderId || orderId === 'undefined') {
+      console.log(`Invalid orderId: ${orderId}`);
+      return res.status(400).json({ message: "Invalid order ID." });
+    }
+
     // 1) Find the order
     const order = await Order.findOne({ _id: orderId }).lean();
     if (!order) {
@@ -855,6 +912,12 @@ exports.cancelOrderManual = async (req, res) => {
     const { userId } = req.body; // User ID for verification
     
     console.log(`Manual cancellation requested for order: ${orderId} by user: ${userId}`);
+
+    // Validate orderId
+    if (!orderId || orderId === 'undefined') {
+      console.log(`Invalid orderId: ${orderId}`);
+      return res.status(400).json({ message: "Invalid order ID." });
+    }
 
     // 1) Find the order and verify ownership
     const order = await Order.findOne({ _id: orderId }).lean();

@@ -8,6 +8,9 @@ const uniSchema = new mongoose.Schema(
     phone: { type: String, unique: true },
     password: { type: String, required: true },
     isVerified: { type: Boolean, default: false },
+    // Packing and delivery charges
+    packingCharge: { type: Number, default: 5, min: 0 }, // Default ₹5 per produce item
+    deliveryCharge: { type: Number, default: 50, min: 0 }, // Default ₹50 for delivery
     vendors: [
       {
         vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },

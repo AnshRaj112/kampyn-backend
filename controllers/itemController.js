@@ -80,7 +80,7 @@ exports.getItemsByTypeAndUni = async (req, res) => {
 
     const ItemModel = getModel(category);
     const items = await ItemModel.find({ type, uniId })
-      .select("name price image type")
+      .select("name price image type packable")
       .lean();
     res.status(200).json(items);
   } catch (error) {
@@ -106,7 +106,7 @@ exports.getItemsByUniId = async (req, res) => {
 
     const [items, total] = await Promise.all([
       ItemModel.find({ uniId })
-        .select("name price image type")
+        .select("name price image type packable")
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -199,6 +199,7 @@ exports.getItemsByVendor = async (req, res) => {
     return res.status(200).json({
       success: true,
       foodCourtName,
+      uniID: vendor.uniID, // Include the university ID
       data: {
         retailItems: retailItems || [],
         produceItems: produceItems || [],
