@@ -231,7 +231,8 @@ async function generateRazorpayOrderForUser({
   if (orderType === "delivery") finalTotal += DELIVERY_CHARGE;
 
   // Generate Razorpay order
-  const tempOrderId = `TEMP-${Date.now()}-${userId}`;
+  const shortUserId = userId.toString().slice(-6);
+  const tempOrderId = `T${Date.now()}-${shortUserId}`; // always < 40 chars
   const razorpayOrder = await razorpay.orders.create({
     amount: finalTotal * 100,
     currency: "INR",
