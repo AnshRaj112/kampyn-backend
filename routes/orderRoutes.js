@@ -8,6 +8,9 @@ const orderController = require("../controllers/orderController");
 // Guest order endpoint for vendors (must come before /:userId route)
 router.post("/guest", orderController.createGuestOrder);
 
+// Store order details for mobile payment flow (must come before /:userId route)
+router.post("/store-details", orderController.storeOrderDetails);
+
 // Place an order (creates Order in DB + returns Razorpay options)
 router.post("/:userId", orderController.placeOrderHandler);
 
@@ -41,9 +44,6 @@ router.post("/:orderId/cancel-manual", orderController.cancelOrderManual);
 
 // Get all active orders for a vendor
 router.get("/vendor/:vendorId/active", orderController.getActiveOrdersByVendor);
-
-// Store order details for mobile payment flow
-router.post("/store-details", orderController.storeOrderDetails);
 
 // Get a specific order by ID (must be last to avoid conflicts with other :orderId routes)
 router.get("/:orderId", orderController.getOrderById);
