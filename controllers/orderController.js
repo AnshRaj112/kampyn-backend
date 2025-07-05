@@ -89,7 +89,7 @@ exports.storeOrderDetails = async (req, res) => {
 
     // Store order details in the pendingOrderDetails map
     const orderUtils = require("../utils/orderUtils");
-    orderUtils.storePendingOrderDetails(razorpayOrderId, {
+    const orderDetailsToStore = {
       userId,
       cart,
       vendorId,
@@ -99,7 +99,14 @@ exports.storeOrderDetails = async (req, res) => {
       address,
       finalTotal,
       timestamp: Date.now()
-    });
+    };
+    
+    console.log("📦 Storing order details with key:", razorpayOrderId);
+    orderUtils.storePendingOrderDetails(razorpayOrderId, orderDetailsToStore);
+    
+    // Verify storage
+    const storedDetails = orderUtils.getPendingOrderDetails(razorpayOrderId);
+    console.log("📦 Verification - order details stored successfully:", storedDetails ? "YES" : "NO");
 
     res.json({
       success: true,
