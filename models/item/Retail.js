@@ -23,6 +23,7 @@ const retailSchema = new mongoose.Schema({
   unit: { type: String, default: "pcs" },
   price: { type: Number, required: true },
   image: { type: String, required: true },
+  packable: { type: Boolean, default: false },
 });
 retailSchema.index({ uniId: 1, type: 1 });
 retailSchema.post("findOneAndDelete", async function (doc) {

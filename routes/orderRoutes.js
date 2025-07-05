@@ -42,4 +42,10 @@ router.post("/:orderId/cancel-manual", orderController.cancelOrderManual);
 // Get all active orders for a vendor
 router.get("/vendor/:vendorId/active", orderController.getActiveOrdersByVendor);
 
+// Store order details for mobile payment flow
+router.post("/store-details", orderController.storeOrderDetails);
+
+// Get a specific order by ID (must be last to avoid conflicts with other :orderId routes)
+router.get("/:orderId", orderController.getOrderById);
+
 module.exports = router;

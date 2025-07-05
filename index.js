@@ -21,6 +21,8 @@ const inventoryReportRoutes = require("./routes/inventoryReportRoutes");
 const vendorCartRoutes = require("./routes/vendorCartRoutes");
 const billingInfoRoutes = require("./routes/billingInfoRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const universityRoutes = require("./routes/universityRoutes");
+const razorpayRoutes = require("./routes/razorpayRoutes");
 const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
 const configRoutes = require("./routes/configRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
@@ -89,10 +91,12 @@ app.use("/fav", favouriteRoutes);
 app.use("/order", orderRoutes);
 app.use("/payment", paymentRoutes);
 app.use("/api/vendor", vendorRoutes);
+app.use("/api/university", universityRoutes);
 app.use("/inventoryreport", inventoryReportRoutes);
 app.use("/vendorcart", vendorCartRoutes);
 app.use("/billinginfo", billingInfoRoutes);
 app.use("/admin", adminRoutes); // 🔒 Admin routes for lock management
+app.use("/razorpay", razorpayRoutes);
 app.use("/api", configRoutes);
 //app.use("/temp", tempRoutes);
 

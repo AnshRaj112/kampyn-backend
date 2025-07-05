@@ -214,4 +214,57 @@ This document provides a comprehensive reference for all backend API endpoints, 
 # Notes
 - All endpoints may require authentication unless otherwise specified.
 - For detailed request/response formats, refer to the respective controller implementations.
-- Some endpoints require specific permissions (see Admin routes). 
+- Some endpoints require specific permissions (see Admin routes).
+- University charges are applied as follows:
+  - **Takeaway:** Base amount + (Packing charge × Produce items)
+  - **Delivery:** Base amount + (Packing charge × Produce items) + Delivery charge
+  - **Dine-in:** Base amount only (no additional charges)
+
+## University Routes (`/api/university`)
+
+### University Charges Management
+- **GET `/api/university/charges/:uniId`**
+  - **Description:** Get packing and delivery charges for a specific university.
+  - **Parameters:** `uniId` (path) - University ID
+  - **Response:**
+    ```json
+    {
+      "packingCharge": 5,
+      "deliveryCharge": 50,
+      "universityName": "KIIT University"
+    }
+    ```
+
+- **PUT `/api/university/charges/:uniId`**
+  - **Description:** Update packing and delivery charges for a university (requires university authentication).
+  - **Parameters:** `uniId` (path) - University ID
+  - **Body:**
+    ```json
+    {
+      "packingCharge": 10,
+      "deliveryCharge": 75
+    }
+    ```
+  - **Response:**
+    ```json
+    {
+      "message": "Charges updated successfully",
+      "packingCharge": 10,
+      "deliveryCharge": 75,
+      "universityName": "KIIT University"
+    }
+    ```
+
+### University Image Management
+- **POST `/api/university/upload-image`**
+  - **Description:** Upload image for a university.
+  - **Body:**
+    ```json
+    {
+      "universityId": "university_id",
+      "imageUrl": "https://example.com/image.jpg"
+    }
+    ```
+
+- **GET `/api/university/api/cloudinary/cloud-name`**
+  - **Description:** Get Cloudinary cloud name configuration. 
