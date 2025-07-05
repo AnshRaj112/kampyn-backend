@@ -211,6 +211,18 @@ async function generateRazorpayOrderForUser({
   const cartDetails = await cartUtils.getCartDetails(userId);
   const populatedCart = cartDetails.cart;
 
+  console.log("🛒 Backend: Cart details fetched:", {
+    userId,
+    cartLength: populatedCart.length,
+    cartItems: populatedCart.map(item => ({
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      packable: item.packable,
+      kind: item.kind
+    }))
+  });
+
   if (!["takeaway", "delivery", "dinein"].includes(orderType)) {
     throw new Error(`Invalid orderType "${orderType}".`);
   }
@@ -231,19 +243,39 @@ async function generateRazorpayOrderForUser({
   let itemTotal = 0;
   let packableItemsTotal = 0;
   
+  console.log("🔍 Cart items for calculation:", populatedCart.map(item => ({
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    packable: item.packable,
+    kind: item.kind,
+    totalPrice: (item.price || 0) * (item.quantity || 0)
+  })));
+  
   for (const cartItem of populatedCart) {
     const itemPrice = cartItem.price || 0;
     const itemQuantity = cartItem.quantity || 0;
     const itemTotalPrice = itemPrice * itemQuantity;
     
+    console.log(`💰 Item calculation: ${cartItem.name} - Price: ${itemPrice} × Quantity: ${itemQuantity} = ${itemTotalPrice}`);
+    
     itemTotal += itemTotalPrice;
     
     // Check if item is packable (produce items are packable by default)
     const isPackable = cartItem.packable === true || cartItem.kind === "Produce";
+    console.log(`📦 Packable check for ${cartItem.name}: packable=${cartItem.packable}, kind=${cartItem.kind}, isPackable=${isPackable}`);
+    
     if (isPackable) {
       packableItemsTotal += itemQuantity;
     }
   }
+  
+  console.log("📊 Calculation summary:", {
+    itemTotal,
+    packableItemsTotal,
+    packingCharge,
+    deliveryCharge
+  });
   
   // Calculate packaging and delivery charges
   const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
@@ -267,6 +299,15 @@ async function generateRazorpayOrderForUser({
       packable: item.packable,
       kind: item.kind
     }))
+  });
+
+  // Additional debugging for amount calculation
+  console.log("🔍 Amount Debug:", {
+    finalTotal,
+    finalTotalInPaise: finalTotal * 100,
+    razorpayAmount: finalTotal * 100,
+    expectedFrontendTotal: 140, // Based on user's log
+    difference: Math.abs(finalTotal - 140)
   });
 
   // Generate Razorpay order
@@ -314,7 +355,7 @@ async function generateRazorpayOrderForUser({
     }
   }
 
-  return {
+  const response = {
     razorpayOptions: {
       key: razorpayKeyId,
       amount: razorpayOrder.amount,
@@ -329,6 +370,14 @@ async function generateRazorpayOrderForUser({
     address,
     finalTotal,
   };
+
+  console.log("📤 Backend Response:", {
+    finalTotal: response.finalTotal,
+    razorpayAmount: response.razorpayOptions.amount,
+    amountInRupees: response.razorpayOptions.amount / 100
+  });
+
+  return response;
 }
 
 // New function: create the Order in DB after payment is verified
@@ -380,6 +429,11 @@ async function createOrderAfterPayment({
 // Get pending order details from temporary storage
 function getPendingOrderDetails(razorpayOrderId) {
   return pendingOrderDetails.get(razorpayOrderId);
+}
+
+// Store pending order details in temporary storage
+function storePendingOrderDetails(razorpayOrderId, orderDetails) {
+  pendingOrderDetails.set(razorpayOrderId, orderDetails);
 }
 
 // Remove pending order details from temporary storage
@@ -788,5 +842,6 @@ module.exports = {
   getVendorPastOrdersWithDetails,
   cancelOrderAtomically,
   getPendingOrderDetails,
+  storePendingOrderDetails,
   removePendingOrderDetails,
 };

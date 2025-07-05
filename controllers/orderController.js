@@ -73,6 +73,45 @@ exports.placeOrderHandler = async (req, res) => {
 };
 
 /**
+ * POST /orders/store-details
+ * Store order details for mobile payment flow
+ */
+exports.storeOrderDetails = async (req, res) => {
+  try {
+    const { razorpayOrderId, userId, cart, vendorId, orderType, collectorName, collectorPhone, address, finalTotal } = req.body;
+
+    console.log("📦 Storing order details for mobile payment:", {
+      razorpayOrderId,
+      userId,
+      cartLength: cart?.length || 0,
+      finalTotal
+    });
+
+    // Store order details in the pendingOrderDetails map
+    const orderUtils = require("../utils/orderUtils");
+    orderUtils.storePendingOrderDetails(razorpayOrderId, {
+      userId,
+      cart,
+      vendorId,
+      orderType,
+      collectorName,
+      collectorPhone,
+      address,
+      finalTotal,
+      timestamp: Date.now()
+    });
+
+    res.json({
+      success: true,
+      message: "Order details stored successfully"
+    });
+  } catch (err) {
+    console.error("Error in storeOrderDetails:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
  * GET /orders/active/:vendorId/:orderType?
  */
 exports.getActiveOrders = async (req, res) => {
