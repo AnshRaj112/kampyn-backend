@@ -14,6 +14,14 @@ const razorpay = new Razorpay({
   key_secret: razorpayKeySecret,
 });
 
+// GET /razorpay/key
+router.get("/key", (req, res) => {
+  res.json({
+    success: true,
+    key: razorpayKeyId
+  });
+});
+
 // POST /razorpay/create-order
 router.post("/create-order", async (req, res) => {
   try {

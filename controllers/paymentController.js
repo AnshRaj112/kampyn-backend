@@ -41,8 +41,12 @@ async function verifyPaymentHandler(req, res, next) {
 
     // 2. Signature is valid → create the Order in DB
     // Retrieve order details from temporary storage using razorpay_order_id
+    console.log("🔍 Looking for order details with razorpay_order_id:", razorpay_order_id);
     const orderDetails = orderUtils.getPendingOrderDetails(razorpay_order_id);
+    console.log("🔍 Order details found:", orderDetails ? "YES" : "NO");
+    
     if (!orderDetails) {
+      console.error("❌ Order details not found for razorpay_order_id:", razorpay_order_id);
       return res.status(400).json({ 
         success: false, 
         message: "Order details not found. Payment may have expired or order was already processed." 
