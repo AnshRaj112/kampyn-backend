@@ -36,7 +36,7 @@ exports.getVendorsWithAvailability = async (req, res) => {
 
     // Get all vendors for this university
     const vendors = await Vendor.find({ uniID: uniId })
-      .select("_id fullName email phone location")
+      .select("_id fullName email phone location deliverySettings")
       .lean();
 
     // Create a map of vendor availability
@@ -52,7 +52,11 @@ exports.getVendorsWithAvailability = async (req, res) => {
       email: vendor.email,
       phone: vendor.phone,
       location: vendor.location,
-      isAvailable: availabilityMap.get(vendor._id.toString()) || "N"
+      isAvailable: availabilityMap.get(vendor._id.toString()) || "N",
+      deliverySettings: vendor.deliverySettings || {
+        offersDelivery: false,
+        deliveryPreparationTime: 30
+      }
     }));
 
     res.status(200).json(vendorsWithAvailability);
@@ -181,5 +185,97 @@ exports.updateItemAvailableStatus = async (req, res) => {
     res.status(200).json({ success: true, message: `isAvailable updated to ${isAvailable}` });
   } catch (err) {
     res.status(500).json({ error: "Server error", details: err.message });
+  }
+};
+
+/**
+ * GET /vendor/:vendorId/delivery-settings
+ * Get delivery settings for a vendor
+ */
+exports.getDeliverySettings = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    
+    const vendor = await Vendor.findById(vendorId).select('deliverySettings').lean();
+    
+    if (!vendor) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Vendor not found" 
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: vendor.deliverySettings || {
+        offersDelivery: false,
+        deliveryPreparationTime: 30
+      }
+    });
+  } catch (err) {
+    console.error("Error getting delivery settings:", err);
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error" 
+    });
+  }
+};
+
+/**
+ * PUT /vendor/:vendorId/delivery-settings
+ * Update delivery settings for a vendor
+ */
+exports.updateDeliverySettings = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const {
+      offersDelivery,
+      deliveryPreparationTime
+    } = req.body;
+    
+    // Validate input
+    if (typeof offersDelivery !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: "offersDelivery must be a boolean"
+      });
+    }
+    
+    if (deliveryPreparationTime !== undefined && (deliveryPreparationTime < 0 || deliveryPreparationTime > 180)) {
+      return res.status(400).json({
+        success: false,
+        message: "deliveryPreparationTime must be between 0 and 180 minutes"
+      });
+    }
+    
+    // Build update object
+    const updateData = {};
+    if (offersDelivery !== undefined) updateData['deliverySettings.offersDelivery'] = offersDelivery;
+    if (deliveryPreparationTime !== undefined) updateData['deliverySettings.deliveryPreparationTime'] = deliveryPreparationTime;
+    
+    const vendor = await Vendor.findByIdAndUpdate(
+      vendorId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select('deliverySettings');
+    
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found"
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: vendor.deliverySettings,
+      message: "Delivery settings updated successfully"
+    });
+  } catch (err) {
+    console.error("Error updating delivery settings:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };

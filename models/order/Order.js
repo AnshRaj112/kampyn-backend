@@ -15,6 +15,11 @@ const orderSchema = new mongoose.Schema({
     enum: ["takeaway", "delivery", "dinein", "cash"],
     required: true,
   },
+  paymentMethod: {
+    type: String,
+    enum: ["cash", "upi", "card"],
+    default: "cash",
+  },
   collectorName: { type: String, required: true },
   collectorPhone: { type: String, required: true },
 

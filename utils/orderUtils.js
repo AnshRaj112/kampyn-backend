@@ -230,9 +230,16 @@ async function generateRazorpayOrderForUser({
     throw new Error("Address is required for delivery orders.");
   }
 
-  // Get vendor to find university
-  const vendor = await Vendor.findById(user.vendorId).select('uniID').lean();
+  // Get vendor to find university and check delivery settings
+  const vendor = await Vendor.findById(user.vendorId).select('uniID deliverySettings').lean();
   if (!vendor) throw new Error("Vendor not found");
+  
+  // Check if vendor offers delivery for delivery orders
+  if (orderType === "delivery") {
+    if (!vendor.deliverySettings?.offersDelivery) {
+      throw new Error("This vendor does not offer delivery service.");
+    }
+  }
   
   // Get university charges
   const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge').lean();
