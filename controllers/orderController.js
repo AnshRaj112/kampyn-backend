@@ -742,13 +742,21 @@ exports.getVendorPastOrders = async (req, res) => {
  */
 exports.createGuestOrder = async (req, res) => {
   try {
-    const { vendorId, items, total, collectorName, collectorPhone, orderType, isGuest } = req.body;
+    const { vendorId, items, total, collectorName, collectorPhone, orderType, paymentMethod, isGuest } = req.body;
 
     // Basic validation
-    if (!vendorId || !items || !total || !collectorName || !collectorPhone) {
+    if (!vendorId || !items || !total || !collectorName || !collectorPhone || !orderType) {
       return res.status(400).json({
         success: false,
-        message: "vendorId, items, total, collectorName, and collectorPhone are required.",
+        message: "vendorId, items, total, collectorName, collectorPhone, and orderType are required.",
+      });
+    }
+
+    // Validate orderType
+    if (!["dinein", "takeaway"].includes(orderType)) {
+      return res.status(400).json({
+        success: false,
+        message: "orderType must be either 'dinein' or 'takeaway'.",
       });
     }
 
@@ -799,7 +807,7 @@ exports.createGuestOrder = async (req, res) => {
     const newOrder = await Order.create({
       orderNumber,
       userId,
-      orderType: "cash",
+      orderType: orderType, // Use the orderType from request
       collectorName,
       collectorPhone,
       items: items.map(item => ({
@@ -811,6 +819,7 @@ exports.createGuestOrder = async (req, res) => {
       status: "inProgress", // Start directly as in progress since it's cash payment
       vendorId,
       isGuest: true,
+      paymentMethod: paymentMethod || "cash", // Store payment method
     });
 
     // If user exists, add to their active orders
