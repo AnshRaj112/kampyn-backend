@@ -60,7 +60,7 @@ exports.addItem = async (req, res) => {
       await Promise.all(vendors.map(vendor => {
         // Only add if not already present
         if (!vendor.produceInventory.some(inv => inv.itemId.equals(item._id))) {
-          vendor.produceInventory.push({ itemId: item._id, isAvailable: 'Y' });
+          vendor.produceInventory.push({ itemId: item._id, isAvailable: 'N' });
           return vendor.save();
         }
         return Promise.resolve();
