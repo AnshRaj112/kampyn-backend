@@ -10,7 +10,6 @@ const {
   getDeliverySettings,
   updateDeliverySettings
 } = require("../controllers/vendorController");
-const authMiddleware = require("../middleware/authMiddleware").authMiddleware;
 
 // Get all vendors for a specific university
 router.get("/list/uni/:uniId", getVendorsByUni);
@@ -25,10 +24,10 @@ router.patch("/availability/uni/:uniId/vendor/:vendorId", updateVendorAvailabili
 router.delete("/delete/uni/:uniId/vendor/:vendorId", deleteVendor);
 
 // Get delivery settings for a vendor
-router.get("/:vendorId/delivery-settings", authMiddleware, getDeliverySettings);
+router.get("/:vendorId/delivery-settings", getDeliverySettings);
 
 // Update delivery settings for a vendor
-router.put("/:vendorId/delivery-settings", authMiddleware, updateDeliverySettings);
+router.put("/:vendorId/delivery-settings", updateDeliverySettings);
 
 // Add route for updating isSpecial for a vendor's item
 router.patch("/:vendorId/item/:itemId/:kind/special", updateItemSpecialStatus);
