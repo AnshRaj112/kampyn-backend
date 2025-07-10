@@ -854,24 +854,28 @@ exports.createGuestOrder = async (req, res) => {
 
 /**
  * GET /api/order/vendor/:vendorId/active
- * Returns all active orders for a vendor
+ * Returns all active orders for a vendor with detailed item information
  */
 exports.getActiveOrdersByVendor = async (req, res) => {
   try {
     const { vendorId } = req.params;
     if (!vendorId) return res.status(400).json({ error: "Missing vendorId" });
 
-    // Find all active orders for this vendor
-    const orders = await Order.find({
-      vendorId,
-      status: { $in: ["pendingPayment", "inProgress", "onTheWay"] },
-      deleted: false
-    })
-      .select("_id orderNumber status createdAt items")
-      .lean();
+    // Use the utility function that properly populates item details
+    const orders = await orderUtils.getOrdersWithDetails(vendorId);
+    
+    console.log("getActiveOrdersByVendor - Orders found:", orders.length);
+    if (orders.length > 0) {
+      console.log("First order sample:", {
+        orderNumber: orders[0].orderNumber,
+        total: orders[0].total,
+        totalType: typeof orders[0].total
+      });
+    }
 
     res.json({ orders });
   } catch (err) {
+    console.error("Error in getActiveOrdersByVendor:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };

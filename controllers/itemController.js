@@ -21,11 +21,11 @@ const getModel = (category) => {
   }
 };
 
-// Add Item (with duplicate check)
+// Add Item (with duplicate check and vendor-specific support)
 exports.addItem = async (req, res) => {
   try {
     const { category } = req.params;
-    const { name, uniId } = req.body;
+    const { name, uniId, vendorId } = req.body;
 
     if (!name || !uniId) {
       return res
@@ -34,6 +34,8 @@ exports.addItem = async (req, res) => {
     }
 
     const ItemModel = getModel(category);
+    
+    // Check for duplicate item name within the same university
     const existingItem = await ItemModel.findOne({ name: name.trim(), uniId });
 
     if (existingItem) {
@@ -45,26 +47,48 @@ exports.addItem = async (req, res) => {
     const item = new ItemModel(req.body);
     await item.save();
 
-    // Add the new item to all vendors in the same university
-    const vendors = await Vendor.find({ uniID: uniId });
-    if (category.toLowerCase() === 'retail') {
-      await Promise.all(vendors.map(vendor => {
+    // If vendorId is provided, add item only to that specific vendor
+    if (vendorId) {
+      const vendor = await Vendor.findById(vendorId);
+      if (!vendor) {
+        return res.status(404).json({ error: "Vendor not found" });
+      }
+
+      if (category.toLowerCase() === 'retail') {
         // Only add if not already present
         if (!vendor.retailInventory.some(inv => inv.itemId.equals(item._id))) {
           vendor.retailInventory.push({ itemId: item._id, quantity: 0 });
-          return vendor.save();
+          await vendor.save();
         }
-        return Promise.resolve();
-      }));
-    } else if (category.toLowerCase() === 'produce') {
-      await Promise.all(vendors.map(vendor => {
+      } else if (category.toLowerCase() === 'produce') {
         // Only add if not already present
         if (!vendor.produceInventory.some(inv => inv.itemId.equals(item._id))) {
           vendor.produceInventory.push({ itemId: item._id, isAvailable: 'N' });
-          return vendor.save();
+          await vendor.save();
         }
-        return Promise.resolve();
-      }));
+      }
+    } else {
+      // Add the new item to all vendors in the same university (existing behavior)
+      const vendors = await Vendor.find({ uniID: uniId });
+      if (category.toLowerCase() === 'retail') {
+        await Promise.all(vendors.map(vendor => {
+          // Only add if not already present
+          if (!vendor.retailInventory.some(inv => inv.itemId.equals(item._id))) {
+            vendor.retailInventory.push({ itemId: item._id, quantity: 0 });
+            return vendor.save();
+          }
+          return Promise.resolve();
+        }));
+      } else if (category.toLowerCase() === 'produce') {
+        await Promise.all(vendors.map(vendor => {
+          // Only add if not already present
+          if (!vendor.produceInventory.some(inv => inv.itemId.equals(item._id))) {
+            vendor.produceInventory.push({ itemId: item._id, isAvailable: 'N' });
+            return vendor.save();
+          }
+          return Promise.resolve();
+        }));
+      }
     }
 
     res.status(201).json({ message: "Item added successfully", item });
@@ -542,5 +566,57 @@ exports.getItemById = async (req, res) => {
     res.status(200).json(item);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+};
+
+// Get vendor-specific items (items that belong only to a specific vendor)
+exports.getVendorSpecificItems = async (req, res) => {
+  try {
+    const { vendorId, category } = req.params;
+    
+    // Check if vendor exists
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({ error: "Vendor not found" });
+    }
+
+    const ItemModel = getModel(category);
+    
+    // Get all items for the vendor's university
+    const allItems = await ItemModel.find({ uniId: vendor.uniID }).lean();
+    
+    // Get vendor's inventory
+    const inventoryField = category.toLowerCase() === 'retail' ? 'retailInventory' : 'produceInventory';
+    const vendorInventory = vendor[inventoryField] || [];
+    
+    // Get items that are in vendor's inventory
+    const vendorItemIds = vendorInventory.map(inv => inv.itemId.toString());
+    const vendorItems = allItems.filter(item => vendorItemIds.includes(item._id.toString()));
+    
+    // Add inventory information to each item
+    const itemsWithInventory = vendorItems.map(item => {
+      const inventory = vendorInventory.find(inv => inv.itemId.toString() === item._id.toString());
+      return {
+        ...item,
+        inventory: inventory || {}
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        items: itemsWithInventory,
+        vendor: {
+          _id: vendor._id,
+          fullName: vendor.fullName,
+          email: vendor.email,
+          phone: vendor.phone,
+          location: vendor.location
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error getting vendor-specific items:", error);
+    res.status(500).json({ error: error.message });
   }
 };
