@@ -87,7 +87,7 @@ The Cache Locking System is an in-memory solution that prevents race conditions 
    ```
 
 2. **Default Credentials**:
-   - Email: `admin@kiitbites.com`
+   - Email: `admin@bitesbay.com`
    - Password: `SuperAdmin123!`
    - **⚠️ Change password after first login!**
 
@@ -167,7 +167,7 @@ The Cache Locking System is an in-memory solution that prevents race conditions 
 curl -X POST http://localhost:5001/api/admin/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "admin@kiitbites.com",
+    "email": "admin@bitesbay.com",
     "password": "SuperAdmin123!"
   }'
 ```
@@ -373,7 +373,7 @@ Cache cleanup stopped
 4. **Reset Admin Password** (Database operation):
    ```javascript
    // Connect to database and update admin password
-   const admin = await Admin.findOne({ email: 'admin@kiitbites.com' });
+   const admin = await Admin.findOne({ email: 'admin@bitesbay.com' });
    admin.password = 'NewPassword123!';
    await admin.save();
    ```

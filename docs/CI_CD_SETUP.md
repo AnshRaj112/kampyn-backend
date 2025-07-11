@@ -1,6 +1,6 @@
 # CI/CD Pipeline Setup Guide
 
-This guide explains how to set up automatic deployment of the KIITBites backend to Render using GitHub Actions.
+This guide explains how to set up automatic deployment of the BitesBay backend to Render using GitHub Actions.
 
 ## Overview
 
