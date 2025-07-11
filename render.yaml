@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: kiitbites-backend
+    name: bitesbay-backend
     runtime: node
     plan: starter
     buildCommand: npm install
