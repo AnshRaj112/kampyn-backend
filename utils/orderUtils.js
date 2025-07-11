@@ -605,7 +605,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
   // 1) Fetch the orders
   const filter = {
     vendorId,
-    status: { $in: ["completed", "inProgress", "onTheWay"] },
+    status: { $in: ["inProgress", "onTheWay"] },
     deleted: false
   };
 
@@ -617,6 +617,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
     collectorName: 1,
     collectorPhone: 1,
     address: 1,
+    total: 1,
     items: 1,
     createdAt: 1,
   })
@@ -650,6 +651,8 @@ async function getOrdersWithDetails(vendorId, orderType) {
 
   // 5) Assemble each order's detailed items
   return orders.map((order) => {
+    console.log("Processing order:", order.orderNumber, "Total:", order.total);
+    
     const detailedItems = order.items.map(({ itemId, kind, quantity }) => {
       const key = itemId.toString();
       const doc = kind === "Retail" ? retailMap[key] : produceMap[key];
@@ -662,7 +665,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
       };
     });
 
-    return {
+    const result = {
       orderId: order._id,
       orderNumber: order.orderNumber,
       orderType: order.orderType,
@@ -671,8 +674,17 @@ async function getOrdersWithDetails(vendorId, orderType) {
       collectorName: order.collectorName,
       collectorPhone: order.collectorPhone,
       address: order.address,
+      total: order.total,
       items: detailedItems,
     };
+    
+    console.log("Returning order result:", {
+      orderNumber: result.orderNumber,
+      total: result.total,
+      totalType: typeof result.total
+    });
+    
+    return result;
   });
 }
 

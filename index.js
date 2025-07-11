@@ -75,6 +75,15 @@ app.use(cors({
 
 // ✅ Ensure MONGO_URL exists
 
+// ✅ Health check endpoint for Render
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ 
+    status: "OK", 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // ✅ Routes
 app.use("/api/user/auth", userAuthRoutes);
 app.use("/api/uni/auth", uniAuthRoutes);

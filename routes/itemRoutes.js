@@ -50,6 +50,9 @@ router.get("/vendors/:itemId", itemController.getVendorsForItem);
 // Get individual item by id in a category
 router.get("/:category/item/:id", itemController.getItemById);
 
+// Get vendor-specific items (items that belong only to a specific vendor)
+router.get("/vendor/:vendorId/:category", itemController.getVendorSpecificItems);
+
 router.get('/types/retail', (req, res) => {
   const retailTypes = Retail.schema.path('type').enumValues;
   res.json({ types: retailTypes });

@@ -82,8 +82,7 @@ async function getItemsForVendorId(vendorId) {
   const produceItemIds = produceEntries.map((e) => String(e.itemId));
 
   // 5. Batch‐fetch item docs from Retail & Produce in parallel
-  //    We only select the fields we actually need: name + price.
-  //    If your frontend also needs type, unit, or image, you can add them here.
+  //    We select the fields needed by the frontend: name, price, image, type
   const [retailDocs, produceDocs] = await Promise.all([
     Retail.find({
       _id: { $in: retailItemIds.map(toObjectId) },
@@ -229,7 +228,7 @@ async function getRetailItemsForVendorId(vendorId) {
     _id: { $in: retailItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name price type") // no longer select isSpecial from item
+    .select("name price type image") // include image field
     .lean();
 
   const retailMap = new Map(retailDocs.map((d) => [String(d._id), d]));
@@ -243,6 +242,7 @@ async function getRetailItemsForVendorId(vendorId) {
         price: doc.price,
         quantity,
         type: doc.type,
+        image: doc.image,
         isSpecial, // from vendor's inventory
       };
     })
@@ -267,7 +267,7 @@ async function getProduceItemsForVendorId(vendorId) {
     _id: { $in: produceItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name price type") // no longer select isSpecial from item
+    .select("name price type image") // include image field
     .lean();
 
   const produceMap = new Map(produceDocs.map((d) => [String(d._id), d]));
@@ -281,6 +281,7 @@ async function getProduceItemsForVendorId(vendorId) {
         price: doc.price,
         isAvailable,
         type: doc.type,
+        image: doc.image,
         isSpecial, // from vendor's inventory
       };
     })
