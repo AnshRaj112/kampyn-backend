@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 
-console.log('🚀 KIITBites Backend CI/CD Setup Validation\n');
+console.log('🚀 BitesBay Backend CI/CD Setup Validation\n');
 
 // Check if required files exist
 const requiredFiles = [
