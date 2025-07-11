@@ -3,7 +3,7 @@ services:
     name: bitesbay-backend
     runtime: node
     plan: starter
-    buildCommand: npm ci --only=production
+    buildCommand: npm ci && npm run verify-debug && npm audit fix --force
     startCommand: npm start
     envVars:
       - key: NODE_ENV
