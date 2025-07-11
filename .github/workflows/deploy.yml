@@ -23,16 +23,14 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: 'kiitbites-backend/package-lock.json'
+        cache-dependency-path: 'package-lock.json'
         
     - name: Install dependencies
       run: |
-        cd kiitbites-backend
         npm ci
         
     - name: Run tests (if available)
       run: |
-        cd kiitbites-backend
         npm test
       continue-on-error: true
       

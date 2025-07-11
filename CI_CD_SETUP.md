@@ -22,7 +22,7 @@ The CI/CD pipeline automatically deploys the backend to Render when:
 2. Click "New +" and select "Web Service"
 3. Connect your GitHub repository
 4. Configure the service:
-   - **Name**: `kiitbites-backend`
+   - **Name**: `bitesbay-backend`
    - **Environment**: `Node`
    - **Build Command**: `npm install`
    - **Start Command**: `npm start`
@@ -101,7 +101,7 @@ The backend includes a health check endpoint at `/api/health` that returns:
 ```json
 {
   "status": "OK",
-  "timestamp": "2024-01-01T00:00:00.000Z",
+  "timestamp": "2025-01-01T00:00:00.000Z",
   "uptime": 123.456
 }
 ```
@@ -166,3 +166,61 @@ If you encounter issues:
 2. Review Render service logs
 3. Verify all configuration steps
 4. Test locally before deploying 
+
+---
+
+## 1. **Fix the `cache-dependency-path` in Workflow**
+
+If your `package-lock.json` is not in the path specified in your workflow, update it to the correct location.
+
+- **If your backend is in the root:**
+  ```yaml
+  cache-dependency-path: 'package-lock.json'
+  ```
+- **If your backend is in a subfolder (e.g., `bitesbay-backend/`):**
+  ```yaml
+  cache-dependency-path: 'bitesbay-backend/package-lock.json'
+  ```
+- **If your repo is named `bitesbay-backend` and the lock file is in the root:**
+  ```yaml
+  cache-dependency-path: 'package-lock.json'
+  ```
+
+**Edit:**  
+`.github/workflows/deploy.yml`  
+Update the `cache-dependency-path` to match your actual file structure.
+
+---
+
+## 2. **Add More Robust Error Handling in Workflow**
+
+You can improve the workflow by:
+- Adding `continue-on-error: false` to critical steps (like install, test, deploy) to ensure failures are caught.
+- Adding more descriptive error messages or notifications.
+
+---
+
+## 3. **Add/Improve Health Check Endpoint**
+
+If you don’t already have a `/api/health` endpoint, or if it’s not robust, you can improve it in your backend code (e.g., `index.js`):
+
+```js
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+```
+
+---
+
+## 4. **Add/Update Scripts in `package.json`**
+
+Make sure you have the correct scripts for `start`, `test`, etc. For example:
+
+```json
+"scripts": {
+  "start": "node index.js",
+  "test": "echo \"No tests yet 
