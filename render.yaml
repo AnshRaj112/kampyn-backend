@@ -3,7 +3,7 @@ services:
     name: bitesbay-backend
     runtime: node
     plan: starter
-    buildCommand: npm install
+    buildCommand: npm ci --only=production
     startCommand: npm start
     envVars:
       - key: NODE_ENV
