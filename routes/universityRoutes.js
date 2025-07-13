@@ -1,6 +1,5 @@
 const express = require('express');
 const Uni = require('../models/account/Uni');
-const { uniAuthMiddleware } = require('../middleware/uniAuthMiddleware');
 
 const router = express.Router();
 
@@ -25,8 +24,8 @@ router.get('/charges/:uniId', async (req, res) => {
   }
 });
 
-// Update university charges (requires university authentication)
-router.put('/charges/:uniId', uniAuthMiddleware, async (req, res) => {
+// Update university charges (no authentication required)
+router.put('/charges/:uniId', async (req, res) => {
   try {
     const { uniId } = req.params;
     const { packingCharge, deliveryCharge } = req.body;
@@ -38,11 +37,6 @@ router.put('/charges/:uniId', uniAuthMiddleware, async (req, res) => {
     
     if (deliveryCharge !== undefined && (deliveryCharge < 0 || !Number.isFinite(deliveryCharge))) {
       return res.status(400).json({ message: "Delivery charge must be a non-negative number" });
-    }
-    
-    // Check if the authenticated university is updating their own charges
-    if (req.uni._id.toString() !== uniId) {
-      return res.status(403).json({ message: "You can only update your own university charges" });
     }
     
     const updateData = {};

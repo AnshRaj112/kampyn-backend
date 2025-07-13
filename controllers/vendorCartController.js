@@ -22,6 +22,10 @@ const getVendorCart = async (req, res) => {
         total: 0
       });
       await vendorCart.save();
+    } else {
+      // Recalculate total with current packing charges to ensure accuracy
+      vendorCart.total = await calculateTotalWithPacking(vendorCart.items, vendorId);
+      await vendorCart.save();
     }
 
     res.json({
@@ -35,6 +39,33 @@ const getVendorCart = async (req, res) => {
       message: 'Internal server error'
     });
   }
+};
+
+// Calculate total with packing charges
+const calculateTotalWithPacking = async (items, vendorId) => {
+  const itemTotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const packableItems = items.filter(item => item.kind === "Produce");
+  
+  // Get university packing charge
+  let packingCharge = 5; // Default packing charge
+  try {
+    const Vendor = require('../models/account/Vendor');
+    const Uni = require('../models/account/Uni');
+    
+    const vendor = await Vendor.findById(vendorId).select('uniID').lean();
+    if (vendor && vendor.uniID) {
+      const university = await Uni.findById(vendor.uniID).select('packingCharge').lean();
+      if (university && university.packingCharge !== undefined) {
+        packingCharge = university.packingCharge;
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching university packing charge:', error);
+    // Use default packing charge if fetch fails
+  }
+  
+  const packingTotal = packableItems.reduce((sum, item) => sum + (packingCharge * item.quantity), 0);
+  return itemTotal + packingTotal;
 };
 
 // Add item to vendor cart
@@ -82,6 +113,8 @@ const addItemToCart = async (req, res) => {
       });
     }
 
+    // Calculate total with packing charges
+    vendorCart.total = await calculateTotalWithPacking(vendorCart.items, vendorId);
     await vendorCart.save();
 
     res.json({
@@ -138,6 +171,8 @@ const updateItemQuantity = async (req, res) => {
       vendorCart.items[itemIndex].quantity = quantity;
     }
 
+    // Calculate total with packing charges
+    vendorCart.total = await calculateTotalWithPacking(vendorCart.items, vendorId);
     await vendorCart.save();
 
     res.json({
@@ -178,6 +213,8 @@ const removeItemFromCart = async (req, res) => {
       item => item.itemId !== itemId
     );
 
+    // Calculate total with packing charges
+    vendorCart.total = await calculateTotalWithPacking(vendorCart.items, vendorId);
     await vendorCart.save();
 
     res.json({
@@ -215,6 +252,7 @@ const clearVendorCart = async (req, res) => {
     }
 
     vendorCart.items = [];
+    vendorCart.total = 0;
     await vendorCart.save();
 
     res.json({
@@ -254,6 +292,9 @@ const updateVendorCart = async (req, res) => {
     }
 
     vendorCart.items = items || [];
+    
+    // Calculate total with packing charges
+    vendorCart.total = await calculateTotalWithPacking(vendorCart.items, vendorId);
     await vendorCart.save();
 
     res.json({

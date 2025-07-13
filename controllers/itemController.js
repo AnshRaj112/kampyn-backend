@@ -1,11 +1,13 @@
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
+const Raw = require("../models/item/Raw");
 const Vendor = require("../models/account/Vendor");
 const {
   getVendorsByItemId,
   getItemsForVendorId,
   getProduceItemsForVendorId,
   getRetailItemsForVendorId,
+  getRawItemsForVendorId,
 } = require("../utils/itemUtils");
 const Uni = require("../models/account/Uni");
 
@@ -16,8 +18,10 @@ const getModel = (category) => {
       return Retail;
     case "produce":
       return Produce;
+    case "raw":
+      return Raw;
     default:
-      throw new Error("Invalid category. Must be 'retail' or 'produce'.");
+      throw new Error("Invalid category. Must be 'retail', 'produce', or 'raw'.");
   }
 };
 
@@ -66,6 +70,17 @@ exports.addItem = async (req, res) => {
           vendor.produceInventory.push({ itemId: item._id, isAvailable: 'N' });
           await vendor.save();
         }
+      } else if (category.toLowerCase() === 'raw') {
+        // Only add if not already present
+        if (!vendor.rawMaterialInventory.some(inv => inv.itemId.equals(item._id))) {
+          vendor.rawMaterialInventory.push({ 
+            itemId: item._id, 
+            openingAmount: 0, 
+            closingAmount: 0, 
+            unit: item.unit || 'kg' 
+          });
+          await vendor.save();
+        }
       }
     } else {
       // Add the new item to all vendors in the same university (existing behavior)
@@ -84,6 +99,20 @@ exports.addItem = async (req, res) => {
           // Only add if not already present
           if (!vendor.produceInventory.some(inv => inv.itemId.equals(item._id))) {
             vendor.produceInventory.push({ itemId: item._id, isAvailable: 'N' });
+            return vendor.save();
+          }
+          return Promise.resolve();
+        }));
+      } else if (category.toLowerCase() === 'raw') {
+        await Promise.all(vendors.map(vendor => {
+          // Only add if not already present
+          if (!vendor.rawMaterialInventory.some(inv => inv.itemId.equals(item._id))) {
+            vendor.rawMaterialInventory.push({ 
+              itemId: item._id, 
+              openingAmount: 0, 
+              closingAmount: 0, 
+              unit: item.unit || 'kg' 
+            });
             return vendor.save();
           }
           return Promise.resolve();
@@ -275,6 +304,28 @@ exports.getProduceItemsByVendor = async (req, res) => {
     });
   } catch (err) {
     console.error("Error in getProduceItemsByVendor:", err);
+    const status = err.message.includes("not found") ? 404 : 500;
+    return res.status(status).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+// New controller for Raw Materials-only
+exports.getRawItemsByVendor = async (req, res) => {
+  const { vendorId } = req.params;
+  try {
+    const { foodCourtName, rawItems } = await getRawItemsForVendorId(
+      vendorId
+    );
+    return res.status(200).json({
+      success: true,
+      foodCourtName,
+      data: { rawItems },
+    });
+  } catch (err) {
+    console.error("Error in getRawItemsByVendor:", err);
     const status = err.message.includes("not found") ? 404 : 500;
     return res.status(status).json({
       success: false,

@@ -8,6 +8,14 @@ const {
 const InventoryReport = require("../models/inventory/InventoryReport");
 const mongoose = require("mongoose");
 
+/** Format date as YYYY-MM-DD in IST */
+function formatDateIST(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * POST /inventory/report/vendor/:vendorId
  * Body (optional): { date: "YYYY-MM-DD" }
@@ -86,8 +94,14 @@ async function getVendorReportDates(req, res) {
     }
     // Ensure vendorId is an ObjectId
     const reports = await InventoryReport.find({ vendorId: new mongoose.Types.ObjectId(vendorId) }).select("date -_id").lean();
-    // Format date as YYYY-MM-DD string
-    const dates = [...new Set(reports.map(r => r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)))].sort((a, b) => b.localeCompare(a));
+    // Format date as YYYY-MM-DD string using local time
+    const dates = [...new Set(reports.map(r => {
+      if (r.date instanceof Date) {
+        return formatDateIST(r.date);
+      } else {
+        return String(r.date).slice(0, 10);
+      }
+    }))].sort((a, b) => b.localeCompare(a));
     res.json({ dates });
   } catch (err) {
     console.error("Error in getVendorReportDates:", err);
