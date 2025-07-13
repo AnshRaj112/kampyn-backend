@@ -5,6 +5,7 @@ const Vendor = require("../models/account/Vendor");
 const Uni = require("../models/account/Uni");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
+const Raw = require("../models/item/Raw");
 
 /**
  * Safely convert a string to ObjectId.
@@ -289,9 +290,53 @@ async function getProduceItemsForVendorId(vendorId) {
 
   return { foodCourtName: vendor.fullName, produceItems };
 }
+
+// Utility to fetch only raw material items for a given vendor
+async function getRawItemsForVendorId(vendorId) {
+  const vOid = toObjectId(vendorId);
+  const vendor = await Vendor.findById(vOid)
+    .select("fullName uniID rawMaterialInventory")
+    .lean();
+  if (!vendor) throw new Error(`Vendor ${vendorId} not found.`);
+  await assertVendorAvailableInUni(vOid, vendor.uniID);
+
+  // Handle vendors that don't have rawMaterialInventory field yet
+  const rawEntries = vendor.rawMaterialInventory || [];
+  const rawItemIds = rawEntries.map((e) => String(e.itemId));
+
+  // If no raw materials, return empty array
+  if (rawItemIds.length === 0) {
+    return { foodCourtName: vendor.fullName, rawItems: [] };
+  }
+
+  const rawDocs = await Raw.find({
+    _id: { $in: rawItemIds.map(toObjectId) },
+  })
+    .select("name unit")
+    .lean();
+
+  const rawMap = new Map(rawDocs.map((d) => [String(d._id), d]));
+  const rawItems = rawEntries
+    .map(({ itemId, openingAmount, closingAmount, unit }) => {
+      const doc = rawMap.get(String(itemId));
+      if (!doc) return null;
+      return {
+        itemId: doc._id,
+        name: doc.name,
+        openingAmount,
+        closingAmount,
+        unit: unit || doc.unit,
+      };
+    })
+    .filter(Boolean);
+
+  return { foodCourtName: vendor.fullName, rawItems };
+}
+
 module.exports = {
   getItemsForVendorId,
   getVendorsByItemId,
   getRetailItemsForVendorId,
   getProduceItemsForVendorId,
+  getRawItemsForVendorId,
 };

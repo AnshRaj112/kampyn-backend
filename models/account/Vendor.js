@@ -64,6 +64,20 @@ const vendorSchema = new mongoose.Schema(
         _id: false,
       },
     ],
+
+    rawMaterialInventory: [
+      {
+        itemId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Raw",
+          required: true,
+        },
+        openingAmount: { type: Number, default: 0, required: true },
+        closingAmount: { type: Number, default: 0, required: true },
+        unit: { type: String, enum: ["l", "kg"], required: true },
+        _id: false,
+      },
+    ],
     activeOrders: [{ type: mongoose.Types.ObjectId, ref: "Order" }],
 
     lastLoginAttempt: { type: Date, default: null },
@@ -74,4 +88,5 @@ const vendorSchema = new mongoose.Schema(
 // this compound index can help—MongoDB can jump directly to that subdocument.
 vendorSchema.index({ uniID: 1, "retailInventory.itemId": 1 });
 vendorSchema.index({ uniID: 1, "produceInventory.itemId": 1 });
+vendorSchema.index({ uniID: 1, "rawMaterialInventory.itemId": 1 });
 module.exports = Cluster_Accounts.model("Vendor", vendorSchema);

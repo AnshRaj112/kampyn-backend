@@ -3,6 +3,7 @@ const router = express.Router();
 const itemController = require("../controllers/itemController");
 const Retail = require('../models/item/Retail');
 const Produce = require('../models/item/Produce');
+const Raw = require('../models/item/Raw');
 const { getAllSpecialsByUniId } = require('../controllers/itemController');
 
 router.get(
@@ -13,7 +14,11 @@ router.get(
   "/getvendors/:vendorId/produce",
   itemController.getProduceItemsByVendor
 );
-// Add a new item in a category (retail/produce)
+router.get(
+  "/getvendors/:vendorId/raw",
+  itemController.getRawItemsByVendor
+);
+// Add a new item in a category (retail/produce/raw)
 router.post("/:category", itemController.addItem);
 
 // Get paginated items by uniId for a category
@@ -34,8 +39,8 @@ router.get("/search/items", itemController.searchItems);
 // Search vendors by name within a uniID
 router.get("/search/vendors", itemController.searchVendorsByName);
 
-//Fetch all vendors that currently hold a given retail/produce item:
-// Only returns vendorName + either quantity (retail) or isAvailable (produce).
+//Fetch all vendors that currently hold a given retail/produce/raw item:
+// Only returns vendorName + either quantity (retail) or isAvailable (produce) or openingAmount/closingAmount (raw).
 router.get(
   "/vendors/by-item/:itemType/:itemId",
   itemController.getVendorsByItem

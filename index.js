@@ -1,4 +1,8 @@
 require("dotenv").config();
+
+// Set timezone to Indian Standard Time (IST)
+process.env.TZ = 'Asia/Kolkata';
+
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -23,7 +27,9 @@ const billingInfoRoutes = require("./routes/billingInfoRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const universityRoutes = require("./routes/universityRoutes");
 const razorpayRoutes = require("./routes/razorpayRoutes");
+const vendorPaymentRoutes = require("./routes/vendorPaymentRoutes");
 const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
+const { initializeDailyClearing } = require("./utils/inventoryReportUtils");
 const configRoutes = require("./routes/configRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
@@ -106,6 +112,7 @@ app.use("/vendorcart", vendorCartRoutes);
 app.use("/billinginfo", billingInfoRoutes);
 app.use("/admin", adminRoutes); // 🔒 Admin routes for lock management
 app.use("/razorpay", razorpayRoutes);
+app.use("/vendor-payment", vendorPaymentRoutes);
 app.use("/api", configRoutes);
 //app.use("/temp", tempRoutes);
 
@@ -133,4 +140,8 @@ app.listen(PORT, () => {
   startPeriodicCleanup(10 * 60 * 1000); // 10 minutes
   console.log("🔒 Cache locking system initialized with periodic cleanup");
   console.log("🔐 Admin authentication system ready");
+  
+  // 🧹 Initialize daily raw material inventory clearing
+  initializeDailyClearing();
+  console.log("🧹 Daily raw material clearing schedule initialized");
 });
