@@ -17,8 +17,14 @@ router.post("/:userId", orderController.placeOrderHandler);
 // 1. get current active order for a vendor (specify type: dinein|takeaway|delivery)
 router.get("/active/:vendorId/:orderType", orderController.getActiveOrders);
 
+// 1.5. get delivery orders for a vendor (onTheWay status only)
+router.get("/delivery/:vendorId", orderController.getDeliveryOrders);
+
 // 2. change status from inProgress to completed
 router.patch("/:orderId/complete", orderController.completeOrder);
+
+// 2.1. change status from inProgress to ready
+router.patch('/:orderId/ready', orderController.readyOrder);
 
 // 3. change status from completed to delivered (moves in user pastOrders)
 router.patch("/:orderId/deliver", orderController.deliverOrder);
