@@ -605,7 +605,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
   // 1) Fetch the orders
   const filter = {
     vendorId,
-    status: { $in: ["inProgress", "onTheWay"] },
+    status: { $in: ["inProgress", "ready", "completed"] }, // Include ready and completed statuses
     deleted: false
   };
 
@@ -848,6 +848,86 @@ async function getVendorPastOrdersWithDetails(vendorId) {
   });
 }
 
+/**
+ * Fetches all delivery orders (onTheWay status) for a vendor,
+ * populating item details *in two queries* instead of N per-item calls.
+ */
+async function getDeliveryOrdersWithDetails(vendorId) {
+  // 1) Fetch the delivery orders (only onTheWay status)
+  const filter = {
+    vendorId,
+    status: "onTheWay",
+    deleted: false
+  };
+
+  const orders = await Order.find(filter, {
+    orderNumber: 1,
+    orderType: 1,
+    status: 1,
+    collectorName: 1,
+    collectorPhone: 1,
+    address: 1,
+    total: 1,
+    items: 1,
+    createdAt: 1,
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (orders.length === 0) return [];
+
+  // 2) Gather all itemIds by kind
+  const retailIds = new Set();
+  const produceIds = new Set();
+  orders.forEach((o) =>
+    o.items.forEach(({ itemId, kind }) =>
+      (kind === "Retail" ? retailIds : produceIds).add(itemId.toString())
+    )
+  );
+
+  // 3) Batch-fetch details in parallel
+  const [retails, produces] = await Promise.all([
+    Retail.find({ _id: { $in: [...retailIds] } }, "name price unit").lean(),
+    Produce.find({ _id: { $in: [...produceIds] } }, "name price unit").lean(),
+  ]);
+
+  // 4) Build lookup maps
+  const retailMap = Object.fromEntries(
+    retails.map((r) => [r._id.toString(), r])
+  );
+  const produceMap = Object.fromEntries(
+    produces.map((p) => [p._id.toString(), p])
+  );
+
+  // 5) Assemble each order's detailed items
+  return orders.map((order) => {
+    const detailedItems = order.items.map(({ itemId, kind, quantity }) => {
+      const key = itemId.toString();
+      const doc = kind === "Retail" ? retailMap[key] : produceMap[key];
+      return {
+        name: doc ? doc.name : "Unknown Item",
+        price: doc ? doc.price : 0,
+        unit: doc ? doc.unit : "",
+        type: kind.toLowerCase(),
+        quantity: quantity || 1,
+      };
+    });
+
+    return {
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      orderType: order.orderType,
+      status: order.status,
+      createdAt: order.createdAt,
+      collectorName: order.collectorName,
+      collectorPhone: order.collectorPhone,
+      address: order.address,
+      total: order.total,
+      items: detailedItems,
+    };
+  });
+}
+
 module.exports = {
   generateOrderNumber,
   generateTimeBasedOrderNumber,
@@ -859,6 +939,7 @@ module.exports = {
   getOrdersWithDetails,
   getOrderWithDetails,
   getVendorPastOrdersWithDetails,
+  getDeliveryOrdersWithDetails,
   cancelOrderAtomically,
   getPendingOrderDetails,
   storePendingOrderDetails,

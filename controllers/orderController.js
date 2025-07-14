@@ -154,15 +154,15 @@ exports.completeOrder = async (req, res) => {
     const { orderId } = req.params;
 
     const result = await Order.findOneAndUpdate(
-      { _id: orderId, status: "inProgress" }, // only target in-progress
-      { $set: { status: "completed" } }, // only update status
+      { _id: orderId, status: { $in: ["inProgress", "ready"] } }, // allow both in-progress and ready orders
+      { $set: { status: "completed" } }, // update status to completed
       { new: true } // return the updated doc
     );
 
     if (!result) {
       return res
         .status(400)
-        .json({ message: "No active in-progress order found." });
+        .json({ message: "No active in-progress or ready order found." });
     }
 
     // Orders stay in activeOrders until delivered
@@ -726,6 +726,40 @@ exports.getVendorPastOrders = async (req, res) => {
 };
 
 /**
+ * GET /orders/delivery/:vendorId
+ * Get delivery orders (onTheWay status) for a vendor
+ */
+exports.getDeliveryOrders = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+
+    console.log(`Fetching delivery orders for vendor: ${vendorId}`);
+
+    // 1) Fetch vendor name
+    const vendor = await Vendor.findById(vendorId, "fullName").lean();
+    if (!vendor) {
+      console.log(`Vendor not found: ${vendorId}`);
+      return res.status(404).json({ message: "Vendor not found." });
+    }
+
+    // 2) Fetch all delivery orders (onTheWay status) + item details
+    const orders = await orderUtils.getDeliveryOrdersWithDetails(vendorId);
+
+    console.log(`Found ${orders.length} delivery orders for vendor`);
+
+    // 3) Return combined payload
+    return res.json({
+      vendorId: vendor._id,
+      vendorName: vendor.fullName,
+      orders, // array of { orderId, orderType, status, collectorName, collectorPhone, items }
+    });
+  } catch (err) {
+    console.error("Error in getDeliveryOrders:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
  * POST /orders/guest
  * Creates a guest order for vendors
  * Expects:
@@ -1044,6 +1078,27 @@ exports.cancelOrderManual = async (req, res) => {
 
   } catch (err) {
     console.error("Error in cancelOrderManual:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
+ * PATCH /orders/:orderId/ready
+ */
+exports.readyOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const result = await Order.findOneAndUpdate(
+      { _id: orderId, status: "inProgress" },
+      { $set: { status: "ready" } },
+      { new: true }
+    );
+    if (!result) {
+      return res.status(400).json({ message: "No active in-progress order found to mark as ready." });
+    }
+    return res.json({ message: "Order marked as ready." });
+  } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: "Server error." });
   }
 };
