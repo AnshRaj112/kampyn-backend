@@ -171,10 +171,15 @@ exports.updateItemAvailableStatus = async (req, res) => {
     if (!["Y", "N"].includes(isAvailable)) {
       return res.status(400).json({ error: "Invalid isAvailable value. Must be 'Y' or 'N'." });
     }
-    if (kind !== "produce") {
-      return res.status(400).json({ error: "isAvailable can only be updated for produce items." });
+    // Allow both 'retail' and 'produce'
+    let inventoryField;
+    if (kind === "retail") {
+      inventoryField = "retailInventory";
+    } else if (kind === "produce") {
+      inventoryField = "produceInventory";
+    } else {
+      return res.status(400).json({ error: "Invalid kind. Must be 'retail' or 'produce'." });
     }
-    const inventoryField = "produceInventory";
     const updateResult = await Vendor.updateOne(
       { _id: vendorId, [`${inventoryField}.itemId`]: itemId },
       { $set: { [`${inventoryField}.$.isAvailable`]: isAvailable } }
