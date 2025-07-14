@@ -106,7 +106,7 @@ async function getItemsForVendorId(vendorId) {
   // 7. Build the minimal response arrays:
   //    • For each retail entry: include itemId, name, price, quantity, isSpecial.
   const retailItems = retailEntries
-    .map(({ itemId, quantity, isSpecial }) => {
+    .map(({ itemId, quantity, isSpecial, isAvailable }) => {
       const doc = retailMap.get(String(itemId));
       if (!doc) return null; // If not found in DB, skip
       return {
@@ -117,6 +117,7 @@ async function getItemsForVendorId(vendorId) {
         image: doc.image,
         type: doc.type,
         isSpecial, // from vendor's inventory
+        isAvailable, // from vendor's inventory
       };
     })
     .filter(Boolean);
@@ -234,7 +235,7 @@ async function getRetailItemsForVendorId(vendorId) {
 
   const retailMap = new Map(retailDocs.map((d) => [String(d._id), d]));
   const retailItems = retailEntries
-    .map(({ itemId, quantity, isSpecial }) => {
+    .map(({ itemId, quantity, isSpecial, isAvailable }) => {
       const doc = retailMap.get(String(itemId));
       if (!doc) return null;
       return {
@@ -245,6 +246,7 @@ async function getRetailItemsForVendorId(vendorId) {
         type: doc.type,
         image: doc.image,
         isSpecial, // from vendor's inventory
+        isAvailable, // from vendor's inventory
       };
     })
     .filter(Boolean);
