@@ -272,12 +272,14 @@ exports.updateRawMaterialInventory = async (req, res) => {
       existingRaw.openingAmount = openingAmount;
       existingRaw.closingAmount = closingAmount;
       existingRaw.unit = unit;
+      // Do not overwrite createdAt
     } else {
       vendor.rawMaterialInventory.push({ 
         itemId, 
         openingAmount, 
         closingAmount, 
-        unit 
+        unit,
+        createdAt: new Date()
       });
     }
 
