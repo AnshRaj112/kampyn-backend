@@ -75,6 +75,7 @@ const vendorSchema = new mongoose.Schema(
         openingAmount: { type: Number, default: 0, required: true },
         closingAmount: { type: Number, default: 0, required: true },
         unit: { type: String, enum: ["l", "kg"], required: true },
+        createdAt: { type: Date, default: Date.now },
         _id: false,
       },
     ],
