@@ -54,4 +54,7 @@ router.get("/vendor/:vendorId/active", orderController.getActiveOrdersByVendor);
 // Get a specific order by ID (must be last to avoid conflicts with other :orderId routes)
 router.get("/:orderId", orderController.getOrderById);
 
+// Vendor analytics endpoint
+router.get('/analytics/:vendorId', orderController.getVendorAnalytics);
+
 module.exports = router;
