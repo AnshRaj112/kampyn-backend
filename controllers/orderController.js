@@ -5,6 +5,8 @@ const Vendor = require("../models/account/Vendor");
 const User = require("../models/account/User");
 const Order = require("../models/order/Order");
 const Uni = require("../models/account/Uni");
+const Retail = require("../models/item/Retail");
+const Produce = require("../models/item/Produce");
 const mongoose = require("mongoose");
 const { atomicCache } = require("../utils/cacheUtils");
 
@@ -1100,5 +1102,105 @@ exports.readyOrder = async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Server error." });
+  }
+};
+
+/**
+ * GET /order/analytics/:vendorId?date=YYYY-MM-DD
+ * Returns analytics for a vendor for the given day, week, and month
+ */
+exports.getVendorAnalytics = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const date = req.query.date ? new Date(req.query.date) : new Date();
+
+    // Calculate start/end for day, week, month
+    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const startOfWeek = new Date(date);
+    startOfWeek.setDate(date.getDate() - date.getDay() + 1); // Monday as first day
+    const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+
+    // Helper to fetch orders in a range
+    const getOrders = (start) =>
+      Order.find({
+        vendorId,
+        createdAt: { $gte: start, $lte: date },
+        deleted: false
+      }).lean();
+
+    const [ordersDay, ordersWeek, ordersMonth] = await Promise.all([
+      getOrders(startOfDay),
+      getOrders(startOfWeek),
+      getOrders(startOfMonth)
+    ]);
+
+    // Helper to aggregate stats with proper item name resolution
+    async function aggregate(orders) {
+      const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+      const totalOrders = orders.length;
+      const avgOrderValue = totalOrders ? totalRevenue / totalOrders : 0;
+      const uniqueCustomers = new Set(orders.map(o => o.collectorPhone)).size;
+      
+      // Collect all item IDs by kind
+      const retailIds = new Set();
+      const produceIds = new Set();
+      orders.forEach(order => {
+        (order.items || []).forEach(item => {
+          if (item.kind === "Retail") {
+            retailIds.add(item.itemId.toString());
+          } else if (item.kind === "Produce") {
+            produceIds.add(item.itemId.toString());
+          }
+        });
+      });
+
+      // Fetch item details
+      const [retails, produces] = await Promise.all([
+        Retail.find({ _id: { $in: [...retailIds] } }, "name").lean(),
+        Produce.find({ _id: { $in: [...produceIds] } }, "name").lean(),
+      ]);
+
+      // Build lookup maps
+      const retailMap = Object.fromEntries(retails.map(r => [r._id.toString(), r.name]));
+      const produceMap = Object.fromEntries(produces.map(p => [p._id.toString(), p.name]));
+
+      // Aggregate item stats with proper names
+      const itemStats = {};
+      orders.forEach(order => {
+        (order.items || []).forEach(item => {
+          let itemName = item.name; // Use existing name if available
+          if (!itemName) {
+            // Fallback to looking up by ID
+            if (item.kind === "Retail") {
+              itemName = retailMap[item.itemId.toString()] || `Unknown Retail Item (${item.itemId})`;
+            } else if (item.kind === "Produce") {
+              itemName = produceMap[item.itemId.toString()] || `Unknown Produce Item (${item.itemId})`;
+            } else {
+              itemName = `Unknown Item (${item.itemId})`;
+            }
+          }
+          itemStats[itemName] = (itemStats[itemName] || 0) + item.quantity;
+        });
+      });
+
+      return { totalRevenue, totalOrders, avgOrderValue, uniqueCustomers, itemStats };
+    }
+
+    const [dayStats, weekStats, monthStats] = await Promise.all([
+      aggregate(ordersDay),
+      aggregate(ordersWeek),
+      aggregate(ordersMonth)
+    ]);
+
+    res.json({
+      success: true,
+      day: dayStats,
+      week: weekStats,
+      month: monthStats,
+      ordersDay, // for graphing
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Analytics error', error: err.message });
   }
 };
