@@ -2,7 +2,7 @@
 
 This document provides a comprehensive reference for all backend API endpoints, grouped by route. Each entry includes the HTTP method, endpoint path, required parameters, and a detailed description of its purpose and behavior.
 
-**Last Updated:** July 2025
+**Last Updated:** January 2025
 
 ---
 
@@ -15,6 +15,10 @@ This document provides a comprehensive reference for all backend API endpoints, 
 - **Inventory Reports** - Vendor inventory reporting
 - **Vendor Cart** - Vendor cart operations
 - **Delivery Settings** - Vendor delivery configuration
+- **Vendor Payment** - Vendor payment processing
+- **Food Court Management** - Food court operations
+- **Team Management** - Team member operations
+- **Contact Form** - Contact form submission
 
 ### 🔒 **Authentication Required:**
 - **Admin Routes** - All admin functionality requires admin authentication
@@ -30,11 +34,13 @@ This document provides a comprehensive reference for all backend API endpoints, 
 - **GET `/admin/auth/me`**
   - **Description:** Get current admin information (ID, email, role, permissions).
   - **Auth:** Admin authentication required.
+  - **Response:** `{ "success": true, "data": { "id": "...", "email": "...", "role": "...", "permissions": [...] } }`
 
 ### Lock Management
 - **GET `/admin/locks/stats`**
   - **Description:** Get statistics about current locks and orders.
   - **Auth:** Requires `viewStats` permission.
+  - **Response:** `{ "success": true, "data": { "activeLocks": number, "totalOrders": number, ... } }`
 - **GET `/admin/locks/detailed-stats`**
   - **Description:** Get detailed statistics about locks for debugging.
   - **Auth:** Requires `viewStats` permission.
@@ -127,6 +133,42 @@ This document provides a comprehensive reference for all backend API endpoints, 
 
 ---
 
+## Vendor Payment Routes (`/vendor-payment`)
+
+### Payment Processing (No Auth Required)
+- **POST `/vendor-payment/create-order`**
+  - **Description:** Create Razorpay order for vendor guest orders.
+  - **Body:** 
+    ```json
+    {
+      "vendorId": "vendor_id",
+      "items": [...],
+      "total": number,
+      "collectorName": "string",
+      "collectorPhone": "string",
+      "orderType": "dinein" | "takeaway"
+    }
+    ```
+  - **Response:** `{ "success": true, "id": "order_id", "amount": number, "currency": "INR", "receipt": "string" }`
+  - **Auth:** No authentication required.
+- **POST `/vendor-payment/verify`**
+  - **Description:** Verify vendor payment and create order.
+  - **Body:** 
+    ```json
+    {
+      "razorpay_order_id": "string",
+      "razorpay_payment_id": "string",
+      "razorpay_signature": "string"
+    }
+    ```
+  - **Auth:** No authentication required.
+- **GET `/vendor-payment/key`**
+  - **Description:** Get Razorpay public key for vendor payments.
+  - **Response:** `{ "success": true, "key": "rzp_test_..." }`
+  - **Auth:** No authentication required.
+
+---
+
 ## Inventory Report Routes (`/inventoryreport`)
 
 ### Report Management (No Auth Required)
@@ -142,6 +184,58 @@ This document provides a comprehensive reference for all backend API endpoints, 
   - **Auth:** No authentication required.
 - **GET `/inventoryreport/vendor/:vendorId/dates`**
   - **Description:** Get all report dates for a specific vendor.
+  - **Auth:** No authentication required.
+
+---
+
+## Inventory Routes (`/inventory`)
+
+### Inventory Management (No Auth Required)
+- **POST `/inventory/add`**
+  - **Description:** Add inventory for retail or produce items.
+  - **Body:** 
+    ```json
+    {
+      "vendorId": "vendor_id",
+      "itemId": "item_id",
+      "itemType": "retail" | "produce",
+      "quantity": number, // Required for retail
+      "isAvailable": "Y" | "N" // Required for produce
+    }
+    ```
+  - **Auth:** No authentication required.
+- **POST `/inventory/reduce`**
+  - **Description:** Reduce retail inventory quantity.
+  - **Body:** 
+    ```json
+    {
+      "vendorId": "vendor_id",
+      "itemId": "item_id",
+      "quantity": number
+    }
+    ```
+  - **Auth:** No authentication required.
+- **POST `/inventory/retail/availability`**
+  - **Description:** Update retail item availability.
+  - **Body:** 
+    ```json
+    {
+      "vendorId": "vendor_id",
+      "itemId": "item_id",
+      "isAvailable": "Y" | "N"
+    }
+    ```
+  - **Auth:** No authentication required.
+- **POST `/inventory/raw-materials`**
+  - **Description:** Update raw material inventory.
+  - **Body:** Raw material data
+  - **Auth:** No authentication required.
+- **DELETE `/inventory/raw-materials`**
+  - **Description:** Delete raw material inventory.
+  - **Body:** Raw material data
+  - **Auth:** No authentication required.
+- **POST `/inventory/clear-raw-materials`**
+  - **Description:** Clear all raw material inventory.
   - **Auth:** No authentication required.
 
 ---
@@ -220,6 +314,7 @@ This document provides a comprehensive reference for all backend API endpoints, 
 
 ## Cart Routes (`/cart`)
 
+### Cart Operations
 - **POST `/cart/add/:userId`**
   - **Description:** Add an item to the user's cart.
 - **GET `/cart/:userId`**
@@ -237,6 +332,7 @@ This document provides a comprehensive reference for all backend API endpoints, 
 
 ## Billing Info Routes (`/billinginfo`)
 
+### Billing Management
 - **POST `/billinginfo/`**
   - **Description:** Save billing information.
 - **GET `/billinginfo/vendor/:vendorId`**
@@ -250,11 +346,13 @@ This document provides a comprehensive reference for all backend API endpoints, 
 
 ---
 
-## Food Routes (`/food`)
+## Food Routes (`/api/foods`)
 
-- **GET `/food/`**
+### Food Search
+- **GET `/api/foods/`**
   - **Description:** Search for food items by query and university ID. Returns both retail and produce items.
   - **Query Params:** `query`, `uniID`
+  - **Response:** `{ "success": true, "data": { "retail": [...], "produce": [...] } }`
 
 ---
 
@@ -268,6 +366,16 @@ This document provides a comprehensive reference for all backend API endpoints, 
   - **Description:** Create a new Razorpay order for payment processing.
   - **Body:** `{ "amount": number, "currency": "INR", "receipt": string }`
   - **Response:** `{ "success": true, "id": "order_id", "amount": number, "currency": "INR", "receipt": string }`
+
+---
+
+## Payment Routes (`/payment`)
+
+### Payment Verification
+- **POST `/payment/verify`**
+  - **Description:** Verify Razorpay payment & process post-payment updates.
+  - **Body:** Payment verification data
+  - **Response:** `{ "success": true, "message": "Payment verified successfully" }`
 
 ---
 
@@ -285,6 +393,7 @@ This document provides a comprehensive reference for all backend API endpoints, 
 ### Admin Auth (`/api/admin/auth`)
 - **POST `/api/admin/auth/login`**
   - **Description:** Admin login.
+  - **Body:** `{ "email": "string", "password": "string" }`
 - **POST `/api/admin/auth/logout`**
   - **Description:** Admin logout.
 - **GET `/api/admin/auth/profile`**
@@ -299,14 +408,19 @@ This document provides a comprehensive reference for all backend API endpoints, 
 ### User Auth (`/api/user/auth`)
 - **POST `/api/user/auth/signup`**
   - **Description:** User signup.
+  - **Body:** `{ "name": "string", "email": "string", "phone": "string", "password": "string", "collegeId": "string" }`
 - **POST `/api/user/auth/otpverification`**
   - **Description:** Verify OTP for user signup/login.
+  - **Body:** `{ "phone": "string", "otp": "string" }`
 - **POST `/api/user/auth/login`**
   - **Description:** User login.
+  - **Body:** `{ "email": "string", "password": "string" }`
 - **POST `/api/user/auth/forgotpassword`**
   - **Description:** User forgot password.
+  - **Body:** `{ "email": "string" }`
 - **POST `/api/user/auth/resetpassword`**
   - **Description:** User reset password.
+  - **Body:** `{ "token": "string", "password": "string" }`
 - **POST `/api/user/auth/googleAuth`**
   - **Description:** User Google authentication.
 - **POST `/api/user/auth/googleSignup`**
@@ -325,14 +439,19 @@ This document provides a comprehensive reference for all backend API endpoints, 
 ### University Auth (`/api/uni/auth`)
 - **POST `/api/uni/auth/signup`**
   - **Description:** University signup.
+  - **Body:** `{ "name": "string", "email": "string", "phone": "string", "password": "string" }`
 - **POST `/api/uni/auth/otpverification`**
   - **Description:** Verify OTP for university signup/login.
+  - **Body:** `{ "phone": "string", "otp": "string" }`
 - **POST `/api/uni/auth/login`**
   - **Description:** University login.
+  - **Body:** `{ "email": "string", "password": "string" }`
 - **POST `/api/uni/auth/forgotpassword`**
   - **Description:** University forgot password.
+  - **Body:** `{ "email": "string" }`
 - **POST `/api/uni/auth/resetpassword`**
   - **Description:** University reset password.
+  - **Body:** `{ "token": "string", "password": "string" }`
 - **POST `/api/uni/auth/googleAuth`**
   - **Description:** University Google authentication.
 - **POST `/api/uni/auth/googleSignup`**
@@ -349,14 +468,19 @@ This document provides a comprehensive reference for all backend API endpoints, 
 ### Vendor Auth (`/api/vendor/auth`)
 - **POST `/api/vendor/auth/signup`**
   - **Description:** Vendor signup.
+  - **Body:** `{ "name": "string", "email": "string", "phone": "string", "password": "string" }`
 - **POST `/api/vendor/auth/otpverification`**
   - **Description:** Verify OTP for vendor signup/login.
+  - **Body:** `{ "phone": "string", "otp": "string" }`
 - **POST `/api/vendor/auth/login`**
   - **Description:** Vendor login.
+  - **Body:** `{ "email": "string", "password": "string" }`
 - **POST `/api/vendor/auth/forgotpassword`**
   - **Description:** Vendor forgot password.
+  - **Body:** `{ "email": "string" }`
 - **POST `/api/vendor/auth/resetpassword`**
   - **Description:** Vendor reset password.
+  - **Body:** `{ "token": "string", "password": "string" }`
 - **POST `/api/vendor/auth/googleAuth`**
   - **Description:** Vendor Google authentication.
 - **POST `/api/vendor/auth/googleSignup`**
@@ -420,35 +544,95 @@ This document provides a comprehensive reference for all backend API endpoints, 
 
 ---
 
-## Other Routes
+## Food Court Routes (`/foodcourts`)
 
-### Contact Routes (`/contact`)
+### Food Court Management (No Auth Required)
+- **POST `/foodcourts`**
+  - **Description:** Create a food provider account (foodcourt, cafe, canteen, guesthouse).
+  - **Body:**
+    ```json
+    {
+      "email": "string",
+      "phone": "string",
+      "password": "string",
+      "location": "string",
+      "type": "foodcourt" | "cafe" | "canteen" | "guesthouse"
+    }
+    ```
+  - **Response:**
+    ```json
+    {
+      "message": "foodcourt account created successfully",
+      "account": {
+        "id": "account_id",
+        "email": "email@example.com",
+        "type": "foodcourt",
+        "location": "location"
+      }
+    }
+    ```
+
+---
+
+## Team Routes (`/team`)
+
+### Team Management (No Auth Required)
+- **GET `/team`**
+  - **Description:** Get all team members.
+  - **Response:** `[{ "name": "string", "image": "string", "github": "string", "linkedin": "string" }]`
+- **POST `/team`**
+  - **Description:** Add a new team member.
+  - **Body:**
+    ```json
+    {
+      "name": "string",
+      "image": "string",
+      "github": "string",
+      "linkedin": "string"
+    }
+    ```
+  - **Response:** `{ "name": "string", "image": "string", "github": "string", "linkedin": "string" }`
+
+---
+
+## Contact Routes (`/contact`)
+
+### Contact Form (No Auth Required)
 - **POST `/contact`**
   - **Description:** Submit contact form.
+  - **Body:** Contact form data
+  - **Response:** `{ "success": true, "message": "Contact form submitted successfully" }`
 
-### Team Routes (`/team`)
-- **GET `/team`**
-  - **Description:** Get team information.
+---
 
-### Favourite Routes (`/fav`)
-- **POST `/fav/add/:userId`**
-  - **Description:** Add item to favorites.
+## Favourite Routes (`/fav`)
+
+### Favourites Management
 - **GET `/fav/:userId`**
-  - **Description:** Get user favorites.
-- **DELETE `/fav/remove/:userId`**
-  - **Description:** Remove item from favorites.
+  - **Description:** Get user favourites.
+- **GET `/fav/:userId/:uniId`**
+  - **Description:** Get user favourites by university.
+- **GET `/fav/:userId/:uniId/:vendorId`**
+  - **Description:** Get user favourites by university and vendor.
+- **PATCH `/fav/:userId/:itemId/:kind/:vendorId`**
+  - **Description:** Toggle favourite status for an item.
+  - **Params:** `kind` can be "retail" or "produce"
 
-### Food Court Routes (`/foodcourts`)
-- **GET `/foodcourts`**
-  - **Description:** Get food court information.
+---
 
-### Inventory Routes (`/inventory`)
-- **POST `/inventory/retail/availability`**
-  - **Description:** Update retail item availability.
+## System Health
 
-### Payment Routes (`/payment`)
-- **POST `/payment/verify`**
-  - **Description:** Verify payment.
+### Health Check
+- **GET `/api/health`**
+  - **Description:** Health check endpoint for monitoring.
+  - **Response:**
+    ```json
+    {
+      "status": "OK",
+      "timestamp": "2025-01-01T00:00:00.000Z",
+      "uptime": 12345.67
+    }
+    ```
 
 ---
 
@@ -491,4 +675,18 @@ Error responses typically include:
   "success": false,
   "message": "Error description"
 }
-``` 
+```
+
+### 🔄 **Payment Flow:**
+1. **Regular Orders:** User cart → Order creation → Razorpay payment → Order confirmation
+2. **Vendor Guest Orders:** Vendor cart → Vendor payment creation → Razorpay payment → Order creation
+
+### 🧹 **Inventory Management:**
+- **Retail Items:** Track quantity (add/reduce inventory)
+- **Produce Items:** Track availability (Y/N)
+- **Raw Materials:** Daily clearing system for fresh inventory
+
+### 📈 **Reporting:**
+- **Inventory Reports:** Daily tracking of item received, sent, and closing quantities
+- **Billing Reports:** Complete transaction history for vendors and customers
+- **System Health:** Real-time monitoring of locks, cache, and system performance 
