@@ -33,10 +33,12 @@
     "google-auth-library": "^9.15.1",
     "ioredis": "^5.6.1",
     "jsonwebtoken": "^9.0.2",
+    "loader": "2.1.1",
     "mongoose": "^8.12.1",
     "nodemailer": "^6.10.0",
     "nodemon": "^3.1.10",
-    "razorpay": "^2.9.6"
+    "razorpay": "^2.9.6",
+    "whatwg-url": "14.2.0"
   },
   "engines": {
     "node": "18.x || 20.x || 22.x",
