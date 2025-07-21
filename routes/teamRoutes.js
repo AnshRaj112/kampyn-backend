@@ -1,9 +1,8 @@
 const express = require("express");
-const { getTeamMembers, addTeamMember } = require("../controllers/teamController");
+const { getTeamMembers } = require("../controllers/teamController");
 
 const router = express.Router();
 
-router.get("/", getTeamMembers);  // GET /team
-router.post("/", addTeamMember);  // POST /team
+router.get("/", getTeamMembers); // GET /team
 
-module.exports = router; 
+module.exports = router;
