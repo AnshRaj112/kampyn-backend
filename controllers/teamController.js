@@ -11,19 +11,19 @@ const getTeamMembers = async (req, res) => {
 };
 
 // Add a new team member
-const addTeamMember = async (req, res) => {
-  const { name, image, github, linkedin } = req.body;
-  if (!name || !image || !github || !linkedin) {
-    return res.status(400).json({ message: "All fields are required" });
-  }
+// const addTeamMember = async (req, res) => {
+//   const { name, image, github, linkedin } = req.body;
+//   if (!name || !image || !github || !linkedin) {
+//     return res.status(400).json({ message: "All fields are required" });
+//   }
 
-  try {
-    const newMember = new TeamMember({ name, image, github, linkedin });
-    await newMember.save();
-    res.status(201).json(newMember);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+//   try {
+//     const newMember = new TeamMember({ name, image, github, linkedin });
+//     await newMember.save();
+//     res.status(201).json(newMember);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// };
 
-module.exports = { getTeamMembers, addTeamMember };
+module.exports = { getTeamMembers };
