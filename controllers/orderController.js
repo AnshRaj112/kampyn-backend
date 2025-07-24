@@ -184,9 +184,9 @@ exports.deliverOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
 
-    // 1) flip status - handle both "completed" and "onTheWay" statuses
+    // 1) flip status - handle completed, onTheWay, ready, and inProgress statuses
     const order = await Order.findOneAndUpdate(
-      { _id: orderId, status: { $in: ["completed", "onTheWay"] } },
+      { _id: orderId, status: { $in: ["completed", "onTheWay", "ready", "inProgress"] } },
       { $set: { status: "delivered" } },
       { new: true }
     );
@@ -218,12 +218,12 @@ exports.startDelivery = async (req, res) => {
   const { orderId } = req.params;
   try {
     const order = await Order.findOneAndUpdate(
-      { _id: orderId, status: "completed" }, // only target completed orders
+      { _id: orderId, status: { $in: ["completed", "ready"] } }, // allow both completed and ready orders
       { status: "onTheWay" },
       { new: true }
     );
     if (!order)
-      return res.status(404).json({ success: false, message: "No completed order found." });
+      return res.status(404).json({ success: false, message: "No completed or ready order found." });
     res.json({ success: true, data: order });
   } catch (err) {
     console.error(err);
