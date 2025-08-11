@@ -15,6 +15,11 @@ const orderSchema = new mongoose.Schema({
     enum: ["takeaway", "delivery", "dinein", "cash"],
     required: true,
   },
+  orderCategory: {
+    type: String,
+    enum: ["online", "express", "transfer"],
+    default: "online",
+  },
   paymentMethod: {
     type: String,
     enum: ["cash", "upi", "card"],
@@ -75,9 +80,12 @@ orderSchema.index({ userId: 1, status: 1, createdAt: -1 });
 orderSchema.index({ status: 1, reservationExpiresAt: 1 });
 
 // Prevent duplicate pending orders from same user at same time
-orderSchema.index({ userId: 1, status: 1, createdAt: 1 }, { 
-  unique: true, 
-  partialFilterExpression: { status: "pendingPayment" } 
-});
+orderSchema.index(
+  { userId: 1, status: 1, createdAt: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: "pendingPayment" },
+  }
+);
 
 module.exports = Cluster_Order.model("Order", orderSchema);

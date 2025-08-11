@@ -11,13 +11,13 @@ const vendorSchema = new mongoose.Schema(
     location: { type: String },
     uniID: { type: mongoose.Schema.Types.ObjectId, ref: "Uni" },
     isVerified: { type: Boolean, default: false },
-    
+
     // Delivery preferences
     deliverySettings: {
       offersDelivery: { type: Boolean, default: false },
-      deliveryPreparationTime: { type: Number, default: 30 } // in minutes
+      deliveryPreparationTime: { type: Number, default: 30 }, // in minutes
     },
-    
+
     retailInventory: [
       {
         itemId: {

@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 // Set timezone to Indian Standard Time (IST)
-process.env.TZ = 'Asia/Kolkata';
+process.env.TZ = "Asia/Kolkata";
 
 const express = require("express");
 const cors = require("cors");
@@ -31,6 +31,8 @@ const vendorPaymentRoutes = require("./routes/vendorPaymentRoutes");
 const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
 const { initializeDailyClearing } = require("./utils/inventoryReportUtils");
 const configRoutes = require("./routes/configRoutes");
+const expressOrderRoutes = require("./routes/expressOrderRoutes");
+const vendorTransferRoutes = require("./routes/vendorTransferRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -48,45 +50,47 @@ const allowedOrigins = [
   process.env.FRONTEND_URL_2,
   process.env.FRONTEND_URL_3,
   process.env.FRONTEND_URL_4,
-  process.env.FRONTEND_URL_5
+  process.env.FRONTEND_URL_5,
 ]
   .filter(Boolean) // Remove any undefined/null values
-  .map(url => url.trim()) // Remove any whitespace
+  .map((url) => url.trim()) // Remove any whitespace
   .reduce((acc, url) => {
     // If the URL is localhost, add both http and https versions
-    if (url.includes('localhost')) {
-      acc.push(url.replace('http://', 'https://'));
-      acc.push(url.replace('https://', 'http://'));
+    if (url.includes("localhost")) {
+      acc.push(url.replace("http://", "https://"));
+      acc.push(url.replace("https://", "http://"));
     }
     acc.push(url);
     return acc;
   }, []);
 
 // ✅ Fix CORS issues: Use a single instance
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked for origin:', origin);
-      console.log('Allowed origins:', allowedOrigins);
-      callback(new Error("CORS not allowed: " + origin));
-    }
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
-  exposedHeaders: ["Content-Range", "X-Content-Range"],
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log("CORS blocked for origin:", origin);
+        console.log("Allowed origins:", allowedOrigins);
+        callback(new Error("CORS not allowed: " + origin));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    exposedHeaders: ["Content-Range", "X-Content-Range"],
+  })
+);
 
 // ✅ Ensure MONGO_URL exists
 
 // ✅ Health check endpoint for Render
 app.get("/api/health", (req, res) => {
-  res.status(200).json({ 
-    status: "OK", 
+  res.status(200).json({
+    status: "OK",
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
   });
 });
 
@@ -114,6 +118,8 @@ app.use("/admin", adminRoutes); // 🔒 Admin routes for lock management
 app.use("/razorpay", razorpayRoutes);
 app.use("/vendor-payment", vendorPaymentRoutes);
 app.use("/api", configRoutes);
+app.use("/express-order", expressOrderRoutes);
+app.use("/api", vendorTransferRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling
@@ -135,12 +141,12 @@ if (process.env.NODE_ENV === "production") {
 // ✅ Start Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  
+
   // 🔒 Start periodic cleanup of expired orders and locks
   startPeriodicCleanup(10 * 60 * 1000); // 10 minutes
   console.log("🔒 Cache locking system initialized with periodic cleanup");
   console.log("🔐 Admin authentication system ready");
-  
+
   // 🧹 Initialize daily raw material inventory clearing
   initializeDailyClearing();
   console.log("🧹 Daily raw material clearing schedule initialized");
