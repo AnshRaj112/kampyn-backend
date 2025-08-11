@@ -32,6 +32,7 @@ const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
 const { initializeDailyClearing } = require("./utils/inventoryReportUtils");
 const configRoutes = require("./routes/configRoutes");
 const expressOrderRoutes = require("./routes/expressOrderRoutes");
+const vendorTransferRoutes = require("./routes/vendorTransferRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -118,6 +119,7 @@ app.use("/razorpay", razorpayRoutes);
 app.use("/vendor-payment", vendorPaymentRoutes);
 app.use("/api", configRoutes);
 app.use("/express-order", expressOrderRoutes);
+app.use("/api", vendorTransferRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling

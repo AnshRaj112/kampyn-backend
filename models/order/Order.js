@@ -17,7 +17,7 @@ const orderSchema = new mongoose.Schema({
   },
   orderCategory: {
     type: String,
-    enum: ["online", "express"],
+    enum: ["online", "express", "transfer"],
     default: "online",
   },
   paymentMethod: {
