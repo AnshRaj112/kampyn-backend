@@ -1,0 +1,4 @@
+aiohttp==3.9.1
+pymongo==4.6.0
+asyncio==3.4.3
+statistics==1.0.3.5

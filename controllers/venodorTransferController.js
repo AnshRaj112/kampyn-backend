@@ -6,8 +6,8 @@ const Retail = require("../models/item/Retail");
 
 /**
  * Bulk transfer retail items from one vendor to another
- */
-exports.bulkTransferRetailItems = async (req, res) => {
+  */
+ exports.bulkTransferRetailItems = async (req, res) => {
   const { senderId, receiverId, items } = req.body;
 
   if (
@@ -68,22 +68,8 @@ exports.bulkTransferRetailItems = async (req, res) => {
           .json({ error: `Not enough quantity for item ${retailItem.name}.` });
       }
 
-      // mutate vendor inventories here (this is the authoritative inventory change)
+      // Reduce from sender now; do NOT add to receiver until confirmation
       senderItem.quantity -= quantity;
-
-      const receiverItem = receiver.retailInventory.find(
-        (inv) => inv.itemId && inv.itemId.toString() === itemId.toString()
-      );
-      if (receiverItem) {
-        receiverItem.quantity += quantity;
-      } else {
-        receiver.retailInventory.push({
-          itemId,
-          quantity,
-          isSpecial: "N",
-          isAvailable: "Y",
-        });
-      }
 
       transferredItems.push({
         itemId,
@@ -92,9 +78,8 @@ exports.bulkTransferRetailItems = async (req, res) => {
       });
     }
 
-    // save vendor changes
+    // Save only sender changes here. Receiver will be updated on confirmation.
     await sender.save();
-    await receiver.save();
 
     const orderNumber = `TRF-${Date.now()}`;
     const newOrder = new Order({
@@ -123,17 +108,10 @@ exports.bulkTransferRetailItems = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    await InventoryReport.findOneAndUpdate(
-      { vendorId: receiver._id, date: { $gte: start } },
-      {
-        $push: { itemReceived: { $each: transferredItems } },
-        $setOnInsert: { retailEntries: [], produceEntries: [], rawEntries: [] },
-      },
-      { upsert: true, new: true }
-    );
+    // Do not update receiver's report yet. That happens on confirmation.
 
     return res.status(200).json({
-      message: "Bulk transfer completed successfully",
+      message: "Transfer initiated. Awaiting receiver confirmation.",
       orderId: newOrder._id,
       transferredItems,
     });
@@ -165,9 +143,54 @@ exports.getTransferOrdersForReceiver = async (req, res) => {
       status: { $in: ["onTheWay", "pending"] },
     }).sort({ createdAt: -1 });
 
+    // Populate item details for each order
+    const populatedOrders = await Promise.all(
+      orders.map(async (order) => {
+        const orderObj = order.toObject();
+        
+        // Populate item details based on kind
+        if (orderObj.items && orderObj.items.length > 0) {
+          const populatedItems = await Promise.all(
+            orderObj.items.map(async (item) => {
+              try {
+                let itemDetails = null;
+                
+                if (item.kind === "Retail") {
+                  const Retail = require("../models/item/Retail");
+                  itemDetails = await Retail.findById(item.itemId);
+                } else if (item.kind === "Produce") {
+                  const Produce = require("../models/item/Produce");
+                  itemDetails = await Produce.findById(item.itemId);
+                }
+                
+                return {
+                  ...item,
+                  itemName: itemDetails ? itemDetails.name : "Unknown Item",
+                  itemType: itemDetails ? itemDetails.type : "Unknown Type",
+                  unit: itemDetails ? itemDetails.unit : "pcs"
+                };
+              } catch (err) {
+                console.error(`Error populating item ${item.itemId}:`, err);
+                return {
+                  ...item,
+                  itemName: "Unknown Item",
+                  itemType: "Unknown Type",
+                  unit: "pcs"
+                };
+              }
+            })
+          );
+          
+          orderObj.items = populatedItems;
+        }
+        
+        return orderObj;
+      })
+    );
+
     return res.status(200).json({
       message: "Transfer orders fetched successfully",
-      orders,
+      orders: populatedOrders,
     });
   } catch (error) {
     console.error("Get transfer orders error:", error);
@@ -189,10 +212,10 @@ function endOfDay(date) {
 }
 
 /**
- * Confirm transfer order - InventoryReport based
- * - This function NO LONGER mutates vendor inventories (bulkTransfer already did)
- * - It calculates opening/closing based on current vendor inventory (post-transfer)
- * - It marks itemSend/itemReceived as confirmed and increments sender soldQty once
+ * Confirm transfer order
+ * - Adds items to receiver inventory at confirmation time
+ * - Computes opening/closing and updates InventoryReport for both parties
+ * - Marks order completed
  */
 exports.confirmTransfer = async (req, res) => {
   try {
@@ -222,11 +245,29 @@ exports.confirmTransfer = async (req, res) => {
         .json({ error: "Only 'onTheWay' orders can be confirmed." });
     }
 
-    // 3. Fetch vendors (we will NOT mutate their inventories here)
+    // 3. Fetch vendors (we WILL mutate receiver inventory here)
     const senderVendor = await Vendor.findById(order.vendorId);
     const receiverVendor = await Vendor.findById(receiverVendorId);
     if (!senderVendor || !receiverVendor) {
       return res.status(404).json({ error: "Vendor(s) not found." });
+    }
+
+    // 3a. Apply receiver inventory increments now
+    for (const item of order.items || []) {
+      if (item.kind !== "Retail" || !item.itemId) continue;
+      const receiverItem = receiverVendor.retailInventory.find(
+        (inv) => inv.itemId && inv.itemId.toString() === item.itemId.toString()
+      );
+      if (receiverItem) {
+        receiverItem.quantity += item.quantity;
+      } else {
+        receiverVendor.retailInventory.push({
+          itemId: item.itemId,
+          quantity: item.quantity,
+          isSpecial: "N",
+          isAvailable: "Y",
+        });
+      }
     }
 
     const start = startOfDay(new Date());
@@ -375,8 +416,8 @@ exports.confirmTransfer = async (req, res) => {
       }
     }
 
-    // 6. Save changes (reports + vendors are already accurate from bulkTransfer - we still save reports)
-    await Promise.all([senderReport.save(), receiverReport.save()]);
+    // 6. Save changes (save receiver vendor inventory + reports)
+    await Promise.all([receiverVendor.save(), senderReport.save(), receiverReport.save()]);
 
     // 7. Mark order completed
     order.status = "completed";
