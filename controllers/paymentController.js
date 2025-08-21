@@ -5,7 +5,7 @@ const Payment = require("../models/order/Payment"); // ← import the Payment mo
 const orderUtils = require("../utils/orderUtils");
 const paymentUtils = require("../utils/paymentUtils");
 const { atomicCache } = require("../utils/cacheUtils");
-const invoiceUtils = require("../utils/invoiceUtils");
+// const invoiceUtils = require("../utils/invoiceUtils");
 
 /**
  * POST /payments/verify
@@ -94,45 +94,45 @@ async function verifyPaymentHandler(req, res, next) {
       console.warn(`Failed to release locks for items: ${lockReleaseResult.failed.join(', ')}`);
     }
 
-    // 📄 Generate invoices for the order
-    try {
-      // Prepare order data for invoice generation
-      const orderDataForInvoice = {
-        orderNumber: order.orderNumber,
-        items: cart.map(item => ({
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          kind: item.kind,
-          packable: item.packable,
-          gstPercentage: item.gstPercentage || 0,
-          unit: item.unit,
-          packagingCharge: orderDetails.packingCharge || 0
-        })),
-        total: finalTotal,
-        collectorName,
-        collectorPhone,
-        address,
-        orderType,
-        paymentMethod: 'razorpay',
-        createdAt: order.createdAt,
-        deliveryCharge: orderDetails.deliveryCharge || 0,
-        packingCharge: orderDetails.packingCharge || 0
-      };
+    // 📄 Generate invoices for the order - DISABLED
+    // try {
+    //   // Prepare order data for invoice generation
+    //   const orderDataForInvoice = {
+    //     orderNumber: order.orderNumber,
+    //     items: cart.map(item => ({
+    //       name: item.name,
+    //       price: item.price,
+    //       quantity: item.quantity,
+    //       kind: item.kind,
+    //       packable: item.packable,
+    //       gstPercentage: item.gstPercentage || 0,
+    //       unit: item.unit,
+    //       packagingCharge: orderDetails.packingCharge || 0
+    //     })),
+    //     total: finalTotal,
+    //     collectorName,
+    //     collectorPhone,
+    //     address,
+    //     orderType,
+    //     paymentMethod: 'razorpay',
+    //     createdAt: order.createdAt,
+    //     deliveryCharge: orderDetails.deliveryCharge || 0,
+    //       packingCharge: orderDetails.packingCharge || 0
+    //   };
 
-      // Generate invoices asynchronously (don't wait for completion)
-      invoiceUtils.generateOrderInvoices(orderDataForInvoice)
-        .then(invoiceResults => {
-          console.log('📄 Invoice generation completed:', invoiceResults);
-        })
-        .catch(error => {
-          console.error('❌ Invoice generation failed:', error);
-        });
+    //   // Generate invoices asynchronously (don't wait for completion)
+    //   invoiceUtils.generateOrderInvoices(orderDataForInvoice)
+    //     .then(invoiceResults => {
+    //       console.log('📄 Invoice generation completed:', invoiceResults);
+    //       });
+    //     .catch(error => {
+    //       console.error('❌ Invoice generation failed:', error);
+    //     });
 
-    } catch (invoiceError) {
-      console.error('❌ Error preparing invoice data:', invoiceError);
-      // Don't fail the payment if invoice generation fails
-    }
+    // } catch (invoiceError) {
+    //   console.error('❌ Error preparing invoice data:', invoiceError);
+    //   // Don't fail the payment if invoice generation fails
+    // }
 
     return res.json({
       success: true,
