@@ -68,4 +68,165 @@ router.get('/types/produce', (req, res) => {
   res.json({ types: produceTypes });
 });
 
+// Get HSN code suggestions based on item type
+router.get('/hsn-suggestions/:category/:type', async (req, res) => {
+  try {
+    const { category, type } = req.params;
+    const ItemModel = getModel(category);
+    
+    // Find items with the same type and get their HSN codes and GST percentages
+    const items = await ItemModel.find({ type }).select('hsnCode name gstPercentage').lean();
+    
+    // Extract unique HSN codes and count occurrences, also get GST percentage
+    const hsnCounts = {};
+    items.forEach(item => {
+      if (item.hsnCode) {
+        if (!hsnCounts[item.hsnCode]) {
+          hsnCounts[item.hsnCode] = {
+            count: 0,
+            gstPercentage: null,
+            items: []
+          };
+        }
+        hsnCounts[item.hsnCode].count++;
+        hsnCounts[item.hsnCode].items.push(item.name);
+        
+        // Set GST percentage from the first valid one we find
+        if (hsnCounts[item.hsnCode].gstPercentage === null && item.gstPercentage != null) {
+          hsnCounts[item.hsnCode].gstPercentage = item.gstPercentage;
+        }
+      }
+    });
+    
+    // Sort by frequency (most used first) and return suggestions
+    const suggestions = Object.entries(hsnCounts)
+      .sort(([,a], [,b]) => b.count - a.count)
+      .map(([hsnCode, data]) => ({
+        hsnCode,
+        count: data.count,
+        gstPercentage: data.gstPercentage || 0, // Default to 0 if no GST percentage found
+        items: data.items
+      }));
+    
+    res.json({ 
+      success: true, 
+      suggestions,
+      totalItems: items.length 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Get most common HSN codes for a specific type across all categories
+router.get('/common-hsn/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    
+    // Search in all item categories for the given type
+    const [retailItems, produceItems] = await Promise.all([
+      Retail.find({ type }).select('hsnCode name gstPercentage').lean(),
+      Produce.find({ type }).select('hsnCode name gstPercentage').lean()
+    ]);
+    
+    // Combine all items
+    const allItems = [...retailItems, ...produceItems];
+    
+    // Debug: Log some items to see what we're getting
+    console.log(`Debug: Found ${allItems.length} items for type "${type}"`);
+    if (allItems.length > 0) {
+      console.log('Sample items:', allItems.slice(0, 3).map(item => ({
+        name: item.name,
+        hsnCode: item.hsnCode,
+        gstPercentage: item.gstPercentage,
+        hasGst: item.gstPercentage != null
+      })));
+    }
+    
+    // Extract unique HSN codes and count occurrences, also get GST percentage
+    const hsnCounts = {};
+    allItems.forEach(item => {
+      if (item.hsnCode) {
+        if (!hsnCounts[item.hsnCode]) {
+          hsnCounts[item.hsnCode] = {
+            count: 0,
+            gstPercentage: null,
+            items: []
+          };
+        }
+        hsnCounts[item.hsnCode].count++;
+        hsnCounts[item.hsnCode].items.push(item.name);
+        
+        // Set GST percentage from the first valid one we find
+        if (hsnCounts[item.hsnCode].gstPercentage === null && item.gstPercentage != null) {
+          hsnCounts[item.hsnCode].gstPercentage = item.gstPercentage;
+        }
+      }
+    });
+    
+    // Debug: Log the HSN counts
+    console.log('HSN Counts:', Object.entries(hsnCounts).map(([hsn, data]) => ({
+      hsnCode: hsn,
+      count: data.count,
+      gstPercentage: data.gstPercentage,
+      hasGst: data.gstPercentage != null
+    })));
+    
+    // Sort by frequency (most used first) and return suggestions
+    const suggestions = Object.entries(hsnCounts)
+      .sort(([,a], [,b]) => b.count - a.count)
+      .map(([hsnCode, data]) => ({
+        hsnCode,
+        count: data.count,
+        gstPercentage: data.gstPercentage || 0, // Default to 0 if no GST percentage found
+        items: data.items
+      }));
+    
+    res.json({ 
+      success: true, 
+      suggestions,
+      totalItems: allItems.length 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Debug endpoint to check database state
+router.get('/debug/hsn-data/:type', async (req, res) => {
+  try {
+    const { type } = req.params;
+    
+    const [retailItems, produceItems] = await Promise.all([
+      Retail.find({ type }).select('hsnCode name gstPercentage').lean(),
+      Produce.find({ type }).select('hsnCode name gstPercentage').lean()
+    ]);
+    
+    const allItems = [...retailItems, ...produceItems];
+    
+    res.json({
+      success: true,
+      type,
+      totalItems: allItems.length,
+      items: allItems.map(item => ({
+        name: item.name,
+        hsnCode: item.hsnCode,
+        gstPercentage: item.gstPercentage,
+        hasGst: item.gstPercentage != null
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

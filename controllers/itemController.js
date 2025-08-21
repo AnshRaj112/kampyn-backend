@@ -29,12 +29,25 @@ const getModel = (category) => {
 exports.addItem = async (req, res) => {
   try {
     const { category } = req.params;
-    const { name, uniId, vendorId } = req.body;
+    const { name, uniId, vendorId, hsnCode, gstPercentage, priceExcludingTax } = req.body;
 
     if (!name || !uniId) {
       return res
         .status(400)
         .json({ error: "Missing required fields: name and uniId" });
+    }
+
+    // Validate new required fields for retail and produce items
+    if (category.toLowerCase() === 'retail' || category.toLowerCase() === 'produce') {
+      if (!hsnCode) {
+        return res.status(400).json({ error: "Missing required field: hsnCode" });
+      }
+      if (!gstPercentage || isNaN(gstPercentage) || gstPercentage < 0) {
+        return res.status(400).json({ error: "Missing or invalid required field: gstPercentage" });
+      }
+      if (!priceExcludingTax || isNaN(priceExcludingTax) || priceExcludingTax < 0) {
+        return res.status(400).json({ error: "Missing or invalid required field: priceExcludingTax" });
+      }
     }
 
     const ItemModel = getModel(category);
@@ -48,7 +61,25 @@ exports.addItem = async (req, res) => {
       });
     }
 
-    const item = new ItemModel(req.body);
+    // Calculate tax-related fields if not provided
+    let itemData = { ...req.body };
+    if (category.toLowerCase() === 'retail' || category.toLowerCase() === 'produce') {
+      const gstPercentageNum = parseFloat(gstPercentage);
+      const priceExcludingTaxNum = parseFloat(priceExcludingTax);
+      
+      // Calculate SGST and CGST (each is half of GST)
+      const sgstPercentage = gstPercentageNum / 2;
+      const cgstPercentage = gstPercentageNum / 2;
+      
+      itemData = {
+        ...itemData,
+        sgstPercentage: Math.round(sgstPercentage * 100) / 100,
+        cgstPercentage: Math.round(cgstPercentage * 100) / 100,
+        priceExcludingTax: Math.round(priceExcludingTaxNum * 100) / 100
+      };
+    }
+
+    const item = new ItemModel(itemData);
     await item.save();
 
     // If vendorId is provided, add item only to that specific vendor

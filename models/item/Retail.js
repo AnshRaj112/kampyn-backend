@@ -22,6 +22,11 @@ const retailSchema = new mongoose.Schema({
   uniId: { type: mongoose.Schema.Types.ObjectId, ref: "Uni", required: true },
   unit: { type: String, default: "pcs" },
   price: { type: Number, required: true },
+  priceExcludingTax: { type: Number, required: true },
+  hsnCode: { type: String, required: true },
+  gstPercentage: { type: Number, required: true },
+  sgstPercentage: { type: Number, required: true },
+  cgstPercentage: { type: Number, required: true },
   image: { type: String, required: true },
   packable: { type: Boolean, default: false },
 });

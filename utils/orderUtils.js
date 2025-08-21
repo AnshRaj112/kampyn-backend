@@ -287,14 +287,16 @@ async function generateRazorpayOrderForUser({
   // Calculate packaging and delivery charges
   const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
   const delivery = (orderType === "delivery") ? deliveryCharge : 0;
+  const platformFee = 2; // Flat platform fee (including GST)
   
-  const finalTotal = itemTotal + packaging + delivery;
+  const finalTotal = itemTotal + packaging + delivery + platformFee;
   
   console.log("💰 Backend Order Calculation:", {
     itemTotal,
     packableItemsTotal,
     packaging,
     delivery,
+    platformFee,
     finalTotal,
     orderType,
     packingCharge,
