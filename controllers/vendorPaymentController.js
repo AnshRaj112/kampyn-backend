@@ -263,53 +263,58 @@ exports.verifyVendorPayment = async (req, res) => {
     // 9. Clean up temporary order details
     pendingVendorOrderDetails.delete(razorpay_order_id);
 
-    // 📄 Generate invoices for the vendor order - DISABLED
-    // try {
-    //   // Get item details for invoice generation
-    //   const populatedItems = await Promise.all(
-    //     items.map(async (item) => {
-    //       const itemModel = item.kind === 'Retail' ? require('../models/item/Retail') : require('../models/item/Produce');
-    //       const itemDoc = await itemModel.findById(item.itemId);
-    //       return {
-    //       name: itemDoc?.name || 'Unknown Item',
-    //       price: itemDoc?.price || 0,
-    //       quantity: item.quantity,
-    //       kind: item.kind,
-    //       packable: itemDoc?.packable || false,
-    //       gstPercentage: itemDoc?.gstPercentage || 0,
-    //       unit: itemDoc?.unit || 'piece'
-    //       };
-    //     })
-    //   );
+    // 📄 Generate invoices for the vendor order
+    try {
+      // Get item details for invoice generation
+      const populatedItems = await Promise.all(
+        items.map(async (item) => {
+          const itemModel = item.kind === 'Retail' ? require('../models/item/Retail') : require('../models/item/Produce');
+          const itemDoc = await itemModel.findById(item.itemId);
+          return {
+            itemId: item.itemId, // Add itemId for reference
+            name: itemDoc?.name || 'Unknown Item',
+            price: itemDoc?.price || 0,
+            quantity: item.quantity,
+            kind: item.kind,
+            packable: itemDoc?.packable || false,
+            gstPercentage: itemDoc?.gstPercentage || 0,
+            sgstPercentage: itemDoc?.sgstPercentage || 0,
+            cgstPercentage: itemDoc?.cgstPercentage || 0,
+            hsnCode: itemDoc?.hsnCode || 'N/A',
+            unit: itemDoc?.unit || 'piece'
+          };
+        })
+      );
 
-    //   // Prepare order data for invoice generation
-    //   const orderDataForInvoice = {
-    //     orderNumber: newOrder.orderNumber,
-    //     items: populatedItems,
-    //     total: total,
-    //     collectorName,
-    //     collectorPhone,
-    //     address: 'KIIT University Campus',
-    //     orderType,
-    //     paymentMethod: 'razorpay',
-    //     createdAt: newOrder.createdAt,
-    //     deliveryCharge: 0,
-    //       packingCharge: 0
-    //   };
+      // Prepare order data for invoice generation
+      const orderDataForInvoice = {
+        orderId: newOrder._id,
+        orderNumber: newOrder.orderNumber,
+        vendorId: vendor._id,
+        total: total,
+        orderType: orderType,
+        collectorName,
+        collectorPhone,
+        address: 'KIIT University Campus',
+        items: populatedItems,
+        packagingCharge: 0,
+        deliveryCharge: 0
+      };
 
-    //   // Generate invoices asynchronously (don't wait for completion)
-    //   invoiceUtils.generateOrderInvoices(orderDataForInvoice)
-    //     .then(invoiceResults => {
-    //       console.log('📄 Vendor order invoice generation completed:', invoiceResults);
-    //       });
-    //     .catch(error => {
-    //       console.error('❌ Vendor order invoice generation failed:', error);
-    //       });
+      // Generate invoices asynchronously (don't wait for completion)
+      const invoiceUtils = require('../utils/invoiceUtils');
+      invoiceUtils.generateOrderInvoices(orderDataForInvoice)
+        .then(invoiceResults => {
+          console.log('📄 Vendor order invoice generation completed:', invoiceResults);
+        })
+        .catch(error => {
+          console.error('❌ Vendor order invoice generation failed:', error);
+        });
 
-    // } catch (invoiceError) {
-    //   console.error('❌ Error preparing vendor order invoice data:', invoiceError);
-    //   // Don't fail the payment if invoice generation fails
-    // }
+    } catch (invoiceError) {
+      console.error('❌ Error preparing vendor order invoice data:', invoiceError);
+      // Don't fail the payment if invoice generation fails
+    }
 
     console.log("✅ Vendor payment verified and order created:", {
       orderId: newOrder._id,

@@ -1,25 +1,100 @@
 const express = require("express");
 const router = express.Router();
 const Razorpay = require("razorpay");
+const razorpayConfig = require("../config/razorpay");
 
-const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
-
-if (!razorpayKeyId || !razorpayKeySecret) {
-  throw new Error("Missing Razorpay credentials in process.env");
-}
-
+// Initialize Razorpay with configuration
 const razorpay = new Razorpay({
-  key_id: razorpayKeyId,
-  key_secret: razorpayKeySecret,
+  key_id: razorpayConfig.keyId,
+  key_secret: razorpayConfig.keySecret,
 });
 
 // GET /razorpay/key
 router.get("/key", (req, res) => {
   res.json({
     success: true,
-    key: razorpayKeyId
+    key: razorpayConfig.keyId,
+    environment: razorpayConfig.environment
   });
+});
+
+// GET /razorpay/invoices/:invoiceId
+router.get("/invoices/:invoiceId", async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    
+    console.log("📄 Fetching Razorpay invoice:", invoiceId);
+    
+    const invoice = await razorpay.invoices.fetch(invoiceId);
+    
+    console.log("✅ Razorpay invoice fetched:", invoice.id);
+    
+    res.json({
+      success: true,
+      data: invoice
+    });
+  } catch (error) {
+    console.error("❌ Error fetching Razorpay invoice:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch invoice from Razorpay",
+      error: error.message
+    });
+  }
+});
+
+// GET /razorpay/invoices/:invoiceId/pdf
+router.get("/invoices/:invoiceId/pdf", async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    
+    console.log("📄 Getting PDF for Razorpay invoice:", invoiceId);
+    
+    // Get invoice details first
+    const invoice = await razorpay.invoices.fetch(invoiceId);
+    
+    // Generate PDF download URL
+    const pdfUrl = `${razorpayConfig.apiBase}/invoices/${invoiceId}/pdf`;
+    
+    console.log("✅ PDF URL generated for invoice:", invoiceId);
+    
+    res.json({
+      success: true,
+      pdfUrl: pdfUrl
+    });
+  } catch (error) {
+    console.error("❌ Error getting invoice PDF:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get invoice PDF from Razorpay",
+      error: error.message
+    });
+  }
+});
+
+// POST /razorpay/invoices
+router.post("/invoices", async (req, res) => {
+  try {
+    const invoiceData = req.body;
+    
+    console.log("📄 Creating Razorpay invoice:", invoiceData);
+    
+    const invoice = await razorpay.invoices.create(invoiceData);
+    
+    console.log("✅ Razorpay invoice created:", invoice.id);
+    
+    res.json({
+      success: true,
+      data: invoice
+    });
+  } catch (error) {
+    console.error("❌ Error creating Razorpay invoice:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create invoice on Razorpay",
+      error: error.message
+    });
+  }
 });
 
 // POST /razorpay/create-order

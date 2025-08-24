@@ -3,7 +3,8 @@
 const express = require("express");
 const router = express.Router();
 const orderController = require("../controllers/orderController");
-//const authMiddleware = require("../middlewares/authMiddleware"); // your JWT‐based auth
+
+// Authentication removed - anyone can access order routes for now
 
 // Guest order endpoint for vendors (must come before /:userId route)
 router.post("/guest", orderController.createGuestOrder);

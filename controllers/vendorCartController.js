@@ -44,7 +44,10 @@ const getVendorCart = async (req, res) => {
 // Calculate total with packing charges
 const calculateTotalWithPacking = async (items, vendorId) => {
   const itemTotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const packableItems = items.filter(item => item.kind === "Produce");
+  // Use consistent logic: produce items are always packable, retail items only if packable property is true
+  const packableItems = items.filter(item => 
+    item.kind === "Produce" || item.packable === true
+  );
   
   // Get university packing charge
   let packingCharge = 5; // Default packing charge
