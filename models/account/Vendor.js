@@ -12,6 +12,10 @@ const vendorSchema = new mongoose.Schema(
     uniID: { type: mongoose.Schema.Types.ObjectId, ref: "Uni" },
     isVerified: { type: Boolean, default: false },
 
+    // GST Information
+    gstNumber: { type: String }, // Optional - vendor can have their own GST number
+    useUniGstNumber: { type: Boolean, default: false }, // Whether to use university's GST number
+
     // Delivery preferences
     deliverySettings: {
       offersDelivery: { type: Boolean, default: false },

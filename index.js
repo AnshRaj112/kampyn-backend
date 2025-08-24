@@ -6,6 +6,12 @@ process.env.TZ = "Asia/Kolkata";
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const path = require("path");
+
+// Import database connections
+const { Cluster_User, Cluster_Order, Cluster_Item, Cluster_Inventory, Cluster_Accounts, Cluster_Cache_Analytics } = require("./config/db");
+
+// Import routes
 const userAuthRoutes = require("./routes/auth/userAuthRoutes");
 const uniAuthRoutes = require("./routes/auth/uniAuthRoutes");
 const vendorAuthRoutes = require("./routes/auth/vendorAuthRoutes");
@@ -33,6 +39,7 @@ const { initializeDailyClearing } = require("./utils/inventoryReportUtils");
 const configRoutes = require("./routes/configRoutes");
 const expressOrderRoutes = require("./routes/expressOrderRoutes");
 const vendorTransferRoutes = require("./routes/vendorTransferRoutes");
+const invoiceRoutes = require("./routes/invoiceRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -94,6 +101,9 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// ✅ Serve static files for uploads (fallback for when Cloudinary fails)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // ✅ Routes
 app.use("/api/user/auth", userAuthRoutes);
 app.use("/api/uni/auth", uniAuthRoutes);
@@ -120,6 +130,7 @@ app.use("/vendor-payment", vendorPaymentRoutes);
 app.use("/api", configRoutes);
 app.use("/express-order", expressOrderRoutes);
 app.use("/api", vendorTransferRoutes);
+app.use("/api/invoices", invoiceRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling
@@ -141,6 +152,15 @@ if (process.env.NODE_ENV === "production") {
 // ✅ Start Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+
+  // ✅ Log database connection status
+  console.log("📊 Database Connection Status:");
+  console.log(`   Users: ${Cluster_User.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.log(`   Orders: ${Cluster_Order.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.log(`   Items: ${Cluster_Item.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.log(`   Inventory: ${Cluster_Inventory.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.log(`   Accounts: ${Cluster_Accounts.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.log(`   Cache: ${Cluster_Cache_Analytics.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
 
   // 🔒 Start periodic cleanup of expired orders and locks
   startPeriodicCleanup(10 * 60 * 1000); // 10 minutes

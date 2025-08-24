@@ -19,6 +19,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "archiver": "7.0.1",
     "bcryptjs": "^3.0.2",
     "bullmq": "^5.52.1",
     "cloudinary": "^2.6.0",
@@ -35,8 +36,10 @@
     "jsonwebtoken": "^9.0.2",
     "loader": "2.1.1",
     "mongoose": "^8.12.1",
+    "node-fetch": "3.3.2",
     "nodemailer": "^6.10.0",
     "nodemon": "^3.1.10",
+    "pdfkit": "^0.14.0",
     "razorpay": "^2.9.6",
     "whatwg-url": "14.2.0"
   },
