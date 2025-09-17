@@ -8,7 +8,9 @@ const {
   updateItemAvailableStatus,
   deleteVendor,
   getDeliverySettings,
-  updateDeliverySettings
+  updateDeliverySettings,
+  toggleVendorAvailability,
+  getVendorAvailability
 } = require("../controllers/vendorController");
 const Vendor = require("../models/account/Vendor");
 const Uni = require("../models/account/Uni");
@@ -36,6 +38,12 @@ router.patch("/:vendorId/item/:itemId/:kind/special", updateItemSpecialStatus);
 
 // Add route for updating isAvailable for a vendor's item
 router.patch("/:vendorId/item/:itemId/:kind/available", updateItemAvailableStatus);
+
+// Get vendor's current availability status
+router.get("/:vendorId/availability", getVendorAvailability);
+
+// Toggle vendor availability (vendor can toggle their own availability)
+router.patch("/:vendorId/toggle-availability", toggleVendorAvailability);
 
 // Get vendor's university charges
 router.get("/:vendorId/university-charges", async (req, res) => {
