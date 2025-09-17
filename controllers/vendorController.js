@@ -10,10 +10,30 @@ exports.getVendorsByUni = async (req, res) => {
       return res.status(400).json({ error: "Missing 'uniId' in path." });
     }
 
+    // Get university with vendors array to check availability
+    const uni = await Uni.findById(uniId).select("vendors").lean();
+    if (!uni) {
+      return res.status(404).json({ error: "University not found." });
+    }
+
+    // Get all vendors for this university
     const vendors = await Vendor.find({ uniID: uniId })
       .select("_id fullName retailInventory produceInventory")
       .lean();
-    res.status(200).json(vendors);
+
+    // Create a map of vendor availability
+    const availabilityMap = new Map();
+    uni.vendors.forEach(vendor => {
+      availabilityMap.set(vendor.vendorId.toString(), vendor.isAvailable);
+    });
+
+    // Filter out unavailable vendors
+    const availableVendors = vendors.filter(vendor => {
+      const isAvailable = availabilityMap.get(vendor._id.toString());
+      return isAvailable === 'Y';
+    });
+
+    res.status(200).json(availableVendors);
   } catch (err) {
     res.status(500).json({ error: "Server error", details: err.message });
   }
@@ -278,6 +298,146 @@ exports.updateDeliverySettings = async (req, res) => {
     });
   } catch (err) {
     console.error("Error updating delivery settings:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+/**
+ * PATCH /vendor/:vendorId/toggle-availability
+ * Toggle vendor availability (vendor can toggle their own availability)
+ */
+exports.toggleVendorAvailability = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const { isAvailable } = req.body;
+
+    if (!vendorId) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor ID is required"
+      });
+    }
+
+    if (!isAvailable || !["Y", "N"].includes(isAvailable)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid 'isAvailable' value. Must be 'Y' or 'N'."
+      });
+    }
+
+    // First, get the vendor to find their university
+    const vendor = await Vendor.findById(vendorId).select('uniID').lean();
+    
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found"
+      });
+    }
+
+    if (!vendor.uniID) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor is not associated with any university"
+      });
+    }
+
+    // Update the vendor availability in the university
+    const result = await Uni.updateOne(
+      { 
+        _id: vendor.uniID,
+        "vendors.vendorId": vendorId 
+      },
+      { 
+        $set: { "vendors.$.isAvailable": isAvailable } 
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found in university"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Vendor availability updated to ${isAvailable === 'Y' ? 'available' : 'unavailable'}`,
+      data: {
+        isAvailable: isAvailable === 'Y'
+      }
+    });
+  } catch (err) {
+    console.error("Error in toggleVendorAvailability:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+/**
+ * GET /vendor/:vendorId/availability
+ * Get vendor's current availability status
+ */
+exports.getVendorAvailability = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+
+    if (!vendorId) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor ID is required"
+      });
+    }
+
+    // Get the vendor to find their university
+    const vendor = await Vendor.findById(vendorId).select('uniID').lean();
+    
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found"
+      });
+    }
+
+    if (!vendor.uniID) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor is not associated with any university"
+      });
+    }
+
+    // Get the vendor's availability from the university
+    const uni = await Uni.findById(vendor.uniID).select('vendors').lean();
+    
+    if (!uni) {
+      return res.status(404).json({
+        success: false,
+        message: "University not found"
+      });
+    }
+
+    const vendorInUni = uni.vendors.find(v => v.vendorId.toString() === vendorId);
+    
+    if (!vendorInUni) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found in university"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        isAvailable: vendorInUni.isAvailable === 'Y'
+      }
+    });
+  } catch (err) {
+    console.error("Error in getVendorAvailability:", err);
     res.status(500).json({
       success: false,
       message: "Server error"
