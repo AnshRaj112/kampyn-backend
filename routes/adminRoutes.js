@@ -3,6 +3,8 @@ const router = express.Router();
 const { getLockStatistics, forceReleaseOrderLocks, cleanupExpiredOrders } = require("../utils/orderCleanupUtils");
 const { atomicCache } = require("../utils/cacheUtils");
 const invoiceController = require("../controllers/invoiceController");
+const Uni = require("../models/account/Uni");
+const Vendor = require("../models/account/Vendor");
 
 // Authentication removed - anyone can access admin routes for now
 
@@ -307,6 +309,68 @@ router.post("/invoices/generate-order-invoices", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to generate order invoices",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/universities
+ * Get all universities with full details including vendor counts
+ * No authentication required
+ */
+router.get("/universities", async (req, res) => {
+  try {
+    console.log("🔵 Admin: Fetching all universities with details");
+    
+    // Fetch all universities with full details
+    const universities = await Uni.find({})
+      .select('_id fullName email phone gstNumber packingCharge deliveryCharge isVerified createdAt updatedAt vendors')
+      .lean();
+
+    // Get vendor counts for each university
+    const universitiesWithVendorCounts = await Promise.all(
+      universities.map(async (uni) => {
+        // Count total vendors for this university
+        const totalVendors = await Vendor.countDocuments({ uniID: uni._id });
+        
+        // Count active vendors (vendors that are marked as available in the uni's vendors array)
+        const activeVendors = uni.vendors.filter(vendor => vendor.isAvailable === 'Y').length;
+        
+        return {
+          _id: uni._id,
+          fullName: uni.fullName,
+          email: uni.email,
+          phone: uni.phone || 'Not provided',
+          gstNumber: uni.gstNumber,
+          packingCharge: uni.packingCharge,
+          deliveryCharge: uni.deliveryCharge,
+          isVerified: uni.isVerified,
+          createdAt: uni.createdAt,
+          updatedAt: uni.updatedAt,
+          totalVendors,
+          activeVendors,
+          vendorCount: totalVendors // For backward compatibility
+        };
+      })
+    );
+
+    // Sort by creation date (newest first)
+    universitiesWithVendorCounts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    console.log(`✅ Admin: Found ${universitiesWithVendorCounts.length} universities`);
+    
+    res.json({
+      success: true,
+      data: universitiesWithVendorCounts,
+      total: universitiesWithVendorCounts.length,
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error fetching universities:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch universities",
       error: error.message
     });
   }
