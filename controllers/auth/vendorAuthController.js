@@ -182,6 +182,22 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
+    // Check if the university is available
+    if (user.uniID) {
+      const university = await Uni.findById(user.uniID).select('isAvailable fullName');
+      if (!university) {
+        return res.status(400).json({ 
+          message: "University not found. Please contact support." 
+        });
+      }
+      
+      if (university.isAvailable !== 'Y') {
+        return res.status(403).json({ 
+          message: `Access denied. ${university.fullName} is currently unavailable. Please contact support for assistance.` 
+        });
+      }
+    }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
