@@ -325,7 +325,7 @@ router.get("/universities", async (req, res) => {
     
     // Fetch all universities with full details
     const universities = await Uni.find({})
-      .select('_id fullName email phone gstNumber packingCharge deliveryCharge isVerified createdAt updatedAt vendors')
+      .select('_id fullName email phone gstNumber packingCharge deliveryCharge isVerified isAvailable createdAt updatedAt vendors')
       .lean();
 
     // Get vendor counts for each university
@@ -346,6 +346,7 @@ router.get("/universities", async (req, res) => {
           packingCharge: uni.packingCharge,
           deliveryCharge: uni.deliveryCharge,
           isVerified: uni.isVerified,
+          isAvailable: uni.isAvailable,
           createdAt: uni.createdAt,
           updatedAt: uni.updatedAt,
           totalVendors,
@@ -371,6 +372,148 @@ router.get("/universities", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch universities",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/universities/:uniId
+ * Get detailed information about a specific university including all vendors
+ * No authentication required
+ */
+router.get("/universities/:uniId", async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    console.log(`🔵 Admin: Fetching details for university ${uniId}`);
+    
+    // Fetch university details
+    const university = await Uni.findById(uniId)
+      .select('_id fullName email phone gstNumber packingCharge deliveryCharge isVerified isAvailable createdAt updatedAt vendors')
+      .lean();
+
+    if (!university) {
+      return res.status(404).json({
+        success: false,
+        message: "University not found"
+      });
+    }
+
+    // Get all vendors for this university with their details
+    const vendors = await Vendor.find({ uniID: uniId })
+      .select('_id fullName email phone location deliverySettings')
+      .lean();
+
+    // Create a map of vendor availability from university's vendors array
+    const availabilityMap = new Map();
+    university.vendors.forEach(vendor => {
+      availabilityMap.set(vendor.vendorId.toString(), vendor.isAvailable);
+    });
+
+    // Combine vendor data with availability status
+    const vendorsWithAvailability = vendors.map(vendor => ({
+      _id: vendor._id,
+      fullName: vendor.fullName,
+      email: vendor.email,
+      phone: vendor.phone,
+      location: vendor.location,
+      isAvailable: availabilityMap.get(vendor._id.toString()) || "N",
+      deliverySettings: vendor.deliverySettings || {
+        offersDelivery: false,
+        deliveryPreparationTime: 30
+      }
+    }));
+
+    // Count statistics
+    const totalVendors = vendors.length;
+    const activeVendors = vendorsWithAvailability.filter(v => v.isAvailable === 'Y').length;
+
+    const universityDetails = {
+      _id: university._id,
+      fullName: university.fullName,
+      email: university.email,
+      phone: university.phone || 'Not provided',
+      gstNumber: university.gstNumber,
+      packingCharge: university.packingCharge,
+      deliveryCharge: university.deliveryCharge,
+      isVerified: university.isVerified,
+      isAvailable: university.isAvailable,
+      createdAt: university.createdAt,
+      updatedAt: university.updatedAt,
+      vendors: vendorsWithAvailability,
+      statistics: {
+        totalVendors,
+        activeVendors,
+        inactiveVendors: totalVendors - activeVendors
+      }
+    };
+
+    console.log(`✅ Admin: Found university with ${totalVendors} vendors`);
+    
+    res.json({
+      success: true,
+      data: universityDetails,
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error fetching university details:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch university details",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PATCH /admin/universities/:uniId/availability
+ * Toggle university availability
+ * No authentication required
+ */
+router.patch("/universities/:uniId/availability", async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const { isAvailable } = req.body;
+
+    if (!isAvailable || !["Y", "N"].includes(isAvailable)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid 'isAvailable' value. Must be 'Y' or 'N'."
+      });
+    }
+
+    console.log(`🔵 Admin: Updating availability for university ${uniId} to ${isAvailable}`);
+
+    const university = await Uni.findByIdAndUpdate(
+      uniId,
+      { isAvailable },
+      { new: true, runValidators: true }
+    ).select('_id fullName isAvailable');
+
+    if (!university) {
+      return res.status(404).json({
+        success: false,
+        message: "University not found"
+      });
+    }
+
+    console.log(`✅ Admin: University ${university.fullName} availability updated to ${isAvailable}`);
+
+    res.json({
+      success: true,
+      message: `University availability updated to ${isAvailable === 'Y' ? 'available' : 'unavailable'}`,
+      data: {
+        _id: university._id,
+        fullName: university.fullName,
+        isAvailable: university.isAvailable
+      },
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error updating university availability:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update university availability",
       error: error.message
     });
   }

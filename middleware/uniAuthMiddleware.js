@@ -30,6 +30,14 @@ const uniAuthMiddleware = async (req, res, next) => {
       });
     }
 
+    // Check if university is available
+    if (university.isAvailable !== 'Y') {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. This university is currently unavailable. Please contact support for assistance."
+      });
+    }
+
     // Add university info to request
     req.uni = {
       _id: university._id,

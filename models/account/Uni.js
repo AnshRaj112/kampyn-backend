@@ -8,6 +8,7 @@ const uniSchema = new mongoose.Schema(
     phone: { type: String, unique: true },
     password: { type: String, required: true },
     isVerified: { type: Boolean, default: false },
+    isAvailable: { type: String, enum: ["Y", "N"], default: "Y" },
     // GST Information
     gstNumber: { type: String, required: true, unique: true },
     // Packing and delivery charges

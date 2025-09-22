@@ -168,6 +168,13 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
+    // Check if the university is available
+    if (user.isAvailable !== 'Y') {
+      return res.status(403).json({ 
+        message: `Access denied. ${user.fullName} is currently unavailable. Please contact support for assistance.` 
+      });
+    }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });

@@ -170,6 +170,23 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
+    // Check if the university is available
+    if (user.uniID) {
+      const Uni = require("../../models/account/Uni");
+      const university = await Uni.findById(user.uniID).select('isAvailable fullName');
+      if (!university) {
+        return res.status(400).json({ 
+          message: "University not found. Please contact support." 
+        });
+      }
+      
+      if (university.isAvailable !== 'Y') {
+        return res.status(403).json({ 
+          message: `Access denied. ${university.fullName} is currently unavailable. Please contact support for assistance.` 
+        });
+      }
+    }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
@@ -423,8 +440,8 @@ exports.getColleges = async (req, res) => {
   try {
     const Uni = require("../../models/account/Uni");
 
-    // Fetch only _id and fullName of all colleges
-    const colleges = await Uni.find({}, '_id fullName');
+    // Fetch only _id and fullName of available colleges
+    const colleges = await Uni.find({ isAvailable: 'Y' }, '_id fullName');
 
     res.status(200).json(colleges);
   } catch (error) {
