@@ -12,6 +12,14 @@ const vendorSchema = new mongoose.Schema(
     uniID: { type: mongoose.Schema.Types.ObjectId, ref: "Uni" },
     isVerified: { type: Boolean, default: false },
 
+    // Seller type: whether the vendor participates as a seller or non-seller
+    sellerType: {
+      type: String,
+      enum: ["SELLER", "NON_SELLER"],
+      default: "NON_SELLER",
+      required: true,
+    },
+
     // GST Information
     gstNumber: { type: String }, // Optional - vendor can have their own GST number
     useUniGstNumber: { type: Boolean, default: false }, // Whether to use university's GST number
@@ -84,6 +92,10 @@ const vendorSchema = new mongoose.Schema(
       },
     ],
     activeOrders: [{ type: mongoose.Types.ObjectId, ref: "Order" }],
+
+    services: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Service" }
+    ],
 
     lastLoginAttempt: { type: Date, default: null },
   },

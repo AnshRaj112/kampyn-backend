@@ -1,5 +1,7 @@
 const express = require('express');
 const Uni = require('../models/account/Uni');
+const Feature = require('../models/account/Feature');
+const Service = require('../models/account/Service');
 
 const router = express.Router();
 
@@ -80,6 +82,90 @@ router.post('/upload-image', async (req, res) => {
 
 router.get('/api/cloudinary/cloud-name', (req, res) => {
   res.json({ cloudName: process.env.CLOUDINARY_CLOUD_NAME });
+});
+
+// Get assigned features and services for a university
+router.get('/universities/:uniId/assignments', async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const uni = await Uni.findById(uniId)
+      .populate('features')
+      .populate({ path: 'services', populate: { path: 'feature' } });
+
+    if (!uni) return res.status(404).json({ success: false, message: 'University not found' });
+
+    res.json({
+      success: true,
+      data: {
+        features: uni.features,
+        services: uni.services,
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching assignments:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch assignments' });
+  }
+});
+
+// Update assigned features for a university
+router.patch('/universities/:uniId/features', async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const { features } = req.body; // array of feature IDs
+
+    if (!Array.isArray(features)) {
+      return res.status(400).json({ success: false, message: 'features must be an array of IDs' });
+    }
+
+    // Validate that provided IDs exist (optional lightweight check)
+    const count = await Feature.countDocuments({ _id: { $in: features } });
+    if (count !== features.length) {
+      return res.status(400).json({ success: false, message: 'One or more feature IDs are invalid' });
+    }
+
+    const uni = await Uni.findByIdAndUpdate(
+      uniId,
+      { $set: { features } },
+      { new: true }
+    ).populate('features');
+
+    if (!uni) return res.status(404).json({ success: false, message: 'University not found' });
+
+    res.json({ success: true, message: 'Features updated', data: uni.features });
+  } catch (err) {
+    console.error('Error updating features:', err);
+    res.status(500).json({ success: false, message: 'Failed to update features' });
+  }
+});
+
+// Update assigned services for a university
+router.patch('/universities/:uniId/services', async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const { services } = req.body; // array of service IDs
+
+    if (!Array.isArray(services)) {
+      return res.status(400).json({ success: false, message: 'services must be an array of IDs' });
+    }
+
+    const count = await Service.countDocuments({ _id: { $in: services } });
+    if (count !== services.length) {
+      return res.status(400).json({ success: false, message: 'One or more service IDs are invalid' });
+    }
+
+    const uni = await Uni.findByIdAndUpdate(
+      uniId,
+      { $set: { services } },
+      { new: true }
+    ).populate({ path: 'services', populate: { path: 'feature' } });
+
+    if (!uni) return res.status(404).json({ success: false, message: 'University not found' });
+
+    res.json({ success: true, message: 'Services updated', data: uni.services });
+  } catch (err) {
+    console.error('Error updating services:', err);
+    res.status(500).json({ success: false, message: 'Failed to update services' });
+  }
 });
 
 module.exports = router; 
