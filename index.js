@@ -34,6 +34,8 @@ const adminRoutes = require("./routes/adminRoutes");
 const universityRoutes = require("./routes/universityRoutes");
 const razorpayRoutes = require("./routes/razorpayRoutes");
 const vendorPaymentRoutes = require("./routes/vendorPaymentRoutes");
+const featureRoutes = require("./routes/featureRoutes");
+const serviceRoutes = require("./routes/serviceRoutes");
 const { startPeriodicCleanup } = require("./utils/orderCleanupUtils");
 const { initializeDailyClearing } = require("./utils/inventoryReportUtils");
 const configRoutes = require("./routes/configRoutes");
@@ -131,6 +133,8 @@ app.use("/api", configRoutes);
 app.use("/express-order", expressOrderRoutes);
 app.use("/api", vendorTransferRoutes);
 app.use("/api/invoices", invoiceRoutes);
+app.use("/api/admin", featureRoutes);
+app.use("/api/admin", serviceRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling

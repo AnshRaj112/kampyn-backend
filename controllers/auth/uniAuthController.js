@@ -29,16 +29,28 @@ exports.signup = async (req, res) => {
   try {
     console.log("🔵 Signup Request Received:", req.body);
 
-    const { fullName, email, phone, password } =
-      req.body;
+    const { fullName, email, phone, password, gstNumber } = req.body;
 
     // Convert email to lowercase
     const emailLower = email.toLowerCase();
 
-    const existingUser = await Account.findOne({ $or: [{ email: emailLower }, { phone }] });
+    // Validate required fields
+    if (!fullName || !email || !phone || !password || !gstNumber) {
+      return res.status(400).json({ 
+        message: "Missing required fields: fullName, email, phone, password, and gstNumber are required" 
+      });
+    }
+
+    const existingUser = await Account.findOne({ 
+      $or: [
+        { email: emailLower }, 
+        { phone }, 
+        { gstNumber }
+      ] 
+    });
     if (existingUser) {
       console.log("⚠️ User already exists:", emailLower);
-      return res.status(400).json({ message: "User already exists" });
+      return res.status(400).json({ message: "User already exists with this email, phone, or GST number" });
     }
 
     const hashedPassword = await hashPassword(password);
@@ -49,7 +61,10 @@ exports.signup = async (req, res) => {
       email: emailLower,
       phone,
       password: hashedPassword,
+      gstNumber,
+      // packingCharge and deliveryCharge will use model defaults (5 and 50)
       isVerified: false,
+      isAvailable: "Y", // Default to available
     };
 
     const newAccount = new Account(accountData);
@@ -57,7 +72,7 @@ exports.signup = async (req, res) => {
     console.log("✅ Account created:", emailLower);
 
     const token = jwt.sign(
-      { id: newAccount._id, role: newAccount.type },
+      { id: newAccount._id, role: "university" },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -76,11 +91,16 @@ exports.signup = async (req, res) => {
     return res.status(201).json({
       message: "Account created successfully. OTP sent for verification.",
       token,
-      role: newAccount.type,
+      role: "university",
       id: newAccount._id,
     });
   } catch (error) {
     console.error("❌ Signup Error:", error);
+    if (error.code === 11000) {
+      return res.status(400).json({ 
+        message: "Duplicate entry. Email, phone, or GST number already exists." 
+      });
+    }
     return res
       .status(500)
       .json({ message: "Signup failed.", error: error.message });

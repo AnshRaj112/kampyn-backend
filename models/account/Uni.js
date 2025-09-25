@@ -21,6 +21,12 @@ const uniSchema = new mongoose.Schema(
         _id: false,
       },
     ],
+    features: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Feature" }
+    ],
+    services: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Service" }
+    ],
     loginAttempts: { type: Number, default: 0 },
     lastLoginAttempt: { type: Date, default: null },
   },
