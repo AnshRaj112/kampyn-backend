@@ -21,7 +21,7 @@ exports.authMiddleware = async (req, res, next) => {
 
     // Determine user type based on user's type field
     let userType = 'user';
-    if (user.type && user.type.includes('admin')) {
+    if (user.type === 'admin') {
       userType = 'admin';
     }
 
