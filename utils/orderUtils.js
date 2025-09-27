@@ -112,7 +112,7 @@ async function generateOrderNumber(userId, vendorId) {
   
   const sequenceNumber = counterResult.sequence.toString().padStart(5, '0');
   
-  return `BB-${datePrefix}-${userSuffix}-${sequenceNumber}`;
+  return `KYN-${datePrefix}-${userSuffix}-${sequenceNumber}`;
 }
 
 /**
@@ -150,7 +150,7 @@ async function generateTimeBasedOrderNumber(userId, vendorId) {
   
   const sequenceNumber = counterResult.sequence.toString().padStart(5, '0');
   
-  return `BB-${timestamp}-${userSuffix}-${sequenceNumber}`;
+  return `KYN-${timestamp}-${userSuffix}-${sequenceNumber}`;
 }
 
 /**
@@ -191,7 +191,7 @@ async function generateUltraHighPerformanceOrderNumberWithDailyReset(userId, ven
   
   const sequenceNumber = counterResult.sequence.toString().padStart(5, '0');
   
-  return `BB-${microTime}-${userSuffix}-${sequenceNumber}`;
+  return `KYN-${microTime}-${userSuffix}-${sequenceNumber}`;
 }
 
 async function generateRazorpayOrderForUser({

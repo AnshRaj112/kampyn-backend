@@ -168,6 +168,89 @@ router.patch('/universities/:uniId/services', async (req, res) => {
   }
 });
 
+// Get all available services for a vendor (from university's features) with assignment status
+router.get('/universities/:uniId/vendors/:vendorId/services', async (req, res) => {
+  try {
+    const { uniId, vendorId } = req.params;
+
+    // Verify the vendor belongs to the university
+    const Vendor = require('../models/account/Vendor');
+    const vendor = await Vendor.findOne({ _id: vendorId, uniID: uniId });
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found or not associated with this university' });
+    }
+
+    // Get university with its features
+    const university = await Uni.findById(uniId)
+      .populate('features')
+      .lean();
+
+    if (!university) {
+      return res.status(404).json({ success: false, message: 'University not found' });
+    }
+
+    // Get all services from the university's features
+    const allServices = await Service.find({ 
+      feature: { $in: university.features.map(f => f._id) },
+      isActive: true 
+    }).populate('feature').lean();
+
+    // Check which services are assigned to this vendor
+    const assignedServiceIds = vendor.services.map(s => s.toString());
+
+    // Combine all services with their assignment status
+    const servicesWithStatus = allServices.map(service => ({
+      ...service,
+      isAssigned: assignedServiceIds.includes(service._id.toString())
+    }));
+
+    res.json({ 
+      success: true, 
+      data: {
+        services: servicesWithStatus,
+        features: university.features
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching vendor services:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch vendor services' });
+  }
+});
+
+// Get all services available for a university (from its features)
+router.get('/universities/:uniId/allowed-services', async (req, res) => {
+  try {
+    const { uniId } = req.params;
+
+    // Get university with its features
+    const university = await Uni.findById(uniId)
+      .populate('features')
+      .lean();
+
+    if (!university) {
+      return res.status(404).json({ success: false, message: 'University not found' });
+    }
+
+    // Get all services from the university's features
+    const allServices = await Service.find({ 
+      feature: { $in: university.features.map(f => f._id) },
+      isActive: true 
+    }).populate('feature').lean();
+
+    res.json({ 
+      success: true, 
+      data: {
+        services: allServices,
+        features: university.features
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching allowed services:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch allowed services' });
+  }
+});
+
 // Update assigned services for a specific vendor
 router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res) => {
   try {
@@ -175,7 +258,7 @@ router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res)
     const { services } = req.body; // array of service IDs
 
     if (!Array.isArray(services)) {
-      return res.status(400).json({ success: false, message: 'services must be an array of IDs' });
+      return res.status(400).json({ success: false, message: 'services must be an array of service IDs' });
     }
 
     // Verify the vendor belongs to the university
@@ -185,10 +268,20 @@ router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res)
       return res.status(404).json({ success: false, message: 'Vendor not found or not associated with this university' });
     }
 
-    // Validate service IDs
-    const count = await Service.countDocuments({ _id: { $in: services } });
-    if (count !== services.length) {
-      return res.status(400).json({ success: false, message: 'One or more service IDs are invalid' });
+    // Get university features to validate services belong to them
+    const university = await Uni.findById(uniId).populate('features').lean();
+    if (!university) {
+      return res.status(404).json({ success: false, message: 'University not found' });
+    }
+
+    // Validate that all services belong to university's features
+    const validServices = await Service.find({ 
+      _id: { $in: services },
+      feature: { $in: university.features.map(f => f._id) }
+    });
+
+    if (validServices.length !== services.length) {
+      return res.status(400).json({ success: false, message: 'One or more services are not available for this university' });
     }
 
     // Update vendor services

@@ -37,7 +37,16 @@ function formatDateIST(date) {
  */
 async function clearRawMaterialInventory() {
   try {
-    console.log(`🧹 Clearing raw material inventory at ${new Date().toISOString()}`);
+    console.log(`🧹 Starting raw material inventory clearing process at ${new Date().toISOString()}`);
+    
+    // First, generate reports for all vendors to capture current raw material data
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1); // Use yesterday's date for the report
+    
+    console.log(`📊 Generating final reports for ${yesterday.toISOString().split('T')[0]} before clearing`);
+    await generateReportsForAllVendors(yesterday);
+    
+    console.log(`🧹 Clearing raw material inventory for all vendors`);
     
     // Clear rawMaterialInventory array for all vendors
     const result = await Vendor.updateMany(
@@ -55,13 +64,13 @@ async function clearRawMaterialInventory() {
 
 /**
  * Schedule daily raw material inventory clearing
- * Runs at 11:59 PM IST (end of day) to clear for the next day
+ * Runs at 12:01 AM IST (start of new day) to clear after reports are generated
  */
 function scheduleRawMaterialClearing() {
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(23, 59, 0, 0); // 11:59 PM IST
+  tomorrow.setHours(0, 1, 0, 0); // 12:01 AM IST - after midnight
   
   const timeUntilMidnight = tomorrow.getTime() - now.getTime();
   
@@ -155,18 +164,46 @@ async function generateDailyReportForVendor(vendorId, targetDate = new Date()) {
     };
   });
 
-  // build raw material entries - handle vendors without rawMaterialInventory
-  const rawEntries = (vendor.rawMaterialInventory || []).map((r) => {
-    const prevE = prev?.rawEntries.find(
-      (e) => e.item.toString() === r.itemId.toString()
-    );
-    const qty = prevE ? prevE.closingQty : r.openingAmount;
-    return {
-      item: r.itemId,
-      openingQty: qty,
-      closingQty: qty,
-    };
-  });
+  // build raw material entries
+  let rawEntries = [];
+  
+  // First, check if we have current raw material inventory data
+  if (vendor.rawMaterialInventory && vendor.rawMaterialInventory.length > 0) {
+    // Use current day's raw material data
+    rawEntries = vendor.rawMaterialInventory.map((r) => {
+      const prevE = prev?.rawEntries.find(
+        (e) => e.item.toString() === r.itemId.toString()
+      );
+      // Use previous day's closing as opening, or current opening if no previous data
+      const openingQty = prevE ? prevE.closingQty : r.openingAmount;
+      const closingQty = r.closingAmount;
+      
+      return {
+        item: r.itemId,
+        openingQty: openingQty,
+        closingQty: closingQty,
+      };
+    });
+  } else if (prev && prev.rawEntries && prev.rawEntries.length > 0) {
+    // No current raw material data, but we have previous day's data
+    // This happens when raw materials were cleared but we need to show continuity
+    rawEntries = prev.rawEntries.map((r) => {
+      // Try to find current raw material data for this item
+      const currentRaw = vendor.rawMaterialInventory?.find(
+        (current) => current.itemId.toString() === r.item.toString()
+      );
+      
+      const openingQty = r.closingQty; // Previous day's closing becomes today's opening
+      const closingQty = currentRaw ? currentRaw.closingAmount : r.closingQty; // Use current closing or previous closing
+      
+      return {
+        item: r.item,
+        openingQty: openingQty,
+        closingQty: closingQty,
+      };
+    });
+  }
+  // If neither current nor previous data exists, rawEntries remains empty
 
   // insert with the normalized midnight date
   await InventoryReport.collection.insertOne({
@@ -218,8 +255,10 @@ async function getInventoryReport(vendorId, forDate) {
     .select("fullName");
   if (!vendor) throw new Error(`Vendor not found: ${vendorId}`);
 
-  const dayStart = startOfDay(forDate);
-  const dayEnd = endOfDay(forDate);
+  // Use today's date if no date provided
+  const targetDate = forDate ? new Date(forDate) : new Date();
+  const dayStart = startOfDay(targetDate);
+  const dayEnd = endOfDay(targetDate);
 
   // 2) Try to find any document on that day
   const report = await InventoryReport.findOne({
@@ -304,6 +343,40 @@ async function getInventoryReport(vendorId, forDate) {
   return report;
 }
 
+/**
+ * Generate reports for all vendors to capture raw material data before clearing
+ * This should be called before the daily clearing to ensure data is captured
+ */
+async function generateReportsForAllVendors(targetDate = new Date()) {
+  try {
+    console.log(`📊 Generating inventory reports for all vendors at ${new Date().toISOString()}`);
+    
+    const vendors = await Vendor.find({}).select('_id fullName').lean();
+    console.log(`📊 Found ${vendors.length} vendors to process`);
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const vendor of vendors) {
+      try {
+        const result = await generateDailyReportForVendor(vendor._id, targetDate);
+        if (result.created || result.added) {
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`❌ Error generating report for vendor ${vendor._id} (${vendor.fullName}):`, error.message);
+        errorCount++;
+      }
+    }
+    
+    console.log(`✅ Report generation completed: ${successCount} successful, ${errorCount} errors`);
+    return { successCount, errorCount, total: vendors.length };
+  } catch (error) {
+    console.error("❌ Error in generateReportsForAllVendors:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   generateDailyReportForVendor,
   generateDailyReportForUni,
@@ -311,4 +384,5 @@ module.exports = {
   clearRawMaterialInventory,
   scheduleRawMaterialClearing,
   initializeDailyClearing,
+  generateReportsForAllVendors,
 };

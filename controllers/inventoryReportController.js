@@ -4,6 +4,7 @@ const {
   generateDailyReportForVendor,
   generateDailyReportForUni,
   getInventoryReport,
+  generateReportsForAllVendors,
 } = require("../utils/inventoryReportUtils");
 const InventoryReport = require("../models/inventory/InventoryReport");
 const mongoose = require("mongoose");
@@ -109,9 +110,26 @@ async function getVendorReportDates(req, res) {
   }
 }
 
+/**
+ * POST /inventory/report/generate-all
+ * Generate inventory reports for all vendors (useful for testing and manual triggers)
+ */
+async function generateAllVendorReports(req, res, next) {
+  try {
+    const date = req.body.date;
+    const result = await generateReportsForAllVendors(date);
+    
+    const message = `Generated reports for ${result.successCount} vendors. ${result.errorCount} errors occurred.`;
+    return res.json({ success: true, message, data: result });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   postVendorReport,
   postUniReport,
   getVendorReport,
   getVendorReportDates,
+  generateAllVendorReports,
 };
