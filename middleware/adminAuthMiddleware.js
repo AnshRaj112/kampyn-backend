@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const Admin = require("../models/account/Admin");
+const { checkUserActivity, updateUserActivity } = require("../utils/authUtils");
 
 /**
  * Admin authentication middleware
@@ -29,6 +30,18 @@ const adminAuthMiddleware = async (req, res, next) => {
         message: "Access denied. Invalid or inactive admin account."
       });
     }
+
+    // Check if admin should be logged out due to inactivity
+    const { shouldLogout } = await checkUserActivity(decoded.adminId, 'admin');
+    if (shouldLogout) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired due to inactivity. Please log in again."
+      });
+    }
+
+    // Update last activity
+    await updateUserActivity(decoded.adminId, 'admin');
 
     // Add admin info to request
     req.admin = {

@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const Uni = require("../models/account/Uni");
+const { checkUserActivity, updateUserActivity } = require("../utils/authUtils");
 
 /**
  * University authentication middleware
@@ -37,6 +38,18 @@ const uniAuthMiddleware = async (req, res, next) => {
         message: "Access denied. This university is currently unavailable. Please contact support for assistance."
       });
     }
+
+    // Check if university should be logged out due to inactivity
+    const { shouldLogout } = await checkUserActivity(decoded.userId, 'uni');
+    if (shouldLogout) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired due to inactivity. Please log in again."
+      });
+    }
+
+    // Update last activity
+    await updateUserActivity(decoded.userId, 'uni');
 
     // Add university info to request
     req.uni = {

@@ -98,6 +98,7 @@ const vendorSchema = new mongoose.Schema(
     ],
 
     lastLoginAttempt: { type: Date, default: null },
+    lastActivity: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

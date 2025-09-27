@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
 const Admin = require("../../models/account/Admin");
+const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
 
 // Utility: Generate OTP
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
@@ -173,6 +174,9 @@ exports.login = async (req, res) => {
       expiresIn: "7d",
     });
 
+    // Update last activity on login
+    await updateUserActivity(user._id, 'admin');
+
     setTokenCookie(res, token);
 
     res.json({ message: "Login successful", token });
@@ -316,7 +320,7 @@ exports.logout = (req, res) => {
 };
 
 // ** 9. Middleware: Verify JWT Token**
-exports.verifyToken = (req, res, next) => {
+exports.verifyToken = async (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
@@ -325,9 +329,24 @@ exports.verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if admin should be logged out due to inactivity
+    const { shouldLogout } = await checkUserActivity(decoded.adminId, 'admin');
+    if (shouldLogout) {
+      return res.status(401).json({ 
+        message: "Session expired due to inactivity. Please log in again." 
+      });
+    }
+
+    // Update last activity
+    await updateUserActivity(decoded.adminId, 'admin');
+    
     req.user = decoded;
     next();
   } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: "Token expired. Please log in again." });
+    }
     return res
       .status(403)
       .json({ message: "Forbidden: Invalid or expired token" });
@@ -456,15 +475,18 @@ exports.adminLogin = async (req, res) => {
         permissions: admin.permissions
       },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "7d" }
     );
+
+    // Update last activity on login
+    await updateUserActivity(admin._id, 'admin');
 
     // Set token in HTTP-only cookie
     res.cookie("adminToken", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
     // Return admin profile (without sensitive data)
