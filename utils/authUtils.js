@@ -35,8 +35,8 @@ async function checkUserActivity(userId, userType) {
       return { shouldLogout: true, user: null };
     }
 
-    // Check if last activity was more than 7 days ago
-    const shouldLogout = user.lastActivity && user.lastActivity < sevenDaysAgo;
+    // Check if last activity is missing or was more than 7 days ago
+    const shouldLogout = !user.lastActivity || user.lastActivity < sevenDaysAgo;
     
     return { shouldLogout, user };
   } catch (error) {
