@@ -39,7 +39,6 @@ const CLOUDINARY_CONFIG = {
   enableFallback: process.env.CLOUDINARY_ENABLE_FALLBACK !== 'false'
 };
 
-console.log('🔧 Cloudinary configuration loaded:', CLOUDINARY_CONFIG);
 
 /**
  * Generate invoices for an order
@@ -47,16 +46,6 @@ console.log('🔧 Cloudinary configuration loaded:', CLOUDINARY_CONFIG);
  */
 exports.generateOrderInvoices = async (orderData) => {
   try {
-    console.log('📄 Starting invoice generation for order:', orderData.orderNumber);
-    console.log('🔍 Original order data structure:', {
-      orderId: orderData.orderId,
-      orderNumber: orderData.orderNumber,
-      vendorId: orderData.vendorId,
-      total: orderData.total,
-      orderType: orderData.orderType,
-      itemsCount: orderData.items?.length || 0,
-      sampleItem: orderData.items?.[0] || 'No items'
-    });
     
     // Get vendor and university details
     const vendor = await Vendor.findById(orderData.vendorId);
@@ -70,7 +59,6 @@ exports.generateOrderInvoices = async (orderData) => {
           
           // Always populate items that have itemId references
           if (item.itemId) {
-            console.log(`🔍 Populating item ${item.name || 'Unknown'} with itemId: ${item.itemId}`);
             
             if (item.kind === "Retail") {
               const Retail = require("../models/item/Retail");
@@ -94,16 +82,6 @@ exports.generateOrderInvoices = async (orderData) => {
               };
             }
             
-                         console.log(`✅ Successfully populated ${item.kind} item:`, {
-               name: itemDetails.name,
-               price: itemDetails.price,
-               priceExcludingTax: itemDetails.priceExcludingTax,
-               hsnCode: itemDetails.hsnCode,
-               gstPercentage: itemDetails.gstPercentage,
-               sgstPercentage: itemDetails.sgstPercentage,
-               cgstPercentage: itemDetails.cgstPercentage,
-               packable: itemDetails.packable
-             });
             
                          return {
                ...item,
@@ -118,7 +96,6 @@ exports.generateOrderInvoices = async (orderData) => {
              };
           } else {
             // Item already has all required data
-            console.log(`✅ Item ${item.name} already has required data, no population needed`);
             return {
               ...item,
               packable: item.packable || (item.kind === "Produce")
@@ -146,44 +123,16 @@ exports.generateOrderInvoices = async (orderData) => {
       items: populatedItems
     };
     
-    console.log('🔍 Populated order items:', populatedItems.map(item => ({
-      name: item.name,
-      price: item.price,
-      hsnCode: item.hsnCode,
-      gstPercentage: item.gstPercentage,
-      sgstPercentage: item.sgstPercentage,
-      cgstPercentage: item.cgstPercentage,
-      packable: item.packable,
-      kind: item.kind,
-      itemId: item.itemId
-    })));
     
     if (!vendor || !university) {
       throw new Error('Required entities not found for invoice generation');
     }
     
-    // Debug: Log vendor details
-    console.log('🔍 Vendor details:', {
-      id: vendor._id,
-      name: vendor.name,
-      fullName: vendor.fullName,
-      phone: vendor.phone,
-      email: vendor.email,
-      address: vendor.address || 'Using fallback address',
-      gstNumber: vendor.gstNumber,
-      useUniGstNumber: vendor.useUniGstNumber
-    });
     
     // Determine which GST number to use
     const effectiveGstNumber = vendor.useUniGstNumber ? university.gstNumber : (vendor.gstNumber || university.gstNumber);
     const gstNumberType = vendor.useUniGstNumber ? 'university' : 'vendor';
     
-    console.log('🏷️ GST Information:', {
-      vendorGstNumber: vendor.gstNumber,
-      universityGstNumber: university.gstNumber,
-      effectiveGstNumber: effectiveGstNumber,
-      gstNumberType: gstNumberType
-    });
     
     // Calculate amounts first
     const platformFee = university.platformFee || 2; // University-specific platform fee, default ₹2
@@ -212,36 +161,10 @@ exports.generateOrderInvoices = async (orderData) => {
     // This is for display purposes only - actual charge is already in order total
     const deliveryTotal = (orderData.orderType === "delivery") ? deliveryCharge : 0;
     
-    console.log('💰 Charge reference calculations (for display only):', {
-      itemTotal,
-      packingCharge,
-      deliveryCharge,
-      packableItemsCount: packableItems.length,
-      packableItemsDetails: packableItems.map(item => ({
-        name: item.name,
-        quantity: item.quantity,
-        packable: item.packable,
-        kind: item.kind,
-        individualPackingCharge: packingCharge * item.quantity
-      })),
-      packingTotal,
-      deliveryTotal,
-      orderType: orderData.orderType,
-      orderTotal: orderData.total,
-      note: 'Charges are already included in order total, these are reference values for display'
-    });
     
     // Calculate vendor amount (total - platform fee)
     const vendorAmount = orderData.total - platformFee;
     
-    // Debug: Log amount calculations
-    console.log('💰 Amount calculations:', {
-      orderTotal: orderData.total,
-      platformFee: platformFee,
-      platformFeeBase: platformFeeBase,
-      platformFeeGST: platformFeeGST,
-      vendorAmount: vendorAmount
-    });
     
         // Generate vendor invoice
     const vendorInvoice = await generateVendorInvoice({
@@ -270,7 +193,6 @@ exports.generateOrderInvoices = async (orderData) => {
       gstNumberType
     });
     
-    console.log('✅ Invoice generation completed for order:', orderData.orderNumber);
     
     return {
       vendorInvoice: vendorInvoice._id,
@@ -295,16 +217,6 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
     
     // Calculate detailed GST breakdown for items
     const itemsWithGst = orderData.items.map(item => {
-      console.log(`🔍 Processing item for GST: ${item.name}`, {
-        price: item.price,
-        hsnCode: item.hsnCode,
-        gstPercentage: item.gstPercentage,
-        sgstPercentage: item.sgstPercentage,
-        cgstPercentage: item.cgstPercentage,
-        kind: item.kind,
-        packable: item.packable,
-        quantity: item.quantity
-      });
       
                     // Use individual SGST and CGST percentages if available, otherwise calculate from total GST
         const sgstPercentage = item.sgstPercentage || ((item.gstPercentage || 0) / 2);
@@ -338,20 +250,6 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
         kind: item.kind
       };
       
-             console.log(`✅ Processed item: ${processedItem.name}`, {
-         hsnCode: processedItem.hsnCode,
-         priceBeforeGst: processedItem.priceBeforeGst,
-         priceExcludingTax: item.priceExcludingTax,
-         gstAmount: processedItem.gstAmount,
-         cgstAmount: processedItem.cgstAmount,
-         sgstAmount: processedItem.sgstAmount,
-         gstPercentage: processedItem.gstPercentage,
-         cgstPercentage: processedItem.cgstPercentage,
-         sgstPercentage: processedItem.sgstPercentage,
-         originalPrice: item.price,
-         calculatedTotal: processedItem.priceBeforeGst + processedItem.gstAmount,
-         usedPriceExcludingTax: !!item.priceExcludingTax
-       });
       
       return processedItem;
     });
@@ -362,45 +260,19 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
     const totalSgstAmount = itemsWithGst.reduce((sum, item) => sum + item.sgstAmount, 0);
     const subtotalBeforeGst = itemsWithGst.reduce((sum, item) => sum + item.priceBeforeGst, 0);
     
-         console.log('🧮 GST Calculations for vendor invoice:', {
-       subtotalBeforeGst: Math.round(subtotalBeforeGst * 100) / 100,
-       totalGstAmount: Math.round(totalGstAmount * 100) / 100,
-       totalCgstAmount: Math.round(totalCgstAmount * 100) / 100,
-       totalSgstAmount: Math.round(totalSgstAmount * 100) / 100,
-       packingTotal: packingTotal,
-       deliveryTotal: deliveryTotal,
-       finalTotal: amount + packingTotal + deliveryTotal
-     });
      
-     // Debug: Show the final breakdown
-     console.log('💰 Final invoice breakdown:', {
-       itemTotal: itemTotal,
-       subtotalBeforeGst: Math.round(subtotalBeforeGst * 100) / 100,
-       gstAmount: Math.round(totalGstAmount * 100) / 100,
-       subtotalAfterGst: itemTotal + Math.round(totalGstAmount * 100) / 100,
-       packingTotal: packingTotal,
-       deliveryTotal: deliveryTotal,
-       grandTotal: amount,
-       note: 'amount already includes all charges'
-     });
     
     // Create Razorpay invoice (with fallback)
      let razorpayInvoice = null;
      
      // Check if Razorpay invoices are enabled
      if (!INVOICE_CONFIG.enableRazorpayInvoices) {
-       console.log('⏭️ Razorpay invoice creation is disabled via configuration');
      } else {
        try {
        // Validate and sanitize customer data for Razorpay
        const customerName = orderData.collectorName?.trim();
        const customerPhone = orderData.collectorPhone?.trim();
        
-       // Log original values for debugging
-       console.log('🔍 Original customer data:', {
-         collectorName: orderData.collectorName,
-         collectorPhone: orderData.collectorPhone
-       });
        
        // Check if we have valid customer data
        let finalCustomerName, finalCustomerPhone, shouldCreateRazorpayInvoice;
@@ -429,15 +301,8 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
          finalCustomerName = customerName || 'Customer';
          finalCustomerPhone = customerPhone || '0000000000';
          
-         console.log('⚠️ Insufficient customer data for Razorpay, skipping invoice creation');
        }
        
-       // Log sanitized values for debugging
-       console.log('🧹 Customer data for invoice:', {
-         name: finalCustomerName,
-         phone: finalCustomerPhone,
-         willCreateRazorpay: shouldCreateRazorpayInvoice
-       });
        
        if (shouldCreateRazorpayInvoice) {
          // Only create Razorpay invoice if we have valid customer data
@@ -485,9 +350,7 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
              university: university.fullName
            }
          });
-         console.log('✅ Razorpay invoice created successfully');
        } else {
-         console.log('⏭️ Skipping Razorpay invoice creation due to insufficient customer data');
        }
        } catch (razorpayError) {
          // Check if it's a trust issue
@@ -555,54 +418,6 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
     
     await invoice.save();
     
-    console.log('📄 Final vendor invoice data:', {
-      invoiceNumber: invoice.invoiceNumber,
-      subtotal: invoice.subtotal,
-      subtotalBeforeGst: invoice.subtotalBeforeGst,
-      gstAmount: invoice.gstAmount,
-      cgstAmount: invoice.cgstAmount,
-      sgstAmount: invoice.sgstAmount,
-      packagingCharge: invoice.packagingCharge, // Reference value for display
-      deliveryCharge: invoice.deliveryCharge, // Reference value for display
-      totalAmount: invoice.totalAmount,
-      itemsCount: invoice.items.length,
-      breakdown: {
-        itemsOnly: invoice.subtotal,
-        itemsBeforeGst: invoice.subtotalBeforeGst,
-        gstOnItems: invoice.gstAmount,
-        itemsAfterGst: invoice.subtotal + invoice.gstAmount,
-        charges: invoice.packagingCharge + invoice.deliveryCharge,
-        grandTotal: invoice.totalAmount,
-        packingBreakdown: {
-          packableItems: orderData.items.filter(item => 
-            item.kind === "Produce" || item.packable === true
-          ).map(item => ({
-            name: item.name,
-            quantity: item.quantity,
-            packable: item.packable,
-            kind: item.kind,
-            individualPackingCharge: 5 * item.quantity
-          })),
-          totalPackableItems: orderData.items.filter(item => 
-            item.kind === "Produce" || item.packable === true
-          ).reduce((sum, item) => sum + item.quantity, 0),
-          packingChargePerItem: 5,
-          totalPackingCharge: invoice.packagingCharge
-        },
-        note: 'Charges are reference values for display - actual charges already included in grandTotal'
-      },
-      sampleItem: invoice.items[0] ? {
-        name: invoice.items[0].name,
-        hsnCode: invoice.items[0].hsnCode,
-        priceBeforeGst: invoice.items[0].priceBeforeGst,
-        gstAmount: invoice.items[0].gstAmount,
-        cgstAmount: invoice.items[0].cgstAmount,
-        sgstAmount: invoice.items[0].sgstAmount,
-        gstPercentage: invoice.items[0].gstPercentage,
-        cgstPercentage: invoice.items[0].cgstPercentage,
-        sgstPercentage: invoice.items[0].sgstPercentage
-      } : 'No items'
-    });
     
     // Generate and upload PDF
     const pdfBuffer = await generateInvoicePDF(invoice, 'vendor');
@@ -612,7 +427,6 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
     invoice.pdfUrl = pdfUrl;
     await invoice.save();
     
-    console.log('✅ Vendor invoice generated:', invoiceNumber);
     return invoice;
     
   } catch (error) {
@@ -663,7 +477,6 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
         gst_amount: gstAmount
       }
     });
-    console.log('✅ Razorpay invoice created successfully');
   } catch (razorpayError) {
     console.warn('⚠️ Razorpay invoice creation failed, proceeding with local invoice only:', {
       error: razorpayError.message,
@@ -733,7 +546,6 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
     invoice.pdfUrl = pdfUrl;
     await invoice.save();
     
-    console.log('✅ Platform invoice generated:', invoiceNumber);
     return invoice;
     
   } catch (error) {
@@ -803,7 +615,6 @@ async function createRazorpayInvoice(invoiceData) {
     }
     
     const invoice = await razorpay.invoices.create(invoiceData);
-    console.log('✅ Razorpay invoice created:', invoice.id);
     return invoice;
   } catch (error) {
     console.error('❌ Error creating Razorpay invoice:', error);
@@ -1055,7 +866,6 @@ async function checkCloudinaryAccountStatus() {
       }
     ).end(testBuffer);
     
-    console.log('✅ Cloudinary account status verified');
     return true;
   } catch (error) {
     console.error('❌ Error checking Cloudinary account status:', error);
@@ -1069,8 +879,6 @@ async function checkCloudinaryAccountStatus() {
 async function uploadWithRetry(pdfBuffer, filename, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`🔄 Upload attempt ${attempt}/${maxRetries} for ${filename}`);
-      console.log(`📊 PDF buffer size: ${pdfBuffer.length} bytes`);
       
       // Create temporary file for this attempt
       const tempPath = path.join(os.tmpdir(), `attempt_${attempt}_${filename}`);
@@ -1078,7 +886,6 @@ async function uploadWithRetry(pdfBuffer, filename, maxRetries = 3) {
       
       // Verify file was created and has content
       const stats = fs.statSync(tempPath);
-      console.log(`📁 Temp file created: ${tempPath} (${stats.size} bytes)`);
       
       // Try different upload strategies based on attempt number
       let uploadOptions = {
@@ -1106,15 +913,12 @@ async function uploadWithRetry(pdfBuffer, filename, maxRetries = 3) {
         delete uploadOptions.access_mode;
       }
       
-      console.log(`🔧 Upload options for attempt ${attempt}:`, JSON.stringify(uploadOptions, null, 2));
       
       const result = await cloudinary.uploader.upload(tempPath, uploadOptions);
       
       // Clean up temporary file
       fs.unlinkSync(tempPath);
       
-      console.log(`✅ Upload successful on attempt ${attempt}`);
-      console.log(`🔗 Result URL: ${result.secure_url}`);
       return result.secure_url;
       
     } catch (error) {
@@ -1146,7 +950,6 @@ async function uploadWithRetry(pdfBuffer, filename, maxRetries = 3) {
  */
 async function fallbackUpload(pdfBuffer, filename) {
   try {
-    console.log('🔄 Attempting fallback upload with alternative settings...');
     
     const tempPath = path.join(os.tmpdir(), `fallback_${filename}`);
     fs.writeFileSync(tempPath, pdfBuffer);
@@ -1186,7 +989,6 @@ async function fallbackUpload(pdfBuffer, filename) {
  */
 async function uploadPDFWithEnhancedHandling(pdfBuffer, filename) {
   try {
-    console.log('🔧 Attempting enhanced PDF upload method...');
     
     const tempPath = path.join(os.tmpdir(), `enhanced_${filename}`);
     fs.writeFileSync(tempPath, pdfBuffer);
@@ -1226,14 +1028,12 @@ async function uploadPDFWithEnhancedHandling(pdfBuffer, filename) {
     
     for (const strategy of strategies) {
       try {
-        console.log(`🔄 Trying strategy: ${strategy.name}`);
         
         const result = await cloudinary.uploader.upload(tempPath, strategy.options);
         
         // Clean up
         fs.unlinkSync(tempPath);
         
-        console.log(`✅ Enhanced PDF upload successful with strategy: ${strategy.name}`);
         return result.secure_url;
         
       } catch (strategyError) {
@@ -1268,7 +1068,6 @@ async function uploadPDFToCloudinary(pdfBuffer, filename) {
     // Use retry mechanism for upload (it handles temporary file creation)
     const pdfUrl = await uploadWithRetry(pdfBuffer, filename, CLOUDINARY_CONFIG.maxRetries);
     
-    console.log('✅ PDF uploaded to Cloudinary:', pdfUrl);
     return pdfUrl;
     
   } catch (error) {

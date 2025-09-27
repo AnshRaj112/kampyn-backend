@@ -31,6 +31,7 @@ const uniSchema = new mongoose.Schema(
     ],
     loginAttempts: { type: Number, default: 0 },
     lastLoginAttempt: { type: Date, default: null },
+    lastActivity: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

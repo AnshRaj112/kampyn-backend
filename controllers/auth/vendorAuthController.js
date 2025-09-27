@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
+const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
 
 // Utility: Generate OTP
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
@@ -220,6 +221,9 @@ exports.login = async (req, res) => {
       expiresIn: "7d",
     });
 
+    // Update last activity on login
+    await updateUserActivity(user._id, 'vendor');
+
     setTokenCookie(res, token);
 
     res.json({ message: "Login successful", token });
@@ -363,7 +367,7 @@ exports.logout = (req, res) => {
 };
 
 // ** 9. Middleware: Verify JWT Token**
-exports.verifyToken = (req, res, next) => {
+exports.verifyToken = async (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
@@ -372,9 +376,24 @@ exports.verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if vendor should be logged out due to inactivity
+    const { shouldLogout } = await checkUserActivity(decoded.userId, 'vendor');
+    if (shouldLogout) {
+      return res.status(401).json({ 
+        message: "Session expired due to inactivity. Please log in again." 
+      });
+    }
+
+    // Update last activity
+    await updateUserActivity(decoded.userId, 'vendor');
+    
     req.user = decoded;
     next();
   } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: "Token expired. Please log in again." });
+    }
     return res
       .status(403)
       .json({ message: "Forbidden: Invalid or expired token" });

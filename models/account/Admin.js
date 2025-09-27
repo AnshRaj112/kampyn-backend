@@ -52,6 +52,10 @@ const adminSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  lastActivity: {
+    type: Date,
+    default: Date.now
+  },
   loginAttempts: {
     type: Number,
     default: 0
