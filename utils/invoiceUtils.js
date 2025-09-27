@@ -186,10 +186,10 @@ exports.generateOrderInvoices = async (orderData) => {
     });
     
     // Calculate amounts first
-    const platformFee = 2; // Fixed platform fee
-    // For ₹2 total including GST: base amount = 2/1.18 = 1.69, GST = 2 - 1.69 = 0.31
-    const platformFeeBase = Math.round((platformFee / 1.18) * 100) / 100; // ₹1.69
-    const platformFeeGST = Math.round((platformFee - platformFeeBase) * 100) / 100; // ₹0.31
+    const platformFee = university.platformFee || 2; // University-specific platform fee, default ₹2
+    // For platform fee total including GST: base amount = platformFee/1.18, GST = platformFee - base
+    const platformFeeBase = Math.round((platformFee / 1.18) * 100) / 100;
+    const platformFeeGST = Math.round((platformFee - platformFeeBase) * 100) / 100;
     
     // Get reference values for packing and delivery charges from university
     // These are used for display purposes only - the actual charges are already included in orderData.total

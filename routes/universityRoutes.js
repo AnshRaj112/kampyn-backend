@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/charges/:uniId', async (req, res) => {
   try {
     const { uniId } = req.params;
-    const university = await Uni.findById(uniId).select('packingCharge deliveryCharge fullName');
+    const university = await Uni.findById(uniId).select('packingCharge deliveryCharge platformFee fullName');
     
     if (!university) {
       return res.status(404).json({ message: "University not found" });
@@ -18,6 +18,7 @@ router.get('/charges/:uniId', async (req, res) => {
     res.json({
       packingCharge: university.packingCharge,
       deliveryCharge: university.deliveryCharge,
+      platformFee: university.platformFee,
       universityName: university.fullName
     });
   } catch (err) {

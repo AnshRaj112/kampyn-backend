@@ -14,6 +14,8 @@ const uniSchema = new mongoose.Schema(
     // Packing and delivery charges
     packingCharge: { type: Number, default: 5, min: 0 }, // Default ₹5 per produce item
     deliveryCharge: { type: Number, default: 50, min: 0 }, // Default ₹50 for delivery
+    // Platform fee
+    platformFee: { type: Number, default: 2, min: 0 }, // Default ₹2 per order
     vendors: [
       {
         vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },
