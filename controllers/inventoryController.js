@@ -292,7 +292,23 @@ exports.updateRawMaterialInventory = async (req, res) => {
       date: { $gte: startOfDay, $lt: endOfDay },
     });
 
-    if (!report) report = new InventoryReport({ vendorId, date: new Date() });
+    if (!report) {
+      // Create a new report for today if it doesn't exist
+      report = new InventoryReport({ 
+        vendorId, 
+        date: startOfDay,
+        retailEntries: [],
+        produceEntries: [],
+        rawEntries: [],
+        itemReceived: [],
+        itemSend: []
+      });
+    }
+
+    // Ensure rawEntries array exists
+    if (!report.rawEntries) {
+      report.rawEntries = [];
+    }
 
     const rawEntry = report.rawEntries.find(
       (entry) => entry.item.toString() === itemId

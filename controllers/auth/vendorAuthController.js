@@ -107,23 +107,30 @@ exports.verifyOtp = async (req, res) => {
     console.log("🔵 OTP Verification Request:", req.body);
 
     const { email, otp } = req.body;
-    const otpRecord = await Otp.findOne({ email, otp });
+    const emailLower = email.toLowerCase(); // Ensure lowercase
+    console.log("🔍 Looking for OTP with email:", emailLower, "and OTP:", otp);
+    
+    const otpRecord = await Otp.findOne({ email: emailLower, otp });
+    console.log("🔍 Found OTP record:", otpRecord);
 
     if (!otpRecord) {
       console.log("⚠️ Invalid or expired OTP:", otp);
+      // Let's also check if there are any OTPs for this email
+      const allOtpsForEmail = await Otp.find({ email: emailLower });
+      console.log("🔍 All OTPs for this email:", allOtpsForEmail);
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
     // Update user verification status
     const user = await Account.findOneAndUpdate(
-      { email },
+      { email: emailLower },
       { isVerified: true },
       { new: true }
     );
-    console.log("✅ User verified:", email);
+    console.log("✅ User verified:", emailLower);
 
     // Delete the used OTP
-    await Otp.deleteOne({ email });
+    await Otp.deleteOne({ email: emailLower });
     console.log("🗑️ OTP deleted from database");
 
     // Generate new token for the verified user
@@ -165,14 +172,25 @@ exports.login = async (req, res) => {
     if (!user.isVerified) {
       // Generate new OTP
       const otp = generateOtp();
-      await new Otp({ email: user.email, otp, createdAt: Date.now() }).save();
+      console.log("🔢 Generated OTP for login:", otp, "for email:", user.email);
+      
+      // Delete any existing OTPs for this email first
+      await Otp.deleteMany({ email: user.email });
+      console.log("🗑️ Deleted existing OTPs for email:", user.email);
+      
+      // Save new OTP with lowercase email
+      const newOtp = new Otp({ email: user.email.toLowerCase(), otp, createdAt: Date.now() });
+      await newOtp.save();
+      console.log("✅ Saved new OTP:", newOtp);
 
       // Send OTP email
       await sendOtpEmail(user.email, otp);
+      console.log("📧 Sent OTP email to:", user.email);
 
       // Redirect user to OTP verification
       return res.status(400).json({
         message: "User not verified. OTP sent to email.",
+        email: user.email,
         redirectTo: `/otpverification?email=${user.email}&from=login`,
       });
     }

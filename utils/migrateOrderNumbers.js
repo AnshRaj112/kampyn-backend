@@ -31,7 +31,7 @@ async function generateOrderNumberForMigration(createdAt, userId, vendorId) {
   
   const sequenceNumber = counterResult.sequence.toString().padStart(5, '0');
   
-  return `BB-${microTime}-${userSuffix}-${sequenceNumber}`;
+  return `KYN-${microTime}-${userSuffix}-${sequenceNumber}`;
 }
 
 async function migrateOrderNumbers() {
