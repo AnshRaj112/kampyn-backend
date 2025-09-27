@@ -126,7 +126,7 @@ app.use("/api/university", universityRoutes);
 app.use("/inventoryreport", inventoryReportRoutes);
 app.use("/vendorcart", vendorCartRoutes);
 app.use("/billinginfo", billingInfoRoutes);
-app.use("/admin", adminRoutes); // 🔒 Admin routes for lock management
+app.use("/admin", adminRoutes);
 app.use("/razorpay", razorpayRoutes);
 app.use("/vendor-payment", vendorPaymentRoutes);
 app.use("/api", configRoutes);

@@ -325,7 +325,7 @@ router.get("/universities", async (req, res) => {
     
     // Fetch all universities with full details
     const universities = await Uni.find({})
-      .select('_id fullName email phone gstNumber packingCharge deliveryCharge isVerified isAvailable createdAt updatedAt vendors')
+      .select('_id fullName email phone gstNumber packingCharge deliveryCharge platformFee isVerified isAvailable createdAt updatedAt vendors')
       .lean();
 
     // Get vendor counts for each university
@@ -345,6 +345,7 @@ router.get("/universities", async (req, res) => {
           gstNumber: uni.gstNumber,
           packingCharge: uni.packingCharge,
           deliveryCharge: uni.deliveryCharge,
+          platformFee: uni.platformFee,
           isVerified: uni.isVerified,
           isAvailable: uni.isAvailable,
           createdAt: uni.createdAt,
@@ -514,6 +515,422 @@ router.patch("/universities/:uniId/availability", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update university availability",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PUT /admin/universities/:uniId/platform-fee
+ * Update platform fee for a specific university
+ * No authentication required
+ */
+router.put("/universities/:uniId/platform-fee", async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const { platformFee } = req.body;
+
+    console.log(`🔵 Admin: Updating platform fee for university ${uniId} to ₹${platformFee}`);
+
+    // Validate input
+    if (platformFee === undefined || platformFee === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Platform fee is required"
+      });
+    }
+
+    if (typeof platformFee !== 'number' || platformFee < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Platform fee must be a non-negative number"
+      });
+    }
+
+    // Find and update university
+    const university = await Uni.findByIdAndUpdate(
+      uniId,
+      { platformFee: platformFee },
+      { new: true, runValidators: true }
+    ).select('_id fullName email platformFee');
+
+    if (!university) {
+      return res.status(404).json({
+        success: false,
+        message: "University not found"
+      });
+    }
+
+    console.log(`✅ Admin: Platform fee updated for ${university.fullName} to ₹${platformFee}`);
+
+    res.json({
+      success: true,
+      message: "Platform fee updated successfully",
+      university: {
+        _id: university._id,
+        fullName: university.fullName,
+        email: university.email,
+        platformFee: university.platformFee
+      },
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error updating platform fee:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update platform fee",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PUT /admin/universities/bulk-platform-fees
+ * Update platform fees for multiple universities
+ * No authentication required
+ */
+router.put("/universities/bulk-platform-fees", async (req, res) => {
+  try {
+    const { updates } = req.body;
+
+    console.log(`🔵 Admin: Bulk updating platform fees for ${updates.length} universities`);
+
+    // Validate input
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Updates array is required and must not be empty"
+      });
+    }
+
+    // Validate each update
+    for (const update of updates) {
+      if (!update.uniId || update.platformFee === undefined || update.platformFee === null) {
+        return res.status(400).json({
+          success: false,
+          message: "Each update must have uniId and platformFee"
+        });
+      }
+
+      if (typeof update.platformFee !== 'number' || update.platformFee < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Platform fee must be a non-negative number"
+        });
+      }
+    }
+
+    // Get all university IDs for validation
+    const uniIds = updates.map(update => update.uniId);
+    const existingUnis = await Uni.find({ _id: { $in: uniIds } }).select('_id fullName');
+    
+    if (existingUnis.length !== uniIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more universities not found"
+      });
+    }
+
+    // Perform bulk update
+    const bulkOps = updates.map(update => ({
+      updateOne: {
+        filter: { _id: update.uniId },
+        update: { platformFee: update.platformFee }
+      }
+    }));
+
+    const result = await Uni.bulkWrite(bulkOps);
+
+    console.log(`✅ Admin: Bulk updated platform fees for ${result.modifiedCount} universities`);
+
+    res.json({
+      success: true,
+      message: "Platform fees updated successfully",
+      updatedCount: result.modifiedCount,
+      totalRequested: updates.length,
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error bulk updating platform fees:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to bulk update platform fees",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/universities/:uniId/platform-fee
+ * Get platform fee for a specific university
+ * No authentication required
+ */
+router.get("/universities/:uniId/platform-fee", async (req, res) => {
+  try {
+    const { uniId } = req.params;
+
+    console.log(`🔵 Admin: Fetching platform fee for university ${uniId}`);
+
+    const university = await Uni.findById(uniId)
+      .select('_id fullName email platformFee')
+      .lean();
+
+    if (!university) {
+      return res.status(404).json({
+        success: false,
+        message: "University not found"
+      });
+    }
+
+    console.log(`✅ Admin: Retrieved platform fee for ${university.fullName}: ₹${university.platformFee}`);
+
+    res.json({
+      success: true,
+      university: {
+        _id: university._id,
+        fullName: university.fullName,
+        email: university.email,
+        platformFee: university.platformFee
+      },
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error fetching platform fee:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch platform fee",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/help-messages
+ * Get all help messages with pagination and filtering
+ * No authentication required
+ */
+router.get("/help-messages", async (req, res) => {
+  try {
+    console.log("🔵 Admin: Fetching all help messages");
+    
+    const ContactMessage = require("../models/users/ContactMessage");
+    
+    // Get query parameters
+    const { page = 1, limit = 50, status = 'all' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Build filter query
+    let filter = {};
+    if (status === 'read') {
+      filter.isRead = true;
+    } else if (status === 'unread') {
+      filter.isRead = false;
+    }
+    
+    // Fetch messages with pagination
+    const messages = await ContactMessage.find(filter)
+      .sort({ createdAt: -1 }) // Newest first
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+    
+    // Get total count
+    const totalMessages = await ContactMessage.countDocuments(filter);
+    const unreadCount = await ContactMessage.countDocuments({ isRead: false });
+    const readCount = await ContactMessage.countDocuments({ isRead: true });
+    
+    console.log(`✅ Admin: Found ${messages.length} help messages (${unreadCount} unread)`);
+    
+    res.json({
+      success: true,
+      messages: messages,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalMessages / parseInt(limit)),
+        totalMessages: totalMessages,
+        hasNext: skip + messages.length < totalMessages,
+        hasPrev: parseInt(page) > 1
+      },
+      statistics: {
+        total: totalMessages,
+        unread: unreadCount,
+        read: readCount
+      },
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error fetching help messages:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch help messages",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PUT /admin/help-messages/:messageId/read
+ * Mark a help message as read
+ * No authentication required
+ */
+router.put("/help-messages/:messageId/read", async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    console.log(`🔵 Admin: Marking message ${messageId} as read`);
+    
+    const ContactMessage = require("../models/users/ContactMessage");
+    
+    const message = await ContactMessage.findByIdAndUpdate(
+      messageId,
+      { isRead: true },
+      { new: true, runValidators: true }
+    ).lean();
+    
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found"
+      });
+    }
+    
+    console.log(`✅ Admin: Message ${messageId} marked as read`);
+    
+    res.json({
+      success: true,
+      message: "Message marked as read",
+      data: {
+        _id: message._id,
+        isRead: message.isRead
+      },
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error marking message as read:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to mark message as read",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PUT /admin/help-messages/:messageId/unread
+ * Mark a help message as unread
+ * No authentication required
+ */
+router.put("/help-messages/:messageId/unread", async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    console.log(`🔵 Admin: Marking message ${messageId} as unread`);
+    
+    const ContactMessage = require("../models/users/ContactMessage");
+    
+    const message = await ContactMessage.findByIdAndUpdate(
+      messageId,
+      { isRead: false },
+      { new: true, runValidators: true }
+    ).lean();
+    
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found"
+      });
+    }
+    
+    console.log(`✅ Admin: Message ${messageId} marked as unread`);
+    
+    res.json({
+      success: true,
+      message: "Message marked as unread",
+      data: {
+        _id: message._id,
+        isRead: message.isRead
+      },
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error marking message as unread:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to mark message as unread",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/help-messages/:messageId
+ * Get a specific help message by ID
+ * No authentication required
+ */
+router.get("/help-messages/:messageId", async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    console.log(`🔵 Admin: Fetching help message ${messageId}`);
+    
+    const ContactMessage = require("../models/users/ContactMessage");
+    
+    const message = await ContactMessage.findById(messageId).lean();
+    
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found"
+      });
+    }
+    
+    console.log(`✅ Admin: Retrieved help message ${messageId}`);
+    
+    res.json({
+      success: true,
+      message: message,
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error fetching help message:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch help message",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /admin/help-messages/:messageId
+ * Delete a help message
+ * No authentication required
+ */
+router.delete("/help-messages/:messageId", async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    console.log(`🔵 Admin: Deleting help message ${messageId}`);
+    
+    const ContactMessage = require("../models/users/ContactMessage");
+    
+    const message = await ContactMessage.findByIdAndDelete(messageId);
+    
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found"
+      });
+    }
+    
+    console.log(`✅ Admin: Deleted help message ${messageId}`);
+    
+    res.json({
+      success: true,
+      message: "Message deleted successfully",
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    console.error("❌ Admin: Error deleting help message:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete help message",
       error: error.message
     });
   }
