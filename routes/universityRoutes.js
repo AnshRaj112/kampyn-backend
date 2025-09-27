@@ -168,4 +168,43 @@ router.patch('/universities/:uniId/services', async (req, res) => {
   }
 });
 
+// Update assigned services for a specific vendor
+router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res) => {
+  try {
+    const { uniId, vendorId } = req.params;
+    const { services } = req.body; // array of service IDs
+
+    if (!Array.isArray(services)) {
+      return res.status(400).json({ success: false, message: 'services must be an array of IDs' });
+    }
+
+    // Verify the vendor belongs to the university
+    const Vendor = require('../models/account/Vendor');
+    const vendor = await Vendor.findOne({ _id: vendorId, uniID: uniId });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found or not associated with this university' });
+    }
+
+    // Validate service IDs
+    const count = await Service.countDocuments({ _id: { $in: services } });
+    if (count !== services.length) {
+      return res.status(400).json({ success: false, message: 'One or more service IDs are invalid' });
+    }
+
+    // Update vendor services
+    const updatedVendor = await Vendor.findByIdAndUpdate(
+      vendorId,
+      { $set: { services } },
+      { new: true }
+    ).populate({ path: 'services', populate: { path: 'feature' } });
+
+    if (!updatedVendor) return res.status(404).json({ success: false, message: 'Vendor not found' });
+
+    res.json({ success: true, message: 'Vendor services updated', data: updatedVendor.services });
+  } catch (err) {
+    console.error('Error updating vendor services:', err);
+    res.status(500).json({ success: false, message: 'Failed to update vendor services' });
+  }
+});
+
 module.exports = router; 

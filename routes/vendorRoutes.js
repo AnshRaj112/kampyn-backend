@@ -99,4 +99,47 @@ router.get("/:vendorId/university-charges", async (req, res) => {
   }
 });
 
+// Get assigned services for a vendor
+router.get("/:vendorId/assignments", async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    
+    if (!vendorId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vendor ID is required'
+      });
+    }
+
+    const vendor = await Vendor.findById(vendorId)
+      .populate({ path: 'services', populate: { path: 'feature' } })
+      .select('services fullName uniID');
+    
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        vendor: {
+          _id: vendor._id,
+          fullName: vendor.fullName,
+          uniID: vendor.uniID
+        },
+        services: vendor.services || []
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching vendor assignments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch vendor assignments'
+    });
+  }
+});
+
 module.exports = router;
