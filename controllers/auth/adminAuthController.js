@@ -331,7 +331,7 @@ exports.verifyToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Check if admin should be logged out due to inactivity
-    const { shouldLogout } = await checkUserActivity(decoded.userId, 'admin');
+    const { shouldLogout } = await checkUserActivity(decoded.adminId, 'admin');
     if (shouldLogout) {
       return res.status(401).json({ 
         message: "Session expired due to inactivity. Please log in again." 
@@ -339,7 +339,7 @@ exports.verifyToken = async (req, res, next) => {
     }
 
     // Update last activity
-    await updateUserActivity(decoded.userId, 'admin');
+    await updateUserActivity(decoded.adminId, 'admin');
     
     req.user = decoded;
     next();

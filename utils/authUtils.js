@@ -78,23 +78,7 @@ async function updateUserActivity(userId, userType) {
   }
 }
 
-/**
- * Determine user type from JWT payload
- * @param {Object} decoded - Decoded JWT payload
- * @returns {string} - User type
- */
-function getUserTypeFromToken(decoded) {
-  if (decoded.adminId) return 'admin';
-  if (decoded.userId) {
-    // For user, vendor, and uni, we need to check the user's type
-    // This will be handled in the middleware by checking the actual user record
-    return 'user'; // Default, will be refined in middleware
-  }
-  return 'user';
-}
-
 module.exports = {
   checkUserActivity,
-  updateUserActivity,
-  getUserTypeFromToken
+  updateUserActivity
 };
