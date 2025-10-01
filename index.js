@@ -42,6 +42,7 @@ const configRoutes = require("./routes/configRoutes");
 const expressOrderRoutes = require("./routes/expressOrderRoutes");
 const vendorTransferRoutes = require("./routes/vendorTransferRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -135,6 +136,7 @@ app.use("/api", vendorTransferRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/admin", featureRoutes);
 app.use("/api/admin", serviceRoutes);
+app.use("/api/reviews", reviewRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling
