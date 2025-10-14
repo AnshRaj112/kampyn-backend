@@ -7,7 +7,6 @@
     "test": "echo \"No tests specified\" && exit 0",
     "start": "node scripts/start-server.js",
     "dev": "nodemon index.js",
-    "postinstall": "npm audit fix --force",
     "verify-debug": "node scripts/verify-debug.js",
     "fix-debug": "node scripts/fix-debug.js",
     "migrate-orders": "node scripts/migrate-orders.js",
