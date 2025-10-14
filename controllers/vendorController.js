@@ -54,9 +54,10 @@ exports.getVendorsWithAvailability = async (req, res) => {
       return res.status(404).json({ error: "University not found." });
     }
 
-    // Get all vendors for this university
+    // Get all vendors for this university, ordered by creation date (latest first)
     const vendors = await Vendor.find({ uniID: uniId })
-      .select("_id fullName email phone location deliverySettings")
+      .select("_id fullName email phone location deliverySettings sellerType createdAt")
+      .sort({ createdAt: -1 })
       .lean();
 
     // Create a map of vendor availability
@@ -72,6 +73,7 @@ exports.getVendorsWithAvailability = async (req, res) => {
       email: vendor.email,
       phone: vendor.phone,
       location: vendor.location,
+      sellerType: vendor.sellerType,
       isAvailable: availabilityMap.get(vendor._id.toString()) || "N",
       deliverySettings: vendor.deliverySettings || {
         offersDelivery: false,

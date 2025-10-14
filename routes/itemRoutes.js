@@ -27,8 +27,20 @@ router.get("/:category/uni/:uniId", itemController.getItemsByUniId);
 // Get items filtered by type and uniId for a category
 router.get("/:category/:type/:uniId", itemController.getItemsByTypeAndUni);
 
+// Get detailed items (with HSN/GST) by type and uniId for a category
+router.get(
+  "/:category/:type/:uniId/detailed",
+  itemController.getItemsByTypeAndUniDetailed
+);
+
 // Update an item by id in a category
 router.put("/:category/:id", itemController.updateItem);
+
+// Bulk update HSN/GST for a uniId by item type within a category
+router.put("/:category/:type/:uniId/tax", itemController.bulkUpdateTaxByType);
+
+// Bulk update HSN/GST for specific items by IDs within a category
+router.put("/:category/tax/by-ids", itemController.bulkUpdateTaxByIds);
 
 // Delete an item by id in a category
 router.delete("/:category/:id", itemController.deleteItem);

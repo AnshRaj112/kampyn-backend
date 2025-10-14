@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
 const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
+const { populateVendorWithUniversityItems } = require("../../utils/vendorUtils");
 
 // Utility: Generate OTP
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
@@ -31,7 +32,7 @@ exports.signup = async (req, res) => {
   try {
     console.log("🔵 Signup Request Received:", req.body);
 
-    const { fullName, email, phone, password, location, uniID } =
+    const { fullName, email, phone, password, location, uniID, sellerType } =
       req.body;
 
     // Convert email to lowercase
@@ -53,12 +54,17 @@ exports.signup = async (req, res) => {
       password: hashedPassword,
       location, 
       uniID,
+      sellerType,
       isVerified: false,
     };
 
     const newAccount = new Account(accountData);
     await newAccount.save();
     console.log("✅ Account created:", emailLower);
+
+    // Populate vendor with existing university items
+    await populateVendorWithUniversityItems(newAccount, uniID);
+    console.log("✅ Vendor populated with university items");
 
     // Update Uni's vendors array
     await Uni.findByIdAndUpdate(

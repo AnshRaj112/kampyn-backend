@@ -116,6 +116,8 @@ app.use("/api/foods", foodRoutes);
 app.use("/contact", contactRoute);
 app.use("/team", teamRoutes);
 app.use("/api/item", itemRoutes);
+// Backward/forward compatibility: support both singular and plural paths
+app.use("/api/items", itemRoutes);
 app.use("/foodcourts", foodCourtRoutes);
 app.use("/cart", cartRoutes);
 app.use("/inventory", inventoryRoutes);
