@@ -208,6 +208,21 @@ exports.getItemsByUniId = async (req, res) => {
   }
 };
 
+// Get detailed items by type and uniId (includes HSN/GST fields)
+exports.getItemsByTypeAndUniDetailed = async (req, res) => {
+  try {
+    const { category, type, uniId } = req.params;
+
+    const ItemModel = getModel(category);
+    const items = await ItemModel.find({ type, uniId })
+      .select("name hsnCode gstPercentage sgstPercentage cgstPercentage priceExcludingTax price image type packable")
+      .lean();
+    res.status(200).json({ success: true, items });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
 // Update Item
 exports.updateItem = async (req, res) => {
   try {
@@ -700,5 +715,97 @@ exports.getVendorSpecificItems = async (req, res) => {
   } catch (error) {
     console.error("Error getting vendor-specific items:", error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+// Bulk update HSN/GST for all items of a given type within a university
+exports.bulkUpdateTaxByType = async (req, res) => {
+  try {
+    const { category, type, uniId } = req.params;
+    const { hsnCode, gstPercentage } = req.body;
+
+    if ((hsnCode == null || hsnCode === '') && (gstPercentage == null || gstPercentage === '')) {
+      return res.status(400).json({ error: 'Provide at least one of hsnCode or gstPercentage' });
+    }
+
+    const ItemModel = getModel(category);
+    const update = {};
+    if (typeof hsnCode === 'string' && hsnCode.trim() !== '') {
+      update.hsnCode = hsnCode.trim();
+    }
+    if (gstPercentage != null && gstPercentage !== '') {
+      const gstNum = Number(gstPercentage);
+      if (Number.isNaN(gstNum) || gstNum < 0) {
+        return res.status(400).json({ error: 'Valid gstPercentage is required' });
+      }
+      const sgst = Math.round(((gstNum / 2) + Number.EPSILON) * 100) / 100;
+      const cgst = sgst;
+      update.gstPercentage = gstNum;
+      update.sgstPercentage = sgst;
+      update.cgstPercentage = cgst;
+    }
+
+    const result = await ItemModel.updateMany(
+      { uniId, type },
+      { $set: update }
+    );
+
+    return res.status(200).json({
+      success: true,
+      matchedCount: result.matchedCount || result.nMatched || 0,
+      modifiedCount: result.modifiedCount || result.nModified || 0,
+    });
+  } catch (error) {
+    console.error('bulkUpdateTaxByType error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Bulk update HSN/GST for specific items by IDs within a university
+exports.bulkUpdateTaxByIds = async (req, res) => {
+  try {
+    const { category } = req.params;
+    const { uniId, itemIds, hsnCode, gstPercentage } = req.body;
+
+    if (!uniId) {
+      return res.status(400).json({ error: 'uniId is required' });
+    }
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      return res.status(400).json({ error: 'itemIds array is required' });
+    }
+    if ((hsnCode == null || hsnCode === '') && (gstPercentage == null || gstPercentage === '')) {
+      return res.status(400).json({ error: 'Provide at least one of hsnCode or gstPercentage' });
+    }
+
+    const ItemModel = getModel(category);
+    const update = {};
+    if (typeof hsnCode === 'string' && hsnCode.trim() !== '') {
+      update.hsnCode = hsnCode.trim();
+    }
+    if (gstPercentage != null && gstPercentage !== '') {
+      const gstNum = Number(gstPercentage);
+      if (Number.isNaN(gstNum) || gstNum < 0) {
+        return res.status(400).json({ error: 'Valid gstPercentage is required' });
+      }
+      const sgst = Math.round(((gstNum / 2) + Number.EPSILON) * 100) / 100;
+      const cgst = sgst;
+      update.gstPercentage = gstNum;
+      update.sgstPercentage = sgst;
+      update.cgstPercentage = cgst;
+    }
+
+    const result = await ItemModel.updateMany(
+      { uniId, _id: { $in: itemIds } },
+      { $set: update }
+    );
+
+    return res.status(200).json({
+      success: true,
+      matchedCount: result.matchedCount || result.nMatched || 0,
+      modifiedCount: result.modifiedCount || result.nModified || 0,
+    });
+  } catch (error) {
+    console.error('bulkUpdateTaxByIds error:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 };

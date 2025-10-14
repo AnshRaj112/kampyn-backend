@@ -42,6 +42,7 @@ const configRoutes = require("./routes/configRoutes");
 const expressOrderRoutes = require("./routes/expressOrderRoutes");
 const vendorTransferRoutes = require("./routes/vendorTransferRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -115,6 +116,8 @@ app.use("/api/foods", foodRoutes);
 app.use("/contact", contactRoute);
 app.use("/team", teamRoutes);
 app.use("/api/item", itemRoutes);
+// Backward/forward compatibility: support both singular and plural paths
+app.use("/api/items", itemRoutes);
 app.use("/foodcourts", foodCourtRoutes);
 app.use("/cart", cartRoutes);
 app.use("/inventory", inventoryRoutes);
@@ -135,6 +138,7 @@ app.use("/api", vendorTransferRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/admin", featureRoutes);
 app.use("/api/admin", serviceRoutes);
+app.use("/api/reviews", reviewRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Global error handling
