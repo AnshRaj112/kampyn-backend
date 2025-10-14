@@ -3,12 +3,15 @@ services:
     name: bitesbay-backend
     runtime: node
     plan: starter
-    buildCommand: npm ci && npm run fix-debug && npm run verify-debug && npm audit fix --force
-    startCommand: npm ci && npm run fix-debug && npm run verify-debug && npm audit fix --force && npm start
+
+    buildCommand: npm ci && npm run fix-debug && npm run verify-debug && npm run build
+    startCommand: npm start
+
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
+
     healthCheckPath: /api/health
-    autoDeploy: false  # We'll control deployment via GitHub Actions 
+    autoDeploy: false  # We'll control deployment via GitHub Actions
