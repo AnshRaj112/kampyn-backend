@@ -99,15 +99,11 @@ EMAIL_PASS=your_email_password
 ```
 
 ## Documentation
-- [API Development Guide](./docs/API_DEVELOPMENT_GUIDE.md)
-- [API Reference](./docs/API_REFERENCE.md)
-- [Authentication Guide](./docs/AUTHENTICATION.md)
-- [Database Schema](./docs/DATABASE_SCHEMA.md)
-- [Deployment Guide](./docs/DEPLOYMENT.md)
+- [Documentation Overview](./docs/README.md)
 - [Development Guide](./docs/DEVELOPMENT_GUIDE.md)
-- [Features Overview](./docs/FEATURES_OVERVIEW.md)
-- [Architecture Guide](./docs/ARCHITECTURE_GUIDE.md)
-- [Git Workflow](./docs/GIT_WORKFLOW.md)
+- [API Reference](./docs/API_REFERENCE.md)
+- [Security Guide](./docs/SECURITY.md)
+- [Deployment Guide](./docs/DEPLOYMENT.md)
 
 ## Development Workflow
 
