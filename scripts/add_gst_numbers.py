@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GST Number Addition Script for BitesBay
+GST Number Addition Script for KAMPYN
 This script adds fake GST numbers to universities and vendors in the database.
 """
 
@@ -215,7 +215,7 @@ def main():
         
         if verification_success:
             print("\n🔧 Next steps:")
-            print("1. Restart your BitesBay application to load the new models")
+            print("1. Restart your KAMPYN application to load the new models")
             print("2. Test invoice generation with the new GST functionality")
             print("3. Verify that invoices now include detailed GST breakdown")
             print("4. Check that vendor GST preferences are working correctly")

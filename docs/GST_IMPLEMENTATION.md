@@ -1,8 +1,8 @@
-# GST Implementation for BitesBay Invoices
+# GST Implementation for KAMPYN Invoices
 
 ## Overview
 
-This document outlines the implementation of GST (Goods and Services Tax) functionality in the BitesBay invoice system. The implementation includes detailed GST calculations, HSN codes, vendor location tracking, and comprehensive invoice breakdowns.
+This document outlines the implementation of GST (Goods and Services Tax) functionality in the KAMPYN invoice system. The implementation includes detailed GST calculations, HSN codes, vendor location tracking, and comprehensive invoice breakdowns.
 
 ## Features Implemented
 
@@ -288,4 +288,4 @@ For issues related to GST implementation:
 
 **Last Updated**: October 2025
 **Version**: 1.0.0
-**Author**: BitesBay Development Team
+**Author**: KAMPYN Development Team

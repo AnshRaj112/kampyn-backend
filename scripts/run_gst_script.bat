@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo GST Number Addition Script for BitesBay
+echo GST Number Addition Script for KAMPYN
 echo ========================================
 echo.
 

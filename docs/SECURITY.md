@@ -1,6 +1,6 @@
 # Security Documentation
 
-This document outlines the security measures, best practices, and vulnerability management for the BitesBay backend system.
+This document outlines the security measures, best practices, and vulnerability management for the KAMPYN backend system.
 
 **Last Updated:** October 2025
 

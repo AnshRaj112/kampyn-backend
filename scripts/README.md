@@ -1,6 +1,6 @@
 # GST Number Addition Scripts
 
-This directory contains scripts to add GST numbers to universities and vendors in the BitesBay database.
+This directory contains scripts to add GST numbers to universities and vendors in the KAMPYN database.
 
 ## Files
 
@@ -126,7 +126,7 @@ By default, the script uses the database name `bitesbay`. If your database has a
 3. ✅ Verification passed: Yes
 
 🔧 Next steps:
-1. Restart your BitesBay application to load the new models
+1. Restart your KAMPYN application to load the new models
 2. Test invoice generation with the new GST functionality
 3. Verify that invoices now include detailed GST breakdown
 4. Check that vendor GST preferences are working correctly
@@ -175,7 +175,7 @@ db.vendors.find({
 
 ## After Running the Script
 
-1. **Restart your BitesBay application** to load the new models
+1. **Restart your KAMPYN application** to load the new models
 2. **Test invoice generation** to ensure GST functionality works
 3. **Verify invoices** include all GST information
 4. **Check vendor preferences** are working correctly

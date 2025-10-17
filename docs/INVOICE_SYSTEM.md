@@ -2,7 +2,7 @@
 
 ## Overview
 
-The BitesBay invoice system automatically generates two invoices for every order:
+The KAMPYN invoice system automatically generates two invoices for every order:
 1. **Vendor Invoice**: Contains the order total minus platform fee, sent to the vendor
 2. **Platform Invoice**: Contains the platform fee plus GST, sent to the admin
 
@@ -307,6 +307,6 @@ GET /api/invoices/stats?startDate=2024-01-01&endDate=2024-01-31
 
 ## Conclusion
 
-The BitesBay invoice system provides a comprehensive solution for automatic invoice generation, professional presentation, and efficient management. It ensures transparency in financial transactions while maintaining security and providing role-based access control.
+The KAMPYN invoice system provides a comprehensive solution for automatic invoice generation, professional presentation, and efficient management. It ensures transparency in financial transactions while maintaining security and providing role-based access control.
 
 For technical support or feature requests, please contact the development team.

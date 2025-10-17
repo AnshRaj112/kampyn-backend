@@ -1,6 +1,6 @@
-# BitesBay Database Schema
+# KAMPYN Database Schema
 
-This document provides a comprehensive overview of the database schema used in BitesBay backend, including all collections, their fields, relationships, and indexing strategies.
+This document provides a comprehensive overview of the database schema used in KAMPYN backend, including all collections, their fields, relationships, and indexing strategies.
 
 **Last Updated:** October 2025
 
@@ -8,7 +8,7 @@ This document provides a comprehensive overview of the database schema used in B
 
 ## Overview
 
-BitesBay uses MongoDB as the primary database with Mongoose ODM for schema management. The database is organized into logical collections that support the multi-tenant architecture for universities, vendors, and users.
+KAMPYN uses MongoDB as the primary database with Mongoose ODM for schema management. The database is organized into logical collections that support the multi-tenant architecture for universities, vendors, and users.
 
 ## Database Collections
 

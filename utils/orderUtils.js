@@ -81,7 +81,7 @@ async function cancelOrderAtomically(orderId, order, session) {
  * Atomic Counter Format (Recommended for Production)
  * Generates unique order numbers using MongoDB atomic operations
  * Format: BB-YYYYMMDD-UUUU-XXXXX
- * Where: BB = BitesBay, YYYYMMDD = Date, UUUU = User ID (last 4 chars), XXXXX = Vendor-specific atomic counter (5 digits)
+ * Where: BB = KAMPYN, YYYYMMDD = Date, UUUU = User ID (last 4 chars), XXXXX = Vendor-specific atomic counter (5 digits)
  * 
  * Benefits:
  * - Atomic operations prevent race conditions
@@ -119,7 +119,7 @@ async function generateOrderNumber(userId, vendorId) {
  * High-Performance Time-Based Order Number (For Massive Scale)
  * Generates unique order numbers using timestamp and atomic counters
  * Format: BB-TIMESTAMP-UUUU-XXXXX
- * Where: BB = BitesBay, TIMESTAMP = Unix timestamp (10 digits), UUUU = User ID (last 4 chars), XXXXX = Atomic counter (5 digits)
+ * Where: BB = KAMPYN, TIMESTAMP = Unix timestamp (10 digits), UUUU = User ID (last 4 chars), XXXXX = Atomic counter (5 digits)
  * 
  * Benefits for Massive Scale:
  * - Unlimited daily capacity (millions of orders per day)
@@ -157,7 +157,7 @@ async function generateTimeBasedOrderNumber(userId, vendorId) {
  * Ultra-High Performance Order Number with Daily Reset (Recommended)
  * Generates unique order numbers using microsecond timestamps with daily counter reset
  * Format: BB-MICROTIME-UUUU-XXXXX
- * Where: BB = BitesBay, MICROTIME = Microsecond timestamp (13 digits), UUUU = User ID (last 4 chars), XXXXX = Daily atomic counter (5 digits)
+ * Where: BB = KAMPYN, MICROTIME = Microsecond timestamp (13 digits), UUUU = User ID (last 4 chars), XXXXX = Daily atomic counter (5 digits)
  * 
  * Benefits:
  * - Handles 100,000+ orders per second per vendor

@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo    BitesBay Item Addition Scripts
+echo    KAMPYN Item Addition Scripts
 echo ========================================
 echo.
 

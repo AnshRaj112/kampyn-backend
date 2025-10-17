@@ -7,7 +7,7 @@ const { Cluster_Order } = require("../config/db");
 /**
  * Generates a unique order number for migration using Ultra-High Performance Format
  * Format: BB-MICROTIME-UUUU-XXXXX 
- * Where: BB = BitesBay, MICROTIME = Microsecond timestamp (13 digits), UUUU = User ID (last 4 chars), XXXXX = Atomic counter (5 digits)
+ * Where: BB = KAMPYN, MICROTIME = Microsecond timestamp (13 digits), UUUU = User ID (last 4 chars), XXXXX = Atomic counter (5 digits)
  * 
  * Uses microsecond-based atomic counter to ensure maximum performance and zero collision probability
  */

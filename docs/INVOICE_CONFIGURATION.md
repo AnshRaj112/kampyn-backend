@@ -1,6 +1,6 @@
 # Invoice Configuration Guide
 
-This document describes the configuration options available for invoice generation in the BitesBay system.
+This document describes the configuration options available for invoice generation in the KAMPYN system.
 
 ## Environment Variables
 
