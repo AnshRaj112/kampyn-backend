@@ -1,0 +1,117 @@
+name: Deploy to Render
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [ closed ]
+    branches: [ main ]
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    
+    # Only run deployment if PR is merged to main
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'package-lock.json'
+        
+    - name: Install dependencies
+      run: |
+        npm ci
+        
+    - name: Run tests (if available)
+      run: |
+        npm test
+      continue-on-error: true
+      
+    - name: Deploy to Render
+      env:
+        RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
+        RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      run: |
+        echo "🚀 Starting deployment to Render..."
+        echo "Service ID: $RENDER_SERVICE_ID"
+        echo "Token length: ${#RENDER_TOKEN}"
+        
+        # Check if secrets are set
+        if [ -z "$RENDER_TOKEN" ]; then
+          echo "❌ RENDER_TOKEN is not set"
+          exit 1
+        fi
+        
+        if [ -z "$RENDER_SERVICE_ID" ]; then
+          echo "❌ RENDER_SERVICE_ID is not set"
+          exit 1
+        fi
+        
+        # Test API connection first
+        echo "🔍 Testing API connection..."
+        test_response=$(curl -s -w "%{http_code}" -X GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
+          -H "Authorization: Bearer $RENDER_TOKEN")
+        
+        test_http_code="${test_response: -3}"
+        test_response_body="${test_response%???}"
+        
+        if [ "$test_http_code" -eq 200 ]; then
+          echo "✅ API connection successful"
+        else
+          echo "❌ API connection failed with status code: $test_http_code"
+          echo "Response: $test_response_body"
+          echo "Please check your RENDER_TOKEN and RENDER_SERVICE_ID"
+          exit 1
+        fi
+        
+        # Trigger Render deployment via API
+        echo "🚀 Triggering deployment..."
+        response=$(curl -s -w "%{http_code}" -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+          -H "Authorization: Bearer $RENDER_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"clearCache": "do_not_clear"}')
+        
+        # Extract status code and response body
+        http_code="${response: -3}"
+        response_body="${response%???}"
+        
+        echo "Deployment response code: $http_code"
+        echo "Deployment response body: $response_body"
+        
+        if [ "$http_code" -eq 201 ]; then
+          echo "✅ Deployment triggered successfully!"
+        elif [ "$http_code" -eq 400 ]; then
+          echo "❌ Bad request (400) - Check your service configuration"
+          echo "Common causes:"
+          echo "- Service is not a web service"
+          echo "- Service is paused or suspended"
+          echo "- Invalid service ID"
+          exit 1
+        elif [ "$http_code" -eq 401 ]; then
+          echo "❌ Unauthorized (401) - Check your RENDER_TOKEN"
+          exit 1
+        elif [ "$http_code" -eq 404 ]; then
+          echo "❌ Service not found (404) - Check your RENDER_SERVICE_ID"
+          exit 1
+        else
+          echo "❌ Deployment failed with status code: $http_code"
+          exit 1
+        fi
+        
+    - name: Deployment Status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "🎉 Deployment completed successfully!"
+        else
+          echo "💥 Deployment failed!"
+        fi 
