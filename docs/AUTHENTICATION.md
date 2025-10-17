@@ -2,7 +2,7 @@
 
 This document provides a comprehensive guide to the authentication system used in BitesBay backend, including user types, authentication flows, security measures, and implementation details.
 
-**Last Updated:** January 2025
+**Last Updated:** October 2025
 
 ---
 

@@ -2,7 +2,7 @@
 
 This document provides a comprehensive overview of the database schema used in BitesBay backend, including all collections, their fields, relationships, and indexing strategies.
 
-**Last Updated:** July 2025
+**Last Updated:** October 2025
 
 ---
 

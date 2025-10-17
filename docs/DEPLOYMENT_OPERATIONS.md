@@ -2,7 +2,7 @@
 
 This document provides comprehensive guidance for deploying, monitoring, and maintaining the BitesBay backend in production environments.
 
-**Last Updated:** July 2025
+**Last Updated:** October 2025
 
 ---
 
