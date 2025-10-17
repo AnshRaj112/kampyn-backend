@@ -45,7 +45,19 @@ jobs:
           --output-file eslint-results.sarif
         continue-on-error: true
 
+      - name: Check if SARIF file exists
+        id: check-sarif
+        run: |
+          if [ -f "eslint-results.sarif" ]; then
+            echo "sarif-exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "sarif-exists=false" >> $GITHUB_OUTPUT
+            # Create an empty SARIF file if none exists
+            echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"ESLint","version":"8.10.0"}},"results":[]}]}' > eslint-results.sarif
+          fi
+
       - name: Upload analysis results to GitHub
+        if: steps.check-sarif.outputs.sarif-exists == 'true' || steps.check-sarif.outputs.sarif-exists == 'false'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: eslint-results.sarif

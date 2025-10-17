@@ -12,7 +12,9 @@
     "migrate-orders": "node scripts/migrate-orders.js",
     "test-locks": "node scripts/test-locking-system.js",
     "create-admin": "node scripts/create-super-admin.js",
-    "validate-cicd": "node scripts/setup-cicd.js"
+    "validate-cicd": "node scripts/setup-cicd.js",
+    "lint": "eslint . --config .eslintrc.js --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint . --config .eslintrc.js --ext .js,.jsx,.ts,.tsx --fix"
   },
   "keywords": [],
   "author": "",
@@ -40,6 +42,10 @@
     "pdfkit": "^0.14.0",
     "razorpay": "^2.9.6",
     "whatwg-url": "14.2.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.10.0",
+    "@microsoft/eslint-formatter-sarif": "^3.1.0"
   },
   "engines": {
     "node": "18.x || 20.x || 22.x",
