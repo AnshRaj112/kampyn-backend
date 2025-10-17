@@ -173,7 +173,7 @@ exports.getUniversityInvoices = async (req, res) => {
     // Build query - ONLY vendor invoices, exclude platform invoices
     const query = { 
       uniId,
-      invoiceType: 'vendor',  // Only show vendor invoices
+      invoiceType: 'vendor', // Only show vendor invoices
       recipientType: 'vendor' // Ensure it's vendor recipient type
     };
     
@@ -538,9 +538,9 @@ exports.downloadInvoice = async (req, res) => {
         res.setHeader('Content-Length', stats.size);
         
         return res.sendFile(filePath);
-      } else {
+      } 
         console.log(`❌ Local file not found: ${filePath}`);
-      }
+      
     }
     
     // Priority 2: Try Cloudinary URL
@@ -1196,7 +1196,7 @@ exports.generateOrderInvoices = async (req, res) => {
         unit: item.itemId?.unit || 'piece'
       })),
       packagingCharge: 0, // Will be calculated based on university settings
-      deliveryCharge: 0    // Will be calculated based on university settings
+      deliveryCharge: 0 // Will be calculated based on university settings
     };
     
     console.log('🔍 Admin controller - prepared order data:', {

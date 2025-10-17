@@ -353,7 +353,7 @@ exports.getPastOrders = async (req, res) => {
               ...orderDetails,
               vendorId: order.vendorId // Preserve the vendor info we built with college details
             };
-          } else {
+          } 
             console.log(`No details found for order: ${order._id}`);
             // If order details not found, return basic order info
             return {
@@ -370,7 +370,7 @@ exports.getPastOrders = async (req, res) => {
               vendorId: order.vendorId, // Preserve the vendor info we built
               items: []
             };
-          }
+          
         } catch (error) {
           console.error(`Error getting details for order ${order._id}:`, error);
           // Return basic order info if details fetch fails
@@ -637,7 +637,7 @@ exports.getUserActiveOrders = async (req, res) => {
               ...orderDetails,
               vendorId: order.vendorId // Preserve the vendor info we built with college details
             };
-          } else {
+          } 
             console.log(`No details found for order: ${order._id}`);
             // If order details not found, return basic order info
             return {
@@ -654,7 +654,7 @@ exports.getUserActiveOrders = async (req, res) => {
               vendorId: order.vendorId, // Preserve the vendor info we built
               items: []
             };
-          }
+          
         } catch (error) {
           console.error(`Error getting details for order ${order._id}:`, error);
           // Return basic order info if details fetch fails

@@ -99,9 +99,9 @@ async function getVendorReportDates(req, res) {
     const dates = [...new Set(reports.map(r => {
       if (r.date instanceof Date) {
         return formatDateIST(r.date);
-      } else {
+      } 
         return String(r.date).slice(0, 10);
-      }
+      
     }))].sort((a, b) => b.localeCompare(a));
     res.json({ dates });
   } catch (err) {

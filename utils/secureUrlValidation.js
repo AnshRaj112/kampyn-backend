@@ -41,7 +41,7 @@ const MALICIOUS_PATTERNS = [
   /file:/i,
   /ftp:/i,
   /@/g, // User info in URLs
-  /\\/g  // Backslashes
+  /\\/g // Backslashes
 ];
 
 /**

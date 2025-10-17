@@ -36,7 +36,7 @@ exports.toggleFavourite = async (req, res) => {
       );
       await user.save();
       return res.status(200).json({ message: "Favourite removed." });
-    } else {
+    } 
       // Verify the item exists before adding
       const ItemModel = kind === "Retail" ? Retail : Produce;
       const item = await ItemModel.findById(itemId);
@@ -60,7 +60,7 @@ exports.toggleFavourite = async (req, res) => {
       });
       await user.save();
       return res.status(200).json({ message: "Favourite added." });
-    }
+    
   } catch (err) {
     console.error("Error in toggleFavourite:", err);
     res.status(500).json({ error: "Server error", details: err.message });

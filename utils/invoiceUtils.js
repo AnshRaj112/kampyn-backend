@@ -94,13 +94,13 @@ exports.generateOrderInvoices = async (orderData) => {
                cgstPercentage: itemDetails.cgstPercentage,
                packable: itemDetails.packable
              };
-          } else {
+          } 
             // Item already has all required data
             return {
               ...item,
               packable: item.packable || (item.kind === "Produce")
             };
-          }
+          
         } catch (err) {
           console.error(`❌ Error populating item ${item.itemId || item.name}:`, err);
           return {

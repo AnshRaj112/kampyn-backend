@@ -511,7 +511,7 @@ async function postPaymentProcessing(orderDoc) {
           update: { $inc: { "retailInventory.$.quantity": -quantity } },
         },
       };
-    } else {
+    } 
       return {
         updateOne: {
           filter: {
@@ -522,7 +522,7 @@ async function postPaymentProcessing(orderDoc) {
           update: { $set: { "produceInventory.$.isAvailable": "Y" } },
         },
       };
-    }
+    
   });
   if (bulkOps.length) await Vendor.bulkWrite(bulkOps);
 
