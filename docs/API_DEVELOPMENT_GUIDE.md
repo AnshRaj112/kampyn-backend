@@ -1,8 +1,10 @@
-# BitesBay API Development Guide
+# KAMPYN Backend - API Development Guide
 
-This document provides comprehensive guidelines for developing and maintaining APIs in the BitesBay backend system, including coding standards, best practices, and development workflows.
+*Project under **EXSOLVIA** - Excellence in Software Solutions*
 
-**Last Updated:** July 2025
+This document provides comprehensive guidelines for developing and maintaining APIs in the KAMPYN backend system, including coding standards, best practices, and development workflows.
+
+**Last Updated:** January 2025
 
 ---
 
@@ -24,7 +26,7 @@ This document provides comprehensive guidelines for developing and maintaining A
 
 ### Directory Organization
 ```
-kiitbites-backend/
+kampyn-backend/
 ├── config/                 # Configuration files
 ├── controllers/           # Route handlers
 │   ├── auth/             # Authentication controllers
@@ -158,22 +160,39 @@ const getUser = (req, res) => {
 #### Endpoint Examples:
 ```javascript
 // Users
-GET    /api/user/auth/user          // Get current user
-POST   /api/user/auth/signup        // Create user
-PUT    /api/user/auth/profile       // Update user profile
-DELETE /api/user/auth/logout        // Logout user
+GET    /api/auth/user               // Get current user
+POST   /api/auth/signup             // Create user
+PUT    /api/auth/profile            // Update user profile
+DELETE /api/auth/logout             // Logout user
 
 // Orders
-GET    /order/:orderId              // Get specific order
-POST   /order/:userId               // Create order
-PATCH  /order/:orderId/complete     // Update order status
-DELETE /order/:orderId/cancel       // Cancel order
+GET    /api/orders/:orderId         // Get specific order
+POST   /api/orders                  // Create order
+PATCH  /api/orders/:orderId/status  // Update order status
+DELETE /api/orders/:orderId/cancel  // Cancel order
 
 // Items
-GET    /api/item/:category/uni/:uniId  // Get items by category
-POST   /api/item/:category             // Create item
-PUT    /api/item/:category/:id         // Update item
-DELETE /api/item/:category/:id         // Delete item
+GET    /api/items/category/:category // Get items by category
+POST   /api/items                   // Create item
+PUT    /api/items/:id               // Update item
+DELETE /api/items/:id               // Delete item
+
+// Vendors
+GET    /api/vendors                 // Get all vendors
+POST   /api/vendors                 // Create vendor
+PUT    /api/vendors/:id             // Update vendor
+DELETE /api/vendors/:id             // Delete vendor
+
+// Inventory
+GET    /api/inventory               // Get inventory
+POST   /api/inventory               // Add inventory item
+PUT    /api/inventory/:id           // Update inventory
+DELETE /api/inventory/:id           // Remove inventory item
+
+// Payments
+POST   /api/payments/create         // Create payment
+POST   /api/payments/verify         // Verify payment
+GET    /api/payments/:id            // Get payment details
 ```
 
 ### 2. Response Format Standards
@@ -186,7 +205,7 @@ DELETE /api/item/:category/:id         // Delete item
   "data": {
     // Response data
   },
-  "timestamp": "2025-01-15T10:30:00Z"
+  "timestamp": "2025-01-15T10:30:00.000Z"
 }
 ```
 
@@ -196,7 +215,7 @@ DELETE /api/item/:category/:id         // Delete item
   "success": false,
   "message": "Error description",
   "error": "Detailed error message (development only)",
-  "timestamp": "2025-01-15T10:30:00Z"
+  "timestamp": "2025-01-15T10:30:00.000Z"
 }
 ```
 
@@ -364,8 +383,9 @@ const authorize = (...roles) => {
 ### 3. Role-Based Access Control
 ```javascript
 // Usage in routes
-router.get('/admin/users', authenticate, authorize('admin', 'super_admin'), getUsers);
-router.post('/vendor/items', authenticate, authorize('vendor'), createItem);
+router.get('/api/admin/users', authenticate, authorize('admin', 'super_admin'), getUsers);
+router.post('/api/vendors/:id/items', authenticate, authorize('vendor'), createItem);
+router.get('/api/orders', authenticate, authorize('user', 'vendor', 'admin'), getOrders);
 ```
 
 ---
@@ -408,10 +428,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  type: {
+  role: {
     type: String,
     default: 'user',
-    enum: ['user', 'vendor', 'university', 'admin']
+    enum: ['user', 'vendor', 'university', 'admin', 'super_admin']
   }
 }, {
   timestamps: true
@@ -510,7 +530,7 @@ describe('User Authentication', () => {
     await User.deleteMany({});
   });
 
-  describe('POST /api/user/auth/signup', () => {
+  describe('POST /api/auth/signup', () => {
     it('should create a new user with valid data', async () => {
       const userData = {
         fullName: 'John Doe',
@@ -522,7 +542,7 @@ describe('User Authentication', () => {
       };
 
       const response = await request(app)
-        .post('/api/user/auth/signup')
+        .post('/api/auth/signup')
         .send(userData)
         .expect(201);
 
@@ -540,7 +560,7 @@ describe('User Authentication', () => {
       });
 
       const response = await request(app)
-        .post('/api/user/auth/signup')
+        .post('/api/auth/signup')
         .send({
           fullName: 'John Doe',
           email: 'jane@example.com', // Duplicate email
@@ -572,14 +592,15 @@ describe('Order Flow Integration', () => {
   it('should complete full order flow', async () => {
     // 1. Add item to cart
     const cartResponse = await request(app)
-      .post(`/cart/add/${user._id}`)
+      .post(`/api/cart/add/${user._id}`)
       .send({ itemId: item._id, quantity: 2 })
       .expect(200);
 
     // 2. Place order
     const orderResponse = await request(app)
-      .post(`/order/${user._id}`)
+      .post(`/api/orders`)
       .send({
+        userId: user._id,
         vendorId: vendor._id,
         items: [{ itemId: item._id, quantity: 2 }]
       })
@@ -633,7 +654,11 @@ const getVendorItems = async (req, res) => {
     await cache.set(cacheKey, items, 1800); // 30 minutes
   }
 
-  res.json({ items });
+  res.json({ 
+    success: true,
+    data: { items },
+    message: 'Items retrieved successfully'
+  });
 };
 ```
 
@@ -738,7 +763,7 @@ const signup = async (req, res) => {
 ### 2. API Documentation
 ```javascript
 /**
- * @api {post} /api/user/auth/signup Create User Account
+ * @api {post} /api/auth/signup Create User Account
  * @apiName CreateUser
  * @apiGroup Authentication
  * @apiVersion 1.0.0
@@ -831,4 +856,8 @@ Remember to:
 - Review and update these guidelines regularly
 - Share knowledge with team members
 - Continuously improve development practices
-- Stay updated with industry best practices 
+- Stay updated with industry best practices
+
+---
+
+**© 2025 EXSOLVIA. All rights reserved.** 

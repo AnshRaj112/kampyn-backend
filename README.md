@@ -1,114 +1,59 @@
-# BitesBay - Backend
+# KAMPYN - Backend
+
+*Project under **EXSOLVIA** - Excellence in Software Solutions*
 
 ## Introduction
-The **BitesBay Backend** is the core of the food ordering and inventory management system for universities. It handles user authentication, order processing, inventory tracking, payment processing, and real-time updates. This backend is built using **Node.js with Express.js** and uses **MongoDB** and **Mongoose** as the database.
+The **KAMPYN Backend** serves as the core infrastructure for our comprehensive food ordering and inventory management ecosystem designed for university campuses.
 
 ## Tech Stack
 - **Backend Framework:** Node.js with Express.js
-- **Database:** MongoDB (Mongoose ODM)
+- **Database:** MongoDB with Mongoose ODM
 - **Authentication:** JWT (JSON Web Token)
 - **Real-Time Communication:** Socket.io
-- **Caching:** Redis (for session management and performance optimization)
-- **Security:** Helmet, CORS, bcrypt.js
+- **Caching:** Redis
 - **Payment Gateway:** Razorpay
-- **Email Service:** Nodemailer for OTP delivery
+- **Email Service:** Nodemailer
 
 ## Features
-### User Management
 - Multi-role authentication (Users, Admins, Vendors, Universities)
-- JWT-based login and registration
-- OTP verification system
-- Google OAuth authentication
-- Password reset functionality
+- Real-time order processing and tracking
+- Intelligent inventory management
+- Secure payment integration
+- Advanced notification system
+- Comprehensive analytics and reporting
 
-### Order Management
-- Place, update, and cancel orders
-- Real-time order status updates with WebSockets
-- Order tracking for users
-- Digital queue management for food pickup
-- Guest order support
+## Quick Start
 
-### Inventory Management
-- Food courts can manage stock levels in real-time
-- Low-stock alerts and expiry tracking
-- Offline mode support with data synchronization
-- Inventory reporting system
-
-### Payment Integration
-- Razorpay payment gateway integration
-- Supports multiple payment methods (UPI, Cards, Wallets)
-- Secure transactions with order validation
-- Payment failure handling with retry mechanism
-
-### Notifications
-- Email and push notifications for order updates
-- WebSocket-based real-time alerts
-- OTP delivery via email
-
-## Environment Variables
-Create a `.env` file in the root directory and configure the following variables:
-```
-PORT=5001
-MONGO_URL=your_mongodb_uri
-JWT_SECRET=your_secret_key
-REDIS_URL=your_redis_url
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-NEXT_PUBLIC_BACKEND_URL=your_backend_url
-BACKEND_URL=your_backend_url
-PAYMENT_GATEWAY_KEY=your_payment_gateway_key
-RAZORPAY_KEY_ID=your_razorpay_key_id
-RAZORPAY_KEY_SECRET=your_razorpay_key_secret
-EMAIL_USER=your_email
-EMAIL_PASS=your_email_password
-CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
-```
-
-## Installation & Setup
 ### Prerequisites
-- Node.js (v16 or higher) and npm installed
-- MongoDB set up and running
-- Redis server (optional, for caching)
+- Node.js (v18 or higher)
+- MongoDB database
+- Redis server (optional)
 
-### Installation Steps
-1. **Fork the repository** on GitHub.
-2. **Clone the repository**:
-   ```bash
-   git clone https://github.com/your-repo/BitesBay-Backend.git
-   cd BitesBay-Backend
-   ```
-3. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-4. **Create a new branch** following the naming convention:
-   - For new features: `features/feature-name`
-   - For bug fixes: `fixes/fix-name/feature-name`
-   ```bash
-   git checkout -b features/your-feature-name
-   ```
-5. **Configure environment variables**:
-   - Copy `.env.example` to `.env` (if available)
-   - Fill in your configuration values
-6. **Start the backend server**:
-   ```bash
-   npm run dev
-   ```
-7. The backend server will start on `http://localhost:5001`
+### Installation
+```bash
+# Clone repository
+git clone https://github.com/exsolvia/kampyn-backend.git
+cd kampyn-backend
 
-## API Documentation
-For detailed API documentation, see the following files in the `docs/` directory:
-- [API Reference](./docs/API_REFERENCE.md) - Complete API endpoint documentation
-- [Authentication Guide](./docs/AUTHENTICATION.md) - Authentication system documentation
-- [Deployment Guide](./docs/DEPLOYMENT.md) - Deployment instructions
-- [Troubleshooting](./docs/TROUBLESHOOTING.md) - Common issues and solutions
+# Install dependencies
+npm install
 
-## Quick Start API Examples
+# Configure environment
+cp .env.example .env
+# Edit .env with your configuration
+
+# Start development server
+npm run dev
+```
+
+Server will start on `http://localhost:5001`
+
+## Quick API Examples
+
 ### Authentication
 ```bash
 # User Registration
-POST /api/user/auth/signup
+POST /api/auth/signup
 {
   "fullName": "John Doe",
   "email": "john@example.com",
@@ -119,7 +64,7 @@ POST /api/user/auth/signup
 }
 
 # User Login
-POST /api/user/auth/login
+POST /api/auth/login
 {
   "identifier": "john@example.com",
   "password": "password123"
@@ -129,26 +74,80 @@ POST /api/user/auth/login
 ### Orders
 ```bash
 # Place Order
-POST /order/:userId
+POST /api/orders
 {
+  "userId": "user_id",
   "items": [...],
   "vendorId": "vendor_id",
   "orderType": "dinein"
 }
 
 # Get Order Status
-GET /order/:orderId
+GET /api/orders/:orderId
+```
+
+## Environment Variables
+```env
+PORT=5001
+MONGO_URL=your_mongodb_uri
+JWT_SECRET=your_secret_key
+REDIS_URL=your_redis_url
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+EMAIL_USER=your_email
+EMAIL_PASS=your_email_password
+```
+
+## Documentation
+- [API Development Guide](./docs/API_DEVELOPMENT_GUIDE.md)
+- [API Reference](./docs/API_REFERENCE.md)
+- [Authentication Guide](./docs/AUTHENTICATION.md)
+- [Database Schema](./docs/DATABASE_SCHEMA.md)
+- [Deployment Guide](./docs/DEPLOYMENT.md)
+- [Development Guide](./docs/DEVELOPMENT_GUIDE.md)
+- [Features Overview](./docs/FEATURES_OVERVIEW.md)
+- [Architecture Guide](./docs/ARCHITECTURE_GUIDE.md)
+- [Git Workflow](./docs/GIT_WORKFLOW.md)
+
+## Development Workflow
+
+### Branch Naming Convention
+- **Features:** `feature/feature-description`
+- **Bug Fixes:** `fix/bug-description`
+- **Hotfixes:** `hotfix/critical-fix-description`
+
+### Commit Message Format
+```bash
+# Feature development
+git commit -m "feat: implement user authentication system"
+
+# Bug fixes
+git commit -m "fix: resolve payment validation issue"
+
+# Documentation updates
+git commit -m "docs: update API documentation"
+
+# Code refactoring
+git commit -m "refactor: improve order processing logic"
+
+# Performance improvements
+git commit -m "perf: optimize database queries"
 ```
 
 ## Contributing
-1. Fork the repository.
-2. Create a new branch (`git checkout -b features/feature-name` or `fixes/fix-name/feature-name`).
-3. Commit your changes (`git commit -m 'Added new feature'`).
-4. Push to your branch (`git push origin features/feature-name`).
-5. Open a pull request.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit your changes (`git commit -m 'feat: add new feature'`)
+4. Push to your branch (`git push origin feature/your-feature`)
+5. Open a pull request
 
 ## License
 This project is licensed under the MIT License.
 
-## Contact
-For queries or contributions, contact the **BitesBay Backend Team** at [bitesbay@gmail.com](mailto:bitesbay@gmail.com).
+## Support & Contact
+- **Technical Support:** [tech-support@exsolvia.com](mailto:tech-support@exsolvia.com)
+- **General Inquiries:** [info@exsolvia.com](mailto:info@exsolvia.com)
+
+---
+
+**© 2025 EXSOLVIA. All rights reserved.**

@@ -52,7 +52,7 @@ exports.getVendorInvoices = async (req, res) => {
     // Execute query with pagination
     const skip = (page - 1) * limit;
     const invoices = await Invoice.find(query)
-      .populate('orderId', 'orderNumber status')
+      .populate({ path: 'orderId', select: 'orderNumber status', model: Order })
       .populate({ path: 'uniId', select: 'fullName', model: Uni })
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -118,7 +118,7 @@ exports.getAdminInvoices = async (req, res) => {
     // Execute query with pagination
     const skip = (page - 1) * limit;
     const invoices = await Invoice.find(query)
-      .populate('orderId', 'orderNumber status')
+      .populate({ path: 'orderId', select: 'orderNumber status', model: Order })
       .populate({ path: 'vendorId', select: 'fullName name', model: Vendor })
       .populate({ path: 'uniId', select: 'fullName', model: Uni })
       .sort({ createdAt: -1 })
@@ -154,7 +154,7 @@ exports.getAdminInvoices = async (req, res) => {
 
 /**
  * GET /invoices/university/:uniId
- * Get all invoices for a specific university
+ * Get all vendor invoices for a specific university (excludes platform invoices)
  */
 exports.getUniversityInvoices = async (req, res) => {
   try {
@@ -170,8 +170,12 @@ exports.getUniversityInvoices = async (req, res) => {
       });
     }
     
-    // Build query
-    const query = { uniId };
+    // Build query - ONLY vendor invoices, exclude platform invoices
+    const query = { 
+      uniId,
+      invoiceType: 'vendor',  // Only show vendor invoices
+      recipientType: 'vendor' // Ensure it's vendor recipient type
+    };
     
     if (startDate && endDate) {
       query.createdAt = {
@@ -188,17 +192,19 @@ exports.getUniversityInvoices = async (req, res) => {
       query.vendorId = vendorId;
     }
     
-    if (invoiceType) {
+    // invoiceType is already set to 'vendor', but allow override for filtering
+    if (invoiceType && invoiceType !== 'vendor') {
       query.invoiceType = invoiceType;
     }
     
     // Execute query with pagination
     const skip = (page - 1) * limit;
     const invoices = await Invoice.find(query)
-      .populate('orderId', 'orderNumber status')
-      .populate('vendorId', 'name')
-      .populate('recipientId', 'name')
-      .sort({ createdAt: -1 })
+      .populate({ path: 'orderId', select: 'orderNumber status', model: Order })
+      // Explicitly specify models from Accounts DB to avoid cross-connection registration issues
+      .populate({ path: 'vendorId', select: 'fullName name', model: Vendor })
+      // recipientId can be Vendor or Admin via refPath; avoid cross-connection populate here
+      .sort({ createdAt: -1 }) // Latest reports first
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
@@ -238,9 +244,9 @@ exports.getInvoiceById = async (req, res) => {
     const { invoiceId } = req.params;
     
     const invoice = await Invoice.findById(invoiceId)
-      .populate('vendorId', 'name fullName')
-      .populate('uniId', 'fullName')
-      .populate('orderId', 'orderNumber status')
+      .populate({ path: 'vendorId', select: 'name fullName', model: Vendor })
+      .populate({ path: 'uniId', select: 'fullName', model: Uni })
+      .populate({ path: 'orderId', select: 'orderNumber status', model: Order })
       .lean();
     
     if (!invoice) {
@@ -403,8 +409,8 @@ exports.getOrderRazorpayInvoices = async (req, res) => {
     
     // Get all invoices for the order
     const invoices = await Invoice.find({ orderId })
-      .populate('vendorId', 'name fullName')
-      .populate('uniId', 'fullName')
+      .populate({ path: 'vendorId', select: 'name fullName', model: Vendor })
+      .populate({ path: 'uniId', select: 'fullName', model: Uni })
       .sort({ createdAt: -1 })
       .lean();
     
@@ -625,8 +631,8 @@ exports.downloadOrderInvoices = async (req, res) => {
     
     // Get all invoices for the order
     const invoices = await Invoice.find({ orderId })
-      .populate('vendorId', 'name')
-      .populate('uniId', 'fullName')
+      .populate({ path: 'vendorId', select: 'name', model: Vendor })
+      .populate({ path: 'uniId', select: 'fullName', model: Uni })
       .sort({ createdAt: -1 })
       .lean();
     
@@ -704,7 +710,7 @@ exports.downloadOrderInvoices = async (req, res) => {
           try {
             const cloudinaryResponse = await fetch(invoice.pdfUrl);
             if (cloudinaryResponse.ok) {
-              pdfBuffer = await cloudinaryResponse.buffer();
+              pdfBuffer = Buffer.from(await cloudinaryResponse.arrayBuffer());
               console.log(`✅ Downloaded from Cloudinary: ${pdfBuffer.length} bytes`);
             } else {
               console.log(`❌ Cloudinary download failed: ${cloudinaryResponse.status}`);
@@ -721,7 +727,7 @@ exports.downloadOrderInvoices = async (req, res) => {
           try {
             const razorpayResponse = await fetch(invoice.razorpayInvoiceUrl);
             if (razorpayResponse.ok) {
-              pdfBuffer = await razorpayResponse.buffer();
+              pdfBuffer = Buffer.from(await razorpayResponse.arrayBuffer());
               console.log(`✅ Downloaded from Razorpay: ${pdfBuffer.length} bytes`);
             } else {
               console.log(`❌ Razorpay download failed: ${razorpayResponse.status}`);
@@ -749,7 +755,7 @@ exports.downloadOrderInvoices = async (req, res) => {
               if (razorpayData.short_url) {
                 const pdfResponse = await fetch(razorpayData.short_url);
                 if (pdfResponse.ok) {
-                  pdfBuffer = await pdfResponse.buffer();
+                  pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
                   console.log(`✅ Downloaded from Razorpay API: ${pdfBuffer.length} bytes`);
                 }
               }
@@ -879,6 +885,7 @@ exports.getInvoicesForBulkDownload = async (req, res) => {
  * Download multiple invoices as ZIP file with date range filtering
  */
 exports.bulkZipDownload = async (req, res) => {
+  let tempDir = null;
   try {
     const { startDate, endDate, vendorId, uniId, invoiceType, recipientType, orderIds } = req.body;
     
@@ -907,9 +914,9 @@ exports.bulkZipDownload = async (req, res) => {
     
     // Get invoices matching criteria
     const invoices = await Invoice.find(query)
-      .populate('vendorId', 'name')
-      .populate('uniId', 'fullName')
-      .populate('orderId', 'orderNumber')
+      .populate({ path: 'vendorId', select: 'name fullName', model: Vendor })
+      .populate({ path: 'uniId', select: 'fullName', model: Uni })
+      .populate({ path: 'orderId', select: 'orderNumber', model: Order })
       .sort({ createdAt: -1 })
       .lean();
     
@@ -923,7 +930,7 @@ exports.bulkZipDownload = async (req, res) => {
     console.log(`📄 Found ${invoices.length} invoices for bulk download`);
     
     // Create temporary directory for ZIP creation
-    const tempDir = path.join(os.tmpdir(), `bulk_invoices_${Date.now()}`);
+    tempDir = path.join(os.tmpdir(), `bulk_invoices_${Date.now()}`);
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
@@ -937,11 +944,13 @@ exports.bulkZipDownload = async (req, res) => {
     // Listen for archive events
     archive.on('error', (err) => {
       console.error('❌ ZIP creation error:', err);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to create ZIP file',
-        error: err.message
-      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to create ZIP file',
+          error: err.message
+        });
+      }
     });
     
     output.on('close', () => {
@@ -988,7 +997,7 @@ exports.bulkZipDownload = async (req, res) => {
           try {
             const cloudinaryResponse = await fetch(invoice.pdfUrl);
             if (cloudinaryResponse.ok) {
-              pdfBuffer = await cloudinaryResponse.buffer();
+              pdfBuffer = Buffer.from(await cloudinaryResponse.arrayBuffer());
               console.log(`✅ Downloaded from Cloudinary: ${pdfBuffer.length} bytes`);
             } else {
               console.log(`❌ Cloudinary download failed: ${cloudinaryResponse.status}`);
@@ -1005,7 +1014,7 @@ exports.bulkZipDownload = async (req, res) => {
           try {
             const razorpayResponse = await fetch(invoice.razorpayInvoiceUrl);
             if (razorpayResponse.ok) {
-              pdfBuffer = await razorpayResponse.buffer();
+              pdfBuffer = Buffer.from(await razorpayResponse.arrayBuffer());
               console.log(`✅ Downloaded from Razorpay: ${pdfBuffer.length} bytes`);
             } else {
               console.log(`❌ Razorpay download failed: ${razorpayResponse.status}`);
@@ -1033,7 +1042,7 @@ exports.bulkZipDownload = async (req, res) => {
               if (razorpayData.short_url) {
                 const pdfResponse = await fetch(razorpayData.short_url);
                 if (pdfResponse.ok) {
-                  pdfBuffer = await pdfResponse.buffer();
+                  pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
                   console.log(`✅ Downloaded from Razorpay API: ${pdfBuffer.length} bytes`);
                 }
               }
@@ -1105,11 +1114,25 @@ This invoice encountered an error during processing.`;
     
   } catch (error) {
     console.error('❌ Error creating bulk ZIP:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create bulk ZIP file',
-      error: error.message
-    });
+    
+    // Clean up temporary directory if it exists
+    if (tempDir && fs.existsSync(tempDir)) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        console.log('🧹 Cleaned up temp directory after error');
+      } catch (cleanupError) {
+        console.warn('⚠️ Failed to cleanup temp directory:', cleanupError.message);
+      }
+    }
+    
+    // Check if response has already been sent
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create bulk ZIP file',
+        error: error.message
+      });
+    }
   }
 };
 
@@ -1131,7 +1154,7 @@ exports.generateOrderInvoices = async (req, res) => {
     // Get order details
     const order = await Order.findById(orderId)
       .populate('items.itemId', 'name price priceExcludingTax gstPercentage sgstPercentage cgstPercentage hsnCode packable unit')
-      .populate('vendorId', 'name uniID')
+      .populate({ path: 'vendorId', select: 'name uniID', model: Vendor })
       .lean();
     
     if (!order) {
