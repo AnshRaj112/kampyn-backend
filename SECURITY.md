@@ -16,11 +16,12 @@ This document outlines the security measures, best practices, and vulnerability 
 
 ### Security Stack
 ```
-Authentication: JWT + bcrypt + OTP
-Authorization: Role-based access control (RBAC)
-Data Protection: HTTPS + Input validation + SQL injection prevention
-Monitoring: Rate limiting + Audit logging + Error tracking
-Infrastructure: CORS + Security headers + Environment isolation
+Authentication: JWT + bcrypt + OTP + Multi-factor authentication
+Authorization: Role-based access control (RBAC) + Resource-level permissions
+Data Protection: HTTPS + Input validation + NoSQL injection prevention + Encryption at rest
+Monitoring: Rate limiting + Audit logging + Error tracking + Security event monitoring
+Infrastructure: CORS + Security headers + Environment isolation + Secure URL validation
+Vulnerability Management: Automated scanning + Dependency audits + Security testing
 ```
 
 ---
@@ -56,6 +57,58 @@ const jwtConfig = {
 - **Logout:** Immediate token invalidation
 - **Concurrent Sessions:** Limited to 3 active sessions per user
 - **Device Tracking:** Log device information for suspicious activity
+
+---
+
+## 🚨 Recent Security Updates
+
+### CVE-2025-56200 - validator.js URL Validation Bypass (RESOLVED ✅)
+
+**Date Fixed:** October 2025  
+**Severity:** High  
+**Status:** RESOLVED
+
+#### Vulnerability Details
+- **Issue:** URL validation bypass in validator.js through version 13.15.15
+- **Impact:** Potential XSS and Open Redirect attacks
+- **Root Cause:** Protocol parsing discrepancy between validator.js and browser implementations
+
+#### Resolution
+- **Action:** Removed unused express-validator dependency
+- **Implementation:** Custom secure URL validation using native JavaScript URL constructor
+- **Testing:** Comprehensive security test suite implemented
+- **Verification:** npm audit shows 0 vulnerabilities
+
+#### Security Improvements
+```javascript
+// Secure URL validation implementation
+const validateURL = (url, options = {}) => {
+  try {
+    const parsedUrl = new URL(url);
+    
+    // Protocol validation - only allow HTTP/HTTPS
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return { valid: false, error: 'Invalid protocol', code: 'INVALID_PROTOCOL' };
+    }
+    
+    // Host validation - whitelist approach
+    if (!ALLOWED_HOSTS.includes(parsedUrl.hostname)) {
+      return { valid: false, error: 'Host not allowed', code: 'INVALID_HOST' };
+    }
+    
+    return { valid: true, parsedUrl, hostname: parsedUrl.hostname };
+  } catch (error) {
+    return { valid: false, error: 'Invalid URL format', code: 'INVALID_FORMAT' };
+  }
+};
+```
+
+#### Security Test Coverage
+- Malicious URL pattern detection
+- Protocol validation testing
+- Host whitelist verification
+- Input sanitization validation
+- Length and character validation
 
 ---
 
@@ -288,21 +341,23 @@ app.use((err, req, res, next) => {
 
 ### Common Vulnerabilities
 
-#### 1. SQL Injection
+#### 1. NoSQL Injection
 **Risk Level:** High
 **Prevention:**
-- Use Mongoose ODM (prevents SQL injection)
-- Validate all inputs
-- Use parameterized queries
-- Regular security audits
+- Use Mongoose ODM with proper schema validation
+- Validate all inputs using custom validation functions
+- Use parameterized queries and aggregation pipelines
+- Regular security audits and dependency scanning
+- Implement input sanitization for all user inputs
 
 #### 2. XSS (Cross-Site Scripting)
 **Risk Level:** Medium
 **Prevention:**
-- Input sanitization
-- Output encoding
-- Content Security Policy (CSP)
-- XSS protection headers
+- Input sanitization using DOMPurify and custom validation
+- Output encoding for all user-generated content
+- Content Security Policy (CSP) with strict directives
+- XSS protection headers (X-XSS-Protection)
+- Secure URL validation to prevent javascript: protocol attacks
 
 #### 3. CSRF (Cross-Site Request Forgery)
 **Risk Level:** Medium
@@ -320,13 +375,23 @@ app.use((err, req, res, next) => {
 - Session management
 - Account lockout policies
 
-#### 5. Sensitive Data Exposure
+#### 5. URL Validation Bypass
 **Risk Level:** High
 **Prevention:**
-- HTTPS everywhere
-- Data encryption at rest
-- Secure headers
-- Environment variable protection
+- Use native JavaScript URL constructor for validation
+- Implement protocol whitelisting (HTTP/HTTPS only)
+- Host whitelist validation for trusted domains
+- Comprehensive input sanitization
+- Regular security testing for URL validation bypasses
+
+#### 6. Sensitive Data Exposure
+**Risk Level:** High
+**Prevention:**
+- HTTPS everywhere with HSTS headers
+- Data encryption at rest and in transit
+- Secure headers (X-Content-Type-Options, X-Frame-Options)
+- Environment variable protection and secrets management
+- Regular security audits for data exposure risks
 
 ### Security Headers Implementation
 ```javascript
@@ -426,8 +491,8 @@ FRONTEND_URL=https://your-frontend-domain.com
 ```javascript
 // Security test examples
 describe('Security Tests', () => {
-  test('should prevent SQL injection', async () => {
-    const maliciousInput = "'; DROP TABLE users; --";
+  test('should prevent NoSQL injection', async () => {
+    const maliciousInput = { "$ne": null };
     const response = await request(app)
       .post('/api/user/auth/login')
       .send({ email: maliciousInput, password: 'password' });
@@ -442,6 +507,35 @@ describe('Security Tests', () => {
       .set('Authorization', `Bearer ${invalidToken}`);
     
     expect(response.status).toBe(401);
+  });
+
+  test('should prevent URL validation bypass attacks', async () => {
+    const maliciousUrls = [
+      'javascript:alert("XSS")',
+      'data:text/html,<script>alert("XSS")</script>',
+      'vbscript:msgbox("XSS")',
+      'file:///etc/passwd'
+    ];
+    
+    maliciousUrls.forEach(url => {
+      const result = validateURL(url);
+      expect(result.valid).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+  });
+
+  test('should validate secure URL patterns', async () => {
+    const validUrls = [
+      'https://kampyn.com',
+      'https://api.kampyn.com/orders',
+      'http://localhost:3000'
+    ];
+    
+    validUrls.forEach(url => {
+      const result = validateURL(url);
+      expect(result.valid).toBe(true);
+      expect(result.parsedUrl).toBeDefined();
+    });
   });
 });
 ```
