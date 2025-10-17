@@ -4,7 +4,7 @@
 
 This document provides comprehensive guidelines for developing and maintaining APIs in the KAMPYN backend system, including coding standards, best practices, and development workflows.
 
-**Last Updated:** January 2025
+**Last Updated:** October 2025
 
 ---
 

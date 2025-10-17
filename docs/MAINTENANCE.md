@@ -1,8 +1,8 @@
 # Maintenance Documentation
 
-This document provides guidelines and best practices for maintaining the BitesBay backend system, including routine tasks, backup procedures, monitoring, troubleshooting, and operational checklists.
+This document provides guidelines and best practices for maintaining the KAMPYN backend system, including routine tasks, backup procedures, monitoring, troubleshooting, and operational checklists.
 
-**Last Updated:** January 2025
+**Last Updated:** October 2025
 
 ---
 

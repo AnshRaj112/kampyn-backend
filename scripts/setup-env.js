@@ -39,7 +39,7 @@ NEXT_PUBLIC_RAZORPAY_KEY_SECRET=your_actual_razorpay_secret_key_here
 NEXT_PUBLIC_BACKEND_URL=http://localhost:3000
 
 # Other Configuration
-NEXT_PUBLIC_APP_NAME=BitesBay
+NEXT_PUBLIC_APP_NAME=KAMPYN
 NEXT_PUBLIC_APP_VERSION=1.0.0
 
 # Feature Flags

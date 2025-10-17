@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the available API endpoints for accessing and downloading invoices in the BitesBay system.
+This document describes the available API endpoints for accessing and downloading invoices in the KAMPYN system.
 
 ## Base URL
 

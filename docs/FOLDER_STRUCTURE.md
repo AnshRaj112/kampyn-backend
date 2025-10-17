@@ -1,4 +1,4 @@
-# BitesBay Backend - Folder Structure
+# KAMPYN Backend - Folder Structure
 
 **Generated:** 2025-07-11 23:14:13
 
@@ -8,7 +8,7 @@
 
 ---
 
-📁 **BitesBay Backend**
+📁 **KAMPYN Backend**
    📊 **Files:** 113 | **Dirs:** 8 | **Size:** 544.4 KB
 
 |- 📂 **config**

@@ -1,8 +1,8 @@
-# BitesBay Backend Documentation
+# KAMPYN Backend Documentation
 
-Welcome to the comprehensive documentation for the BitesBay backend system. This documentation provides detailed information about the architecture, APIs, deployment, and development guidelines.
+Welcome to the comprehensive documentation for the KAMPYN backend system. This documentation provides detailed information about the architecture, APIs, deployment, and development guidelines.
 
-**Last Updated:** July 2025
+**Last Updated:** October 2025
 
 ---
 
@@ -66,7 +66,7 @@ Welcome to the comprehensive documentation for the BitesBay backend system. This
 ## 🏛️ System Architecture
 
 ### Overview
-BitesBay is a multi-tenant food ordering platform designed for universities, featuring:
+KAMPYN is a multi-tenant food ordering platform designed for universities, featuring:
 
 - **Multi-role authentication** (Users, Vendors, Universities, Admins)
 - **Real-time order management** with WebSocket support
@@ -403,11 +403,11 @@ Bug Fixes
 
 ## 🎉 Conclusion
 
-This documentation provides a comprehensive guide to the BitesBay backend system. Whether you're a developer, DevOps engineer, or system administrator, you'll find the information you need to work effectively with the platform.
+This documentation provides a comprehensive guide to the KAMPYN backend system. Whether you're a developer, DevOps engineer, or system administrator, you'll find the information you need to work effectively with the platform.
 
 **Remember**: This documentation is a living document. Please contribute improvements, report issues, and suggest enhancements to keep it current and useful for the entire team.
 
 ---
 
-*Last updated: January 2025*
-*BitesBay Backend Team* 
+*Last updated: October 2025*
+*KAMPYN Backend Team* 

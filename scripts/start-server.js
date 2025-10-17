@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-console.log('🚀 Starting BitesBay Backend Server...');
+console.log('🚀 Starting KAMPYN Backend Server...');
 console.log('Node.js version:', process.version);
 console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
 

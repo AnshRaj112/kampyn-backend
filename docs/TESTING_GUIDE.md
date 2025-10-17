@@ -1,8 +1,8 @@
-# BitesBay Testing Guide
+# KAMPYN Testing Guide
 
-This document provides comprehensive guidelines for testing the BitesBay backend system, including unit tests, integration tests, API tests, and testing best practices.
+This document provides comprehensive guidelines for testing the KAMPYN backend system, including unit tests, integration tests, API tests, and testing best practices.
 
-**Last Updated:** July 2025
+**Last Updated:** October 2025
 
 ---
 

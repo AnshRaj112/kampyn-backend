@@ -1,8 +1,8 @@
 # Performance Documentation
 
-This document outlines performance optimization strategies, monitoring practices, and best practices for the BitesBay backend system.
+This document outlines performance optimization strategies, monitoring practices, and best practices for the KAMPYN backend system.
 
-**Last Updated:** January 2025
+**Last Updated:** October 2025
 
 ---
 

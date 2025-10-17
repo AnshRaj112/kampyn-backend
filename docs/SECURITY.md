@@ -1,8 +1,8 @@
 # Security Documentation
 
-This document outlines the security measures, best practices, and vulnerability management for the BitesBay backend system.
+This document outlines the security measures, best practices, and vulnerability management for the KAMPYN backend system.
 
-**Last Updated:** January 2025
+**Last Updated:** October 2025
 
 ---
 
@@ -414,8 +414,8 @@ FRONTEND_URL=https://your-frontend-domain.com
    - Communicate with stakeholders
 
 ### Contact Information
-- **Security Team:** security@bitesbay.com
-- **Emergency Hotline:** +91-XXX-XXX-XXXX
+- **Security Team:** contact@kampyn.com
+- **Emergency Contact:** Available 24/7 for critical security issues
 - **Escalation:** CTO and CEO for critical incidents
 
 ---
@@ -460,6 +460,8 @@ describe('Security Tests', () => {
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [Node.js Security Best Practices](https://nodejs.org/en/docs/guides/security/)
 - [MongoDB Security Checklist](https://docs.mongodb.com/manual/security/)
+- [Security Advisory: validator.js Vulnerability](./SECURITY_ADVISORY_VALIDATOR.md)
+- [Security Vulnerability Fix Guide](./SECURITY_VULNERABILITY_FIX.md)
 
 ### Tools
 - **Static Analysis:** ESLint security rules

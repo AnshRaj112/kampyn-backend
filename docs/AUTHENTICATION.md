@@ -1,14 +1,14 @@
-# BitesBay Authentication System
+# KAMPYN Authentication System
 
-This document provides a comprehensive guide to the authentication system used in BitesBay backend, including user types, authentication flows, security measures, and implementation details.
+This document provides a comprehensive guide to the authentication system used in KAMPYN backend, including user types, authentication flows, security measures, and implementation details.
 
-**Last Updated:** January 2025
+**Last Updated:** October 2025
 
 ---
 
 ## Overview
 
-BitesBay implements a multi-role authentication system supporting four distinct user types:
+KAMPYN implements a multi-role authentication system supporting four distinct user types:
 - **Users** - Regular customers who place orders
 - **Vendors** - Food court operators and restaurant owners
 - **Universities** - Educational institutions managing the platform

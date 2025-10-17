@@ -1,8 +1,8 @@
-# BitesBay Deployment & Operations Guide
+# KAMPYN Deployment & Operations Guide
 
-This document provides comprehensive guidance for deploying, monitoring, and maintaining the BitesBay backend in production environments.
+This document provides comprehensive guidance for deploying, monitoring, and maintaining the KAMPYN backend in production environments.
 
-**Last Updated:** July 2025
+**Last Updated:** October 2025
 
 ---
 
@@ -48,7 +48,7 @@ REDIS_TTL=3600
 EMAIL_SERVICE=gmail
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_app_specific_password
-EMAIL_FROM=BitesBay <noreply@bitesbay.com>
+EMAIL_FROM=KAMPYN <noreply@bitesbay.com>
 
 # Payment Gateway (Razorpay)
 RAZORPAY_KEY_ID=rzp_live_your_key_id
@@ -994,7 +994,7 @@ gateway()
 
 This deployment and operations guide provides a comprehensive framework for:
 
-- **Reliable deployment** of BitesBay backend
+- **Reliable deployment** of KAMPYN backend
 - **Effective monitoring** and alerting
 - **Robust security** measures
 - **Scalable architecture** for growth

@@ -450,11 +450,11 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
       type: 'invoice',
       description: `Platform fee invoice for order ${orderData.orderNumber}`,
              customer: {
-         name: 'BitesBay Platform',
+         name: 'KAMPYN Platform',
          contact: '9999999999',
          email: 'platform@bitesbay.com',
          billing_address: {
-           line1: 'BitesBay Platform',
+           line1: 'KAMPYN Platform',
            city: 'Mumbai',
            state: 'Maharashtra',
            country: 'in'
@@ -503,7 +503,7 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
       uniName: university.fullName,
       gstNumber: effectiveGstNumber,
       gstNumberType: gstNumberType,
-      customerName: 'BitesBay Platform',
+      customerName: 'KAMPYN Platform',
       customerPhone: '0000000000',
              customerAddress: '...',
              subtotal: amount, // Total amount is ₹2.00

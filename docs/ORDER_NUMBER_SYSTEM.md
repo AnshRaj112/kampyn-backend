@@ -1,13 +1,13 @@
 # Order Number System Documentation
 
 ## Overview
-The BitesBay order number system ensures unique, traceable order identifiers across all users and vendors. The system uses the **Ultra-High Performance Format** as the primary production solution for maximum scalability and performance.
+The KAMPYN order number system ensures unique, traceable order identifiers across all users and vendors. The system uses the **Ultra-High Performance Format** as the primary production solution for maximum scalability and performance.
 
 ## Order Number Format
 **Format:** `BB-MICROTIME-UUUU-XXXXX`
 
 **Components:**
-- `BB` = BitesBay identifier
+- `BB` = KAMPYN identifier
 - `MICROTIME` = Microsecond timestamp (13 digits, e.g., 1701234567890)
 - `UUUU` = User ID suffix (last 4 characters, uppercase)
 - `XXXXX` = Daily atomic counter (5-digit sequential number)

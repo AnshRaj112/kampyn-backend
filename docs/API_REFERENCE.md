@@ -1,8 +1,8 @@
-# BitesBay Backend API Reference
+# KAMPYN Backend API Reference
 
 This document provides a comprehensive reference for all backend API endpoints, grouped by route. Each entry includes the HTTP method, endpoint path, required parameters, and a detailed description of its purpose and behavior.
 
-**Last Updated:** July 2025
+**Last Updated:** October 2025
 
 ---
 

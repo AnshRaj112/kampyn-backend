@@ -1,6 +1,6 @@
 # Item Addition Scripts
 
-This directory contains Python scripts to automatically add retail and produce items to the BitesBay system for multiple universities.
+This directory contains Python scripts to automatically add retail and produce items to the KAMPYN system for multiple universities.
 
 ## Scripts
 

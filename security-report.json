@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-10-17T11:49:06.800Z",
+  "vulnerability": "CVE-2025-56200",
+  "description": "validator.js URL validation bypass vulnerability",
+  "fixApplied": true,
+  "tests": {
+    "dependencyUpdate": true,
+    "securityAudit": false,
+    "securityTests": false
+  }
+}

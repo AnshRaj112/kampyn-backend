@@ -145,8 +145,7 @@ git commit -m "perf: optimize database queries"
 This project is licensed under the MIT License.
 
 ## Support & Contact
-- **Technical Support:** [tech-support@exsolvia.com](mailto:tech-support@exsolvia.com)
-- **General Inquiries:** [info@exsolvia.com](mailto:info@exsolvia.com)
+- **Contact:** [contact@kampyn.com](mailto:contact@kampyn.com)
 
 ---
 
