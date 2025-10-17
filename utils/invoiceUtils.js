@@ -1133,8 +1133,8 @@ exports.getInvoicesByDateRange = async (filters) => {
     if (recipientType) query.recipientType = recipientType;
     
     const invoices = await Invoice.find(query)
-      .populate('vendorId', 'name')
-      .populate('uniId', 'fullName')
+      .populate({ path: 'vendorId', select: 'name', model: Vendor })
+      .populate({ path: 'uniId', select: 'fullName', model: Uni })
       .sort({ createdAt: -1 })
       .lean();
     
