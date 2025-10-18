@@ -176,8 +176,8 @@ db.inventory.createIndex({ "status": 1, "lastUpdated": -1 })
 
 #### Authentication Endpoints
 ```
-POST   /api/auth/signup          # User registration
-POST   /api/auth/login           # User authentication
+POST   /api/user/auth/signup          # User registration
+POST   /api/user/auth/login           # User authentication
 POST   /api/auth/logout          # User logout
 POST   /api/auth/refresh         # Token refresh
 POST   /api/auth/forgot-password # Password reset request

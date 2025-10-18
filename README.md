@@ -53,7 +53,7 @@ Server will start on `http://localhost:5001`
 ### Authentication
 ```bash
 # User Registration
-POST /api/auth/signup
+POST /api/user/auth/signup
 {
   "fullName": "John Doe",
   "email": "john@example.com",
@@ -64,7 +64,7 @@ POST /api/auth/signup
 }
 
 # User Login
-POST /api/auth/login
+POST /api/user/auth/login
 {
   "identifier": "john@example.com",
   "password": "password123"
@@ -145,4 +145,9 @@ This project is licensed under the MIT License.
 
 ---
 
-**© 2025 EXSOLVIA. All rights reserved.**
+**© 2025 EXSOLVIA. All rights reserved.**# Test comment
+# Test metrics
+# Testing updated metrics system
+# Testing fixed test system
+# Testing fixed test system with worker fixes
+# Testing removal of all test cases
