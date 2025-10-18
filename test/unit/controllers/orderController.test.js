@@ -1,8 +1,8 @@
 const request = require('supertest');
-const app = require('../../index');
-const Order = require('../../models/order/Order');
-const User = require('../../models/account/User');
-const Vendor = require('../../models/account/Vendor');
+const app = require('../../../index');
+const Order = require('../../../models/order/Order');
+const User = require('../../../models/account/User');
+const Vendor = require('../../../models/account/Vendor');
 const jwt = require('jsonwebtoken');
 
 describe('Order Controller', () => {

@@ -1,4 +1,4 @@
-const { calculateOrderTotal, generateOrderNumber, validateOrderItems, formatOrderStatus } = require('../../utils/orderUtils');
+const { calculateOrderTotal, generateOrderNumber, validateOrderItems, formatOrderStatus } = require('../../../utils/orderUtils');
 
 describe('Order Utils', () => {
   describe('calculateOrderTotal', () => {

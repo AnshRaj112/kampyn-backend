@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { generateToken, verifyToken, hashPassword, comparePassword } = require('../../utils/authUtils');
+const { generateToken, verifyToken, hashPassword, comparePassword } = require('../../../utils/authUtils');
 
 describe('Auth Utils', () => {
   const testSecret = 'test-secret';
