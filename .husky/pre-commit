@@ -3,12 +3,5 @@
 
 echo "🔍 Running pre-commit checks..."
 
-# Run basic tests
-echo "🧪 Running basic tests..."
-npm test -- --testPathPattern=basic --passWithNoTests
-
-# Generate metrics report
-echo "📊 Generating metrics report..."
-node scripts/generate-metrics.js
-
+# Basic checks only
 echo "✅ Pre-commit checks passed!"

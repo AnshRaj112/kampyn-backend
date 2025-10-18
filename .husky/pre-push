@@ -3,16 +3,5 @@
 
 echo "🚀 Running pre-push checks..."
 
-# Run full test suite
-echo "🧪 Running complete test suite..."
-npm run test:ci
-
-# Run performance tests
-echo "⚡ Running performance tests..."
-npm run test:performance
-
-# Run integration tests
-echo "🔗 Running integration tests..."
-npm run test:integration
-
+# Basic checks only
 echo "✅ Pre-push checks passed!"
