@@ -3,8 +3,12 @@
 
 echo "🔍 Running pre-commit checks..."
 
-# Create a simple test to verify the setup works
-echo "🧪 Running basic validation..."
-node -e "console.log('✅ Node.js is working'); console.log('✅ Basic validation passed');"
+# Run basic tests
+echo "🧪 Running basic tests..."
+npm test -- --testPathPattern=basic --passWithNoTests
+
+# Generate metrics report
+echo "📊 Generating metrics report..."
+node scripts/generate-metrics.js
 
 echo "✅ Pre-commit checks passed!"
