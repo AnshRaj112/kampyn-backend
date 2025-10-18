@@ -146,7 +146,7 @@ function displayMetrics() {
     console.log('⚠️ Some targets need improvement. See details above.');
   }
   console.log('');
-  console.log('📄 Detailed report saved to: METRICS_REPORT.md');
+  console.log('📄 Run "npm test" to see detailed coverage report');
 }
 
 // Run the metrics display

@@ -10,7 +10,7 @@ describe('Auth Controller', () => {
     await User.deleteMany({});
   });
 
-  describe('POST /api/auth/signup', () => {
+  describe('POST /api/user/auth/signup', () => {
     it('should create a new user successfully', async () => {
       const userData = {
         fullName: 'John Doe',
@@ -22,7 +22,7 @@ describe('Auth Controller', () => {
       };
 
       const response = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
@@ -45,12 +45,12 @@ describe('Auth Controller', () => {
 
       // Create first user
       await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData);
 
       // Try to create user with same email
       const response = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(400);
 
@@ -69,7 +69,7 @@ describe('Auth Controller', () => {
       };
 
       const response = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(400);
 
@@ -87,7 +87,7 @@ describe('Auth Controller', () => {
       };
 
       const response = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(400);
 
@@ -95,7 +95,7 @@ describe('Auth Controller', () => {
     });
   });
 
-  describe('POST /api/auth/login', () => {
+  describe('POST /api/user/auth/login', () => {
     beforeEach(async () => {
       // Create a test user
       const hashedPassword = await bcrypt.hash('password123', 10);
@@ -116,7 +116,7 @@ describe('Auth Controller', () => {
       };
 
       const response = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send(loginData)
         .expect(200);
 
@@ -132,7 +132,7 @@ describe('Auth Controller', () => {
       };
 
       const response = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send(loginData)
         .expect(200);
 
@@ -148,7 +148,7 @@ describe('Auth Controller', () => {
       };
 
       const response = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send(loginData)
         .expect(401);
 
@@ -158,7 +158,7 @@ describe('Auth Controller', () => {
 
     it('should return 400 for missing fields', async () => {
       const response = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send({})
         .expect(400);
 

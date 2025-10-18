@@ -21,6 +21,7 @@ This directory contains essential documentation for the KAMPYN backend system. A
 - **[Security Guide](./SECURITY.md)** - Security best practices, vulnerability management, and incident response
 - **[Security Advisory](./SECURITY_ADVISORY_VALIDATOR.md)** - Recent security fixes and advisories
 - **[Testing Guide](./TESTING_GUIDE.md)** - Testing strategies, unit tests, and integration testing
+- **[Contributor Testing Guide](./CONTRIBUTOR_TESTING_GUIDE.md)** - **MANDATORY** testing requirements for all contributors
 
 ### Deployment & Operations
 - **[Deployment Guide](./DEPLOYMENT.md)** - Production deployment procedures and configuration

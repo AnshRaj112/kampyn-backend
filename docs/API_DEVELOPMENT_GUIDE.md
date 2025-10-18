@@ -161,7 +161,7 @@ const getUser = (req, res) => {
 ```javascript
 // Users
 GET    /api/auth/user               // Get current user
-POST   /api/auth/signup             // Create user
+POST   /api/user/auth/signup             // Create user
 PUT    /api/auth/profile            // Update user profile
 DELETE /api/auth/logout             // Logout user
 
@@ -530,7 +530,7 @@ describe('User Authentication', () => {
     await User.deleteMany({});
   });
 
-  describe('POST /api/auth/signup', () => {
+  describe('POST /api/user/auth/signup', () => {
     it('should create a new user with valid data', async () => {
       const userData = {
         fullName: 'John Doe',
@@ -542,7 +542,7 @@ describe('User Authentication', () => {
       };
 
       const response = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
@@ -560,7 +560,7 @@ describe('User Authentication', () => {
       });
 
       const response = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send({
           fullName: 'John Doe',
           email: 'jane@example.com', // Duplicate email
@@ -763,7 +763,7 @@ const signup = async (req, res) => {
 ### 2. API Documentation
 ```javascript
 /**
- * @api {post} /api/auth/signup Create User Account
+ * @api {post} /api/user/auth/signup Create User Account
  * @apiName CreateUser
  * @apiGroup Authentication
  * @apiVersion 1.0.0

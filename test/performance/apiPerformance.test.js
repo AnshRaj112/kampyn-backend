@@ -33,7 +33,7 @@ describe('API Performance Tests', () => {
       const start = Date.now();
       
       const response = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send({
           identifier: 'test@example.com',
           password: 'password123'
@@ -48,7 +48,7 @@ describe('API Performance Tests', () => {
     it('should handle order creation within 300ms', async () => {
       // Create test user and get token
       const userResponse = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send({
           fullName: 'Test User',
           email: 'perf@example.com',
@@ -104,7 +104,7 @@ describe('API Performance Tests', () => {
       for (let i = 0; i < 50; i++) {
         promises.push(
           request(app)
-            .post('/api/auth/login')
+            .post('/api/user/auth/login')
             .send({
               identifier: `user${i}@example.com`,
               password: 'password123'
@@ -154,7 +154,7 @@ describe('API Performance Tests', () => {
       for (let i = 0; i < 10; i++) {
         promises.push(
           request(app)
-            .post('/api/auth/signup')
+            .post('/api/user/auth/signup')
             .send({
               fullName: `User ${i}`,
               email: `user${i}@example.com`,

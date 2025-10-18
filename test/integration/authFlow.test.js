@@ -21,7 +21,7 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       const registrationResponse = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
@@ -42,7 +42,7 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Step 3: Login with the same credentials
       const loginResponse = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send({
           identifier: userData.email,
           password: userData.password
@@ -75,13 +75,13 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
       // Login with phone
       const loginResponse = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send({
           identifier: userData.phone,
           password: userData.password
@@ -104,13 +104,13 @@ describe('Authentication Flow Integration Tests', () => {
 
       // First registration should succeed
       await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
       // Second registration with same email should fail
       const duplicateResponse = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(400);
 
@@ -130,13 +130,13 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Register user
       await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
       // Try login with wrong password
       const wrongPasswordResponse = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send({
           identifier: userData.email,
           password: 'wrongpassword'
@@ -147,7 +147,7 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Try login with non-existent email
       const wrongEmailResponse = await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send({
           identifier: 'nonexistent@example.com',
           password: userData.password
@@ -170,7 +170,7 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       const registrationResponse = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
@@ -207,7 +207,7 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
@@ -228,13 +228,13 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       await request(app)
-        .post('/api/auth/signup')
+        .post('/api/user/auth/signup')
         .send(userData)
         .expect(201);
 
       // Login should work with correct password
       await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send({
           identifier: userData.email,
           password: userData.password
@@ -243,7 +243,7 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Login should fail with wrong password
       await request(app)
-        .post('/api/auth/login')
+        .post('/api/user/auth/login')
         .send({
           identifier: userData.email,
           password: 'wrongpassword'
