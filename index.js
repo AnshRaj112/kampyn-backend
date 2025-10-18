@@ -141,6 +141,11 @@ app.use("/api/admin", serviceRoutes);
 app.use("/api/reviews", reviewRoutes);
 //app.use("/temp", tempRoutes);
 
+// ✅ Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({ status: "OK", timestamp: new Date().toISOString() });
+});
+
 // ✅ Global error handling
 app.use((err, req, res, next) => {
   console.error("🔥 Server Error:", err);
@@ -156,6 +161,9 @@ if (process.env.NODE_ENV === "production") {
     next();
   });
 }
+
+// Export app for testing
+module.exports = app;
 
 // ✅ Start Server
 app.listen(PORT, () => {

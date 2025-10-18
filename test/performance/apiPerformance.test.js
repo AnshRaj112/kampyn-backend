@@ -7,14 +7,12 @@ describe('API Performance Tests', () => {
   const baseUrl = 'http://localhost:5001';
 
   beforeAll(async () => {
-    // Start server for performance testing
-    server = app.listen(5001);
+    // Server is already running in test environment
+    // No need to start/stop server for performance tests
   });
 
   afterAll(async () => {
-    if (server) {
-      server.close();
-    }
+    // Cleanup if needed
   });
 
   describe('Response Time Tests', () => {

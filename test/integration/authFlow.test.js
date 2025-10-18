@@ -1,6 +1,6 @@
 const request = require('supertest');
 const app = require('../../index');
-const User = require('../../models/users/User');
+const User = require('../../models/account/User');
 const bcrypt = require('bcryptjs');
 
 describe('Authentication Flow Integration Tests', () => {

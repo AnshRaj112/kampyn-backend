@@ -19,7 +19,8 @@
     "migrate-orders": "node scripts/migrate-orders.js",
     "test-locks": "node scripts/test-locking-system.js",
     "create-admin": "node scripts/create-super-admin.js",
-    "validate-cicd": "node scripts/setup-cicd.js"
+    "validate-cicd": "node scripts/setup-cicd.js",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
