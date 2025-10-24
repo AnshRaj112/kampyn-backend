@@ -250,10 +250,15 @@ exports.resetPassword = async (req, res) => {
     console.info("🔵 Reset Password Request:", req.body);
 
     const { email, password } = req.body;
+    // Ensure email is a string to prevent NoSQL injection
+    if (typeof email !== "string") {
+      console.info("⚠️ Invalid email for password reset:", email);
+      return res.status(400).json({ message: "Invalid email address" });
+    }
     const hashedPassword = await hashPassword(password);
     console.info("🔒 Password hashed successfully");
 
-    await Account.findOneAndUpdate({ email }, { password: hashedPassword });
+    await Account.findOneAndUpdate({ email: { $eq: email } }, { password: hashedPassword });
     console.info("✅ Password updated for:", email);
 
     res.json({ message: "Password updated successfully" });
