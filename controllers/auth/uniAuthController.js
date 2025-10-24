@@ -130,7 +130,7 @@ exports.verifyOtp = async (req, res) => {
     console.info("✅ User verified:", email);
 
     // Delete the used OTP
-    await Otp.deleteOne({ email });
+    await Otp.deleteOne({ email: { $eq: email } });
     console.info("🗑️ OTP deleted from database");
 
     // Generate new token for the verified user
