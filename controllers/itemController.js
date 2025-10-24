@@ -1,3 +1,4 @@
+const _ = require("lodash");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const Raw = require("../models/item/Raw");
@@ -447,7 +448,7 @@ exports.searchItems = async (req, res) => {
   }
 
   try {
-    const regex = new RegExp(query, "i"); // case-insensitive partial match
+    const regex = new RegExp(_.escapeRegExp(query), "i"); // case-insensitive partial match
 
     // Define retail types
     const retailTypes = [
