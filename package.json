@@ -42,7 +42,8 @@
     "pdfkit": "^0.14.0",
     "razorpay": "^2.9.6",
     "whatwg-url": "14.2.0",
-    "lusca": "^1.7.0"
+    "lusca": "^1.7.0",
+    "sanitize-filename": "^1.6.3"
   },
   "devDependencies": {
     "husky": "^9.0.11",

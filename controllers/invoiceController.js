@@ -7,6 +7,7 @@ const invoiceUtils = require('../utils/invoiceUtils');
 const { isValidCloudinaryUrl, isValidRazorpayUrl, isSafeExternalUrl } = require('../utils/urlValidation');
 const fs = require('fs');
 const path = require('path');
+const sanitizeFilename = require('sanitize-filename');
 const archiver = require('archiver');
 const os = require('os'); // Added for os module
 const mongoose = require('mongoose');
@@ -934,6 +935,16 @@ exports.bulkZipDownload = async (req, res) => {
   let tempDir = null;
   try {
     const { startDate, endDate, vendorId, uniId, invoiceType, recipientType, orderIds } = req.body;
+
+    // Validate and sanitize date input
+    function safeDateString(val) {
+      if (!val || typeof val !== "string") return "invalid-date";
+      // Only allow ISO 8601 date format
+      const isoPattern = /^\d{4}-\d{2}-\d{2}$/;
+      return isoPattern.test(val) ? val : "invalid-date";
+    }
+    const cleanStartDate = sanitizeFilename(safeDateString(startDate));
+    const cleanEndDate = sanitizeFilename(safeDateString(endDate));
     
     if (!startDate || !endDate) {
       return res.status(400).json({
@@ -981,7 +992,7 @@ exports.bulkZipDownload = async (req, res) => {
       fs.mkdirSync(tempDir, { recursive: true });
     }
     
-    const zipPath = path.join(tempDir, `bulk_invoices_${startDate}_to_${endDate}.zip`);
+    const zipPath = path.join(tempDir, `bulk_invoices_${cleanStartDate}_to_${cleanEndDate}.zip`);
     const output = fs.createWriteStream(zipPath);
     const archive = archiver('zip', {
       zlib: { level: 9 } // Maximum compression
@@ -1004,7 +1015,7 @@ exports.bulkZipDownload = async (req, res) => {
       
       // Set response headers for ZIP download
       res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename="bulk_invoices_${startDate}_to_${endDate}.zip"`);
+      res.setHeader('Content-Disposition', `attachment; filename="bulk_invoices_${cleanStartDate}_to_${cleanEndDate}.zip"`);
       res.setHeader('Content-Length', archive.pointer());
       
       // Send the ZIP file
