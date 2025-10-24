@@ -114,30 +114,52 @@ exports.verifyOtp = async (req, res) => {
     console.info("🔵 OTP Verification Request:", req.body);
 
     const { email, otp } = req.body;
-    const emailLower = email.toLowerCase(); // Ensure lowercase
-    console.info("🔍 Looking for OTP with email:", emailLower, "and OTP:", otp);
     
-    const otpRecord = await Otp.findOne({ email: emailLower, otp });
+    // Input validation
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and OTP are required" });
+    }
+    
+    // Sanitize email: convert to lowercase and validate format
+    const sanitizedEmail = email.toLowerCase().trim();
+    
+    // Validate email format using regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(sanitizedEmail)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+    
+    // Validate OTP format (should be 6 digits)
+    const otpRegex = /^\d{6}$/;
+    if (!otpRegex.test(otp)) {
+      return res.status(400).json({ message: "Invalid OTP format" });
+    }
+    
+    console.info("🔍 Looking for OTP with email:", sanitizedEmail, "and OTP:", otp);
+    
+    const otpRecord = await Otp.findOne({ email: sanitizedEmail, otp });
     console.info("🔍 Found OTP record:", otpRecord);
 
     if (!otpRecord) {
       console.info("⚠️ Invalid or expired OTP:", otp);
-      // Let's also check if there are any OTPs for this email
-      const allOtpsForEmail = await Otp.find({ email: emailLower });
-      console.info("🔍 All OTPs for this email:", allOtpsForEmail);
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
-    // Update user verification status
+    // Update user verification status using sanitized email
     const user = await Account.findOneAndUpdate(
-      { email: emailLower },
+      { email: sanitizedEmail },
       { isVerified: true },
       { new: true }
     );
-    console.info("✅ User verified:", emailLower);
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    console.info("✅ User verified:", sanitizedEmail);
 
-    // Delete the used OTP
-    await Otp.deleteOne({ email: emailLower });
+    // Delete the used OTP using sanitized email
+    await Otp.deleteOne({ email: sanitizedEmail });
     console.info("🗑️ OTP deleted from database");
 
     // Generate new token for the verified user
@@ -245,13 +267,34 @@ exports.forgotPassword = async (req, res) => {
     console.info("🔵 Forgot Password Request:", req.body);
 
     const { identifier } = req.body;
+    
+    // Input validation
+    if (!identifier) {
+      return res.status(400).json({ message: "Email or phone number is required" });
+    }
 
-    // Process identifier based on type
-    const processedIdentifier = identifier.includes('@') 
-      ? identifier.toLowerCase() // Convert email to lowercase
-      : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
+    // Sanitize and validate identifier
+    let processedIdentifier;
+    let isValidEmail = false;
+    
+    if (identifier.includes('@')) {
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      processedIdentifier = identifier.toLowerCase().trim();
+      if (!emailRegex.test(processedIdentifier)) {
+        return res.status(400).json({ message: "Invalid email format" });
+      }
+      isValidEmail = true;
+    } else {
+      // Phone number validation (basic format check)
+      const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+      processedIdentifier = identifier.replace(/\s+/g, '').trim();
+      if (!phoneRegex.test(processedIdentifier) || processedIdentifier.length < 10) {
+        return res.status(400).json({ message: "Invalid phone number format" });
+      }
+    }
 
-    // Find user by email OR phone number
+    // Find user by email OR phone number using sanitized input
     const user = await Account.findOne({
       $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
     });
@@ -285,11 +328,41 @@ exports.resetPassword = async (req, res) => {
     console.info("🔵 Reset Password Request:", req.body);
 
     const { email, password } = req.body;
+    
+    // Input validation and sanitization
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+    
+    // Sanitize email: convert to lowercase and validate format
+    const sanitizedEmail = email.toLowerCase().trim();
+    
+    // Validate email format using regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(sanitizedEmail)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+    
+    // Validate password strength
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters long" });
+    }
+    
     const hashedPassword = await hashPassword(password);
     console.info("🔒 Password hashed successfully");
 
-    await Account.findOneAndUpdate({ email }, { password: hashedPassword });
-    console.info("✅ Password updated for:", email);
+    // Use sanitized email in query to prevent injection
+    const result = await Account.findOneAndUpdate(
+      { email: sanitizedEmail }, 
+      { password: hashedPassword },
+      { new: true }
+    );
+    
+    if (!result) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    console.info("✅ Password updated for:", sanitizedEmail);
 
     res.json({ message: "Password updated successfully" });
   } catch (error) {
