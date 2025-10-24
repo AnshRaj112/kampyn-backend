@@ -39,7 +39,8 @@
     "nodemon": "^3.1.10",
     "pdfkit": "^0.14.0",
     "razorpay": "^2.9.6",
-    "whatwg-url": "14.2.0"
+    "whatwg-url": "14.2.0",
+    "lodash": "^4.17.21"
   },
   "devDependencies": {
     "husky": "^9.0.11",

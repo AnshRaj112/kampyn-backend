@@ -39,6 +39,7 @@ const express = require("express");
 const router = express.Router();
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
+const _ = require("lodash");
 
 router.get("/", async (req, res) => {
   const { query, uniID } = req.query;
@@ -48,7 +49,7 @@ router.get("/", async (req, res) => {
   }
 
   try {
-    const regex = new RegExp(query, "i");
+    const regex = new RegExp(_.escapeRegExp(query), "i");
 
     const [retailResults, produceResults] = await Promise.all([
       Retail.find({ name: regex, uniId: uniID }).populate("vendorId").lean(),
