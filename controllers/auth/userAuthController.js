@@ -96,7 +96,7 @@ exports.verifyOtp = async (req, res) => {
     console.info("🔵 OTP Verification Request:", req.body);
 
     const { email, otp } = req.body;
-    const otpRecord = await Otp.findOne({ email, otp });
+    const otpRecord = await Otp.findOne({ email: { $eq: email }, otp: { $eq: otp } });
 
     if (!otpRecord) {
       console.info("⚠️ Invalid or expired OTP:", otp);
@@ -105,14 +105,14 @@ exports.verifyOtp = async (req, res) => {
 
     // Update user verification status
     const user = await Account.findOneAndUpdate(
-      { email },
+      { email: { $eq: email } },
       { isVerified: true },
       { new: true }
     );
     console.info("✅ User verified:", email);
 
     // Delete the used OTP
-    await Otp.deleteOne({ email });
+    await Otp.deleteOne({ email: { $eq: email } });
     console.info("🗑️ OTP deleted from database");
 
     // Generate new token for the verified user
