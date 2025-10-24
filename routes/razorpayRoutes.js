@@ -23,11 +23,11 @@ router.get("/invoices/:invoiceId", async (req, res) => {
   try {
     const { invoiceId } = req.params;
     
-    console.log("📄 Fetching Razorpay invoice:", invoiceId);
+    console.info("📄 Fetching Razorpay invoice:", invoiceId);
     
     const invoice = await razorpay.invoices.fetch(invoiceId);
     
-    console.log("✅ Razorpay invoice fetched:", invoice.id);
+    console.info("✅ Razorpay invoice fetched:", invoice.id);
     
     res.json({
       success: true,
@@ -48,7 +48,7 @@ router.get("/invoices/:invoiceId/pdf", async (req, res) => {
   try {
     const { invoiceId } = req.params;
     
-    console.log("📄 Getting PDF for Razorpay invoice:", invoiceId);
+    console.info("📄 Getting PDF for Razorpay invoice:", invoiceId);
     
     // Get invoice details first
     const invoice = await razorpay.invoices.fetch(invoiceId);
@@ -56,7 +56,7 @@ router.get("/invoices/:invoiceId/pdf", async (req, res) => {
     // Generate PDF download URL
     const pdfUrl = `${razorpayConfig.apiBase}/invoices/${invoiceId}/pdf`;
     
-    console.log("✅ PDF URL generated for invoice:", invoiceId);
+    console.info("✅ PDF URL generated for invoice:", invoiceId);
     
     res.json({
       success: true,
@@ -77,11 +77,11 @@ router.post("/invoices", async (req, res) => {
   try {
     const invoiceData = req.body;
     
-    console.log("📄 Creating Razorpay invoice:", invoiceData);
+    console.info("📄 Creating Razorpay invoice:", invoiceData);
     
     const invoice = await razorpay.invoices.create(invoiceData);
     
-    console.log("✅ Razorpay invoice created:", invoice.id);
+    console.info("✅ Razorpay invoice created:", invoice.id);
     
     res.json({
       success: true,
@@ -109,7 +109,7 @@ router.post("/create-order", async (req, res) => {
       });
     }
 
-    console.log("💳 Creating Razorpay order:", {
+    console.info("💳 Creating Razorpay order:", {
       amount,
       currency,
       receipt
@@ -122,7 +122,7 @@ router.post("/create-order", async (req, res) => {
       payment_capture: 1,
     });
 
-    console.log("💳 Razorpay order created:", {
+    console.info("💳 Razorpay order created:", {
       id: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency

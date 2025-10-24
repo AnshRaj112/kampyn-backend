@@ -197,7 +197,7 @@ class AtomicCache {
     }
     
     if (expiredKeys.length > 0) {
-      console.log(`Cleaned up ${expiredKeys.length} expired locks`);
+      console.info(`Cleaned up ${expiredKeys.length} expired locks`);
     }
   }
 
@@ -218,7 +218,7 @@ class AtomicCache {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
-      console.log("Cache cleanup stopped");
+      console.info("Cache cleanup stopped");
     }
   }
 

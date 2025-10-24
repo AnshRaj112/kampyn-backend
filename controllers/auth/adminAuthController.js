@@ -29,7 +29,7 @@ const setTokenCookie = (res, token) => {
 // **1. User Signup**exports.signup = async (req, res) => {
 exports.signup = async (req, res) => {
   try {
-    console.log("🔵 Signup Request Received:", req.body);
+    console.info("🔵 Signup Request Received:", req.body);
 
     const { fullName, email, phone, password } =
       req.body;
@@ -39,12 +39,12 @@ exports.signup = async (req, res) => {
 
     const existingUser = await Account.findOne({ $or: [{ email: emailLower }, { phone }] });
     if (existingUser) {
-      console.log("⚠️ User already exists:", emailLower);
+      console.info("⚠️ User already exists:", emailLower);
       return res.status(400).json({ message: "User already exists" });
     }
 
     const hashedPassword = await hashPassword(password);
-    console.log("🔒 Password hashed successfully");
+    console.info("🔒 Password hashed successfully");
 
     const accountData = {
       fullName,
@@ -56,7 +56,7 @@ exports.signup = async (req, res) => {
 
     const newAccount = new Account(accountData);
     await newAccount.save();
-    console.log("✅ Account created:", emailLower);
+    console.info("✅ Account created:", emailLower);
 
     const token = jwt.sign(
       { id: newAccount._id, role: newAccount.type },
@@ -67,10 +67,10 @@ exports.signup = async (req, res) => {
     // Send OTP if needed
     const otp = generateOtp();
     await new Otp({ email: emailLower, otp }).save();
-    console.log("🔢 OTP Generated and Saved:", otp);
+    console.info("🔢 OTP Generated and Saved:", otp);
 
     await sendOtpEmail(emailLower, otp);
-    console.log("📧 OTP sent to email:", emailLower);
+    console.info("📧 OTP sent to email:", emailLower);
 
     // Optional: Set cookie
     // setTokenCookie(res, token);
@@ -92,13 +92,13 @@ exports.signup = async (req, res) => {
 // **2. OTP Verification**
 exports.verifyOtp = async (req, res) => {
   try {
-    console.log("🔵 OTP Verification Request:", req.body);
+    console.info("🔵 OTP Verification Request:", req.body);
 
     const { email, otp } = req.body;
     const otpRecord = await Otp.findOne({ email, otp });
 
     if (!otpRecord) {
-      console.log("⚠️ Invalid or expired OTP:", otp);
+      console.info("⚠️ Invalid or expired OTP:", otp);
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
@@ -108,11 +108,11 @@ exports.verifyOtp = async (req, res) => {
       { isVerified: true },
       { new: true }
     );
-    console.log("✅ User verified:", email);
+    console.info("✅ User verified:", email);
 
     // Delete the used OTP
     await Otp.deleteOne({ email });
-    console.log("🗑️ OTP deleted from database");
+    console.info("🗑️ OTP deleted from database");
 
     // Generate new token for the verified user
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
@@ -133,7 +133,7 @@ exports.verifyOtp = async (req, res) => {
 // **3. Login**
 exports.login = async (req, res) => {
   try {
-    console.log("🔵 Login Request:", req.body);
+    console.info("🔵 Login Request:", req.body);
 
     const { identifier, password } = req.body;
     
@@ -189,7 +189,7 @@ exports.login = async (req, res) => {
 // **4. Forgot Password**
 exports.forgotPassword = async (req, res) => {
   try {
-    console.log("🔵 Forgot Password Request:", req.body);
+    console.info("🔵 Forgot Password Request:", req.body);
 
     const { identifier } = req.body;
 
@@ -204,20 +204,20 @@ exports.forgotPassword = async (req, res) => {
     });
 
     if (!user) {
-      console.log("⚠️ User not found:", processedIdentifier);
+      console.info("⚠️ User not found:", processedIdentifier);
       return res.status(400).json({ message: "User not found" });
     }
 
     const emailToSend = user.email; // Use the user's email to send OTP
 
     const otp = generateOtp();
-    console.log("🔢 OTP Generated:", otp);
+    console.info("🔢 OTP Generated:", otp);
 
     await new Otp({ email: emailToSend, otp }).save();
-    console.log("✅ OTP saved to database");
+    console.info("✅ OTP saved to database");
 
     await sendOtpEmail(emailToSend, otp);
-    console.log("📧 OTP sent to email:", emailToSend);
+    console.info("📧 OTP sent to email:", emailToSend);
 
     res.json({ message: "OTP sent for password reset", email: emailToSend });
   } catch (error) {
@@ -229,14 +229,14 @@ exports.forgotPassword = async (req, res) => {
 // **5. Reset Password**
 exports.resetPassword = async (req, res) => {
   try {
-    console.log("🔵 Reset Password Request:", req.body);
+    console.info("🔵 Reset Password Request:", req.body);
 
     const { email, password } = req.body;
     const hashedPassword = await hashPassword(password);
-    console.log("🔒 Password hashed successfully");
+    console.info("🔒 Password hashed successfully");
 
     await Account.findOneAndUpdate({ email }, { password: hashedPassword });
-    console.log("✅ Password updated for:", email);
+    console.info("✅ Password updated for:", email);
 
     res.json({ message: "Password updated successfully" });
   } catch (error) {
@@ -248,13 +248,13 @@ exports.resetPassword = async (req, res) => {
 // **6. Google Login**
 exports.googleAuth = async (req, res) => {
   try {
-    console.log("🔵 Google Login Request:", req.body);
+    console.info("🔵 Google Login Request:", req.body);
 
     const { email } = req.body;
     let user = await User.findOne({ email });
 
     if (!user) {
-      console.log("⚠️ User not found for Google login:", email);
+      console.info("⚠️ User not found for Google login:", email);
       return res
         .status(400)
         .json({ message: "User does not exist, sign up first" });
@@ -263,7 +263,7 @@ exports.googleAuth = async (req, res) => {
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
-    console.log("✅ Google login successful:", email);
+    console.info("✅ Google login successful:", email);
 
     res.json({ message: "Google login successful", token });
   } catch (error) {
@@ -275,14 +275,14 @@ exports.googleAuth = async (req, res) => {
 // **7. Google Signup**
 exports.googleSignup = async (req, res) => {
   try {
-    console.log("🔵 Google Signup Request:", req.body);
+    console.info("🔵 Google Signup Request:", req.body);
 
     const { email, googleId, fullName } = req.body;
 
     let existingUser = await User.findOne({ email });
 
     if (existingUser) {
-      console.log("⚠️ User already exists:", email);
+      console.info("⚠️ User already exists:", email);
       return res
         .status(400)
         .json({ message: "User already exists. Please log in." });
@@ -299,7 +299,7 @@ exports.googleSignup = async (req, res) => {
     });
 
     await newUser.save();
-    console.log("✅ Google user saved to database:", email);
+    console.info("✅ Google user saved to database:", email);
 
     const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
@@ -314,7 +314,7 @@ exports.googleSignup = async (req, res) => {
 
 // **8. Logout**
 exports.logout = (req, res) => {
-  console.log(`🔴 User Logged Out: ${req.user?.userId || "Unknown User"}`);
+  console.info(`🔴 User Logged Out: ${req.user?.userId || "Unknown User"}`);
   res.clearCookie("token");
   res.json({ message: "Logged out successfully" });
 };
@@ -398,20 +398,20 @@ exports.checkSession = (req, res) => {
 // **12. Get User**
 exports.getUser = async (req, res) => {
   try {
-    console.log("🔵 Get User Request");
+    console.info("🔵 Get User Request");
 
     // Get token from either cookie or Authorization header
     const token =
       req.cookies?.token || req.headers.authorization?.split(" ")[1];
 
     if (!token) {
-      console.log("⚠️ No token provided");
+      console.info("⚠️ No token provided");
       return res.status(401).json({ message: "No token provided" });
     }
 
     // Verify the token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log("✅ Token verified, userId:", decoded.userId);
+    console.info("✅ Token verified, userId:", decoded.userId);
 
     // Get user data with populated vendors
     const user = await Account.findById(decoded.userId)
@@ -422,11 +422,11 @@ exports.getUser = async (req, res) => {
       });
 
     if (!user) {
-      console.log("⚠️ User not found");
+      console.info("⚠️ User not found");
       return res.status(404).json({ message: "User not found" });
     }
 
-    console.log("✅ User data retrieved successfully");
+    console.info("✅ User data retrieved successfully");
     res.json(user);
   } catch (error) {
     console.error("❌ Get User Error:", error);

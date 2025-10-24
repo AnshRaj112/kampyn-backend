@@ -112,7 +112,7 @@ async function _validateAndFetch(
 
    // For retail items, check quantity directly from the entry
    const invQty = entry.quantity || 0;
-   console.log(`Retail item quantity check:`, {
+   console.info(`Retail item quantity check:`, {
      itemId,
      vendorId: vendorIdFromController,
      quantity: invQty,

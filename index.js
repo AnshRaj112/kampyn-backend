@@ -81,8 +81,8 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.log("CORS blocked for origin:", origin);
-        console.log("Allowed origins:", allowedOrigins);
+        console.info("CORS blocked for origin:", origin);
+        console.info("Allowed origins:", allowedOrigins);
         callback(new Error("CORS not allowed: " + origin));
       }
     },
@@ -167,23 +167,23 @@ module.exports = app;
 
 // ✅ Start Server
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.info(`🚀 Server running on port ${PORT}`);
 
   // ✅ Log database connection status
-  console.log("📊 Database Connection Status:");
-  console.log(`   Users: ${Cluster_User.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.log(`   Orders: ${Cluster_Order.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.log(`   Items: ${Cluster_Item.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.log(`   Inventory: ${Cluster_Inventory.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.log(`   Accounts: ${Cluster_Accounts.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.log(`   Cache: ${Cluster_Cache_Analytics.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.info("📊 Database Connection Status:");
+  console.info(`   Users: ${Cluster_User.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.info(`   Orders: ${Cluster_Order.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.info(`   Items: ${Cluster_Item.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.info(`   Inventory: ${Cluster_Inventory.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.info(`   Accounts: ${Cluster_Accounts.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.info(`   Cache: ${Cluster_Cache_Analytics.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
 
   // 🔒 Start periodic cleanup of expired orders and locks
   startPeriodicCleanup(10 * 60 * 1000); // 10 minutes
-  console.log("🔒 Cache locking system initialized with periodic cleanup");
-  console.log("🔐 Admin authentication system ready");
+  console.info("🔒 Cache locking system initialized with periodic cleanup");
+  console.info("🔐 Admin authentication system ready");
 
   // 🧹 Initialize daily raw material inventory clearing
   initializeDailyClearing();
-  console.log("🧹 Daily raw material clearing schedule initialized");
+  console.info("🧹 Daily raw material clearing schedule initialized");
 });

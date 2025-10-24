@@ -36,7 +36,7 @@ async function handleViewVendor(req, res) {
  * POST /express-order/confirm/:orderId
  */
 async function handleConfirm(req, res) {
-  console.log("🔔 handleConfirm:", { params: req.params, body: req.body });
+  console.info("🔔 handleConfirm:", { params: req.params, body: req.body });
   try {
     const { orderId } = req.params;
     const order = await confirmExpressOrder(orderId);

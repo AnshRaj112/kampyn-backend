@@ -9,7 +9,7 @@ function createConnection(uri, name) {
   });
 
   connection.on('connected', () => {
-    console.log(`✅ ${name} database connected successfully`);
+    console.info(`✅ ${name} database connected successfully`);
   });
 
   connection.on('error', (err) => {
@@ -17,7 +17,7 @@ function createConnection(uri, name) {
   });
 
   connection.on('disconnected', () => {
-    console.log(`⚠️ ${name} database disconnected`);
+    console.info(`⚠️ ${name} database disconnected`);
   });
 
   return connection;
@@ -40,7 +40,7 @@ Promise.all([
   new Promise(resolve => Cluster_Accounts.once('connected', resolve)),
   new Promise(resolve => Cluster_Cache_Analytics.once('connected', resolve)),
 ]).then(() => {
-  console.log('🎉 All database connections established successfully!');
+  console.info('🎉 All database connections established successfully!');
 }).catch(err => {
   console.error('❌ Failed to establish database connections:', err.message);
 });

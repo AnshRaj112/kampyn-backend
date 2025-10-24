@@ -321,7 +321,7 @@ router.post("/invoices/generate-order-invoices", async (req, res) => {
  */
 router.get("/universities", async (req, res) => {
   try {
-    console.log("🔵 Admin: Fetching all universities with details");
+    console.info("🔵 Admin: Fetching all universities with details");
     
     // Fetch all universities with full details
     const universities = await Uni.find({})
@@ -360,7 +360,7 @@ router.get("/universities", async (req, res) => {
     // Sort by creation date (newest first)
     universitiesWithVendorCounts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    console.log(`✅ Admin: Found ${universitiesWithVendorCounts.length} universities`);
+    console.info(`✅ Admin: Found ${universitiesWithVendorCounts.length} universities`);
     
     res.json({
       success: true,
@@ -386,7 +386,7 @@ router.get("/universities", async (req, res) => {
 router.get("/universities/:uniId", async (req, res) => {
   try {
     const { uniId } = req.params;
-    console.log(`🔵 Admin: Fetching details for university ${uniId}`);
+    console.info(`🔵 Admin: Fetching details for university ${uniId}`);
     
     // Fetch university details
     const university = await Uni.findById(uniId)
@@ -449,7 +449,7 @@ router.get("/universities/:uniId", async (req, res) => {
       }
     };
 
-    console.log(`✅ Admin: Found university with ${totalVendors} vendors`);
+    console.info(`✅ Admin: Found university with ${totalVendors} vendors`);
     
     res.json({
       success: true,
@@ -483,7 +483,7 @@ router.patch("/universities/:uniId/availability", async (req, res) => {
       });
     }
 
-    console.log(`🔵 Admin: Updating availability for university ${uniId} to ${isAvailable}`);
+    console.info(`🔵 Admin: Updating availability for university ${uniId} to ${isAvailable}`);
 
     const university = await Uni.findByIdAndUpdate(
       uniId,
@@ -498,7 +498,7 @@ router.patch("/universities/:uniId/availability", async (req, res) => {
       });
     }
 
-    console.log(`✅ Admin: University ${university.fullName} availability updated to ${isAvailable}`);
+    console.info(`✅ Admin: University ${university.fullName} availability updated to ${isAvailable}`);
 
     res.json({
       success: true,
@@ -530,7 +530,7 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
     const { uniId } = req.params;
     const { platformFee } = req.body;
 
-    console.log(`🔵 Admin: Updating platform fee for university ${uniId} to ₹${platformFee}`);
+    console.info(`🔵 Admin: Updating platform fee for university ${uniId} to ₹${platformFee}`);
 
     // Validate input
     if (platformFee === undefined || platformFee === null) {
@@ -561,7 +561,7 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
       });
     }
 
-    console.log(`✅ Admin: Platform fee updated for ${university.fullName} to ₹${platformFee}`);
+    console.info(`✅ Admin: Platform fee updated for ${university.fullName} to ₹${platformFee}`);
 
     res.json({
       success: true,
@@ -593,7 +593,7 @@ router.put("/universities/bulk-platform-fees", async (req, res) => {
   try {
     const { updates } = req.body;
 
-    console.log(`🔵 Admin: Bulk updating platform fees for ${updates.length} universities`);
+    console.info(`🔵 Admin: Bulk updating platform fees for ${updates.length} universities`);
 
     // Validate input
     if (!Array.isArray(updates) || updates.length === 0) {
@@ -641,7 +641,7 @@ router.put("/universities/bulk-platform-fees", async (req, res) => {
 
     const result = await Uni.bulkWrite(bulkOps);
 
-    console.log(`✅ Admin: Bulk updated platform fees for ${result.modifiedCount} universities`);
+    console.info(`✅ Admin: Bulk updated platform fees for ${result.modifiedCount} universities`);
 
     res.json({
       success: true,
@@ -669,7 +669,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
   try {
     const { uniId } = req.params;
 
-    console.log(`🔵 Admin: Fetching platform fee for university ${uniId}`);
+    console.info(`🔵 Admin: Fetching platform fee for university ${uniId}`);
 
     const university = await Uni.findById(uniId)
       .select('_id fullName email platformFee')
@@ -682,7 +682,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
       });
     }
 
-    console.log(`✅ Admin: Retrieved platform fee for ${university.fullName}: ₹${university.platformFee}`);
+    console.info(`✅ Admin: Retrieved platform fee for ${university.fullName}: ₹${university.platformFee}`);
 
     res.json({
       success: true,
@@ -711,7 +711,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
  */
 router.get("/help-messages", async (req, res) => {
   try {
-    console.log("🔵 Admin: Fetching all help messages");
+    console.info("🔵 Admin: Fetching all help messages");
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -739,7 +739,7 @@ router.get("/help-messages", async (req, res) => {
     const unreadCount = await ContactMessage.countDocuments({ isRead: false });
     const readCount = await ContactMessage.countDocuments({ isRead: true });
     
-    console.log(`✅ Admin: Found ${messages.length} help messages (${unreadCount} unread)`);
+    console.info(`✅ Admin: Found ${messages.length} help messages (${unreadCount} unread)`);
     
     res.json({
       success: true,
@@ -776,7 +776,7 @@ router.get("/help-messages", async (req, res) => {
 router.put("/help-messages/:messageId/read", async (req, res) => {
   try {
     const { messageId } = req.params;
-    console.log(`🔵 Admin: Marking message ${messageId} as read`);
+    console.info(`🔵 Admin: Marking message ${messageId} as read`);
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -793,7 +793,7 @@ router.put("/help-messages/:messageId/read", async (req, res) => {
       });
     }
     
-    console.log(`✅ Admin: Message ${messageId} marked as read`);
+    console.info(`✅ Admin: Message ${messageId} marked as read`);
     
     res.json({
       success: true,
@@ -822,7 +822,7 @@ router.put("/help-messages/:messageId/read", async (req, res) => {
 router.put("/help-messages/:messageId/unread", async (req, res) => {
   try {
     const { messageId } = req.params;
-    console.log(`🔵 Admin: Marking message ${messageId} as unread`);
+    console.info(`🔵 Admin: Marking message ${messageId} as unread`);
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -839,7 +839,7 @@ router.put("/help-messages/:messageId/unread", async (req, res) => {
       });
     }
     
-    console.log(`✅ Admin: Message ${messageId} marked as unread`);
+    console.info(`✅ Admin: Message ${messageId} marked as unread`);
     
     res.json({
       success: true,
@@ -868,7 +868,7 @@ router.put("/help-messages/:messageId/unread", async (req, res) => {
 router.get("/help-messages/:messageId", async (req, res) => {
   try {
     const { messageId } = req.params;
-    console.log(`🔵 Admin: Fetching help message ${messageId}`);
+    console.info(`🔵 Admin: Fetching help message ${messageId}`);
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -881,7 +881,7 @@ router.get("/help-messages/:messageId", async (req, res) => {
       });
     }
     
-    console.log(`✅ Admin: Retrieved help message ${messageId}`);
+    console.info(`✅ Admin: Retrieved help message ${messageId}`);
     
     res.json({
       success: true,
@@ -906,7 +906,7 @@ router.get("/help-messages/:messageId", async (req, res) => {
 router.delete("/help-messages/:messageId", async (req, res) => {
   try {
     const { messageId } = req.params;
-    console.log(`🔵 Admin: Deleting help message ${messageId}`);
+    console.info(`🔵 Admin: Deleting help message ${messageId}`);
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -919,7 +919,7 @@ router.delete("/help-messages/:messageId", async (req, res) => {
       });
     }
     
-    console.log(`✅ Admin: Deleted help message ${messageId}`);
+    console.info(`✅ Admin: Deleted help message ${messageId}`);
     
     res.json({
       success: true,

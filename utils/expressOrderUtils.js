@@ -112,7 +112,7 @@ async function initiateExpressOrder({
     deleted: false,
   });
 
-  console.log("✅ ExpressOrder created:", {
+  console.info("✅ ExpressOrder created:", {
     id: expressOrder._id.toString(),
     expires: expressOrder.reservationExpiresAt.toISOString(),
   });
@@ -135,7 +135,7 @@ async function getVendorExpressOrders(vendorId) {
     reservationExpiresAt: { $gt: now },
     deleted: false,
   };
-  console.log("🔍 getVendorExpressOrders filter:", filter);
+  console.info("🔍 getVendorExpressOrders filter:", filter);
 
   return Order.find(filter).sort({ createdAt: -1 }).lean();
 }

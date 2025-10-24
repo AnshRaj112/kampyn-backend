@@ -79,7 +79,7 @@ exports.createVendorRazorpayOrder = async (req, res) => {
       });
     }
 
-    console.log("💳 Creating Razorpay order for vendor guest order:", {
+    console.info("💳 Creating Razorpay order for vendor guest order:", {
       vendorId,
       total,
       amountInPaise,
@@ -99,7 +99,7 @@ exports.createVendorRazorpayOrder = async (req, res) => {
       payment_capture: 1,
     });
 
-    console.log("💳 Razorpay order created:", {
+    console.info("💳 Razorpay order created:", {
       razorpayOrderId: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency
@@ -152,7 +152,7 @@ exports.verifyVendorPayment = async (req, res) => {
       razorpay_signature,
     } = req.body;
 
-    console.log("🔍 Verifying vendor payment:", {
+    console.info("🔍 Verifying vendor payment:", {
       razorpay_order_id,
       razorpay_payment_id
     });
@@ -305,7 +305,7 @@ exports.verifyVendorPayment = async (req, res) => {
       const invoiceUtils = require('../utils/invoiceUtils');
       invoiceUtils.generateOrderInvoices(orderDataForInvoice)
         .then(invoiceResults => {
-          console.log('📄 Vendor order invoice generation completed:', invoiceResults);
+          console.info('📄 Vendor order invoice generation completed:', invoiceResults);
         })
         .catch(error => {
           console.error('❌ Vendor order invoice generation failed:', error);
@@ -316,7 +316,7 @@ exports.verifyVendorPayment = async (req, res) => {
       // Don't fail the payment if invoice generation fails
     }
 
-    console.log("✅ Vendor payment verified and order created:", {
+    console.info("✅ Vendor payment verified and order created:", {
       orderId: newOrder._id,
       orderNumber: newOrder.orderNumber,
       isNewUser

@@ -19,7 +19,7 @@ if (!razorpayConfig.keyId) {
   console.warn('⚠️ Using default test key: rzp_test_kR4r4rtzasoKWl');
 }
 
-console.log('🔑 Razorpay Configuration:', {
+console.info('🔑 Razorpay Configuration:', {
   keyId: razorpayConfig.keyId,
   environment: razorpayConfig.environment,
   apiBase: razorpayConfig.apiBase,

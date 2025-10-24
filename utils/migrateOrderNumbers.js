@@ -36,7 +36,7 @@ async function generateOrderNumberForMigration(createdAt, userId, vendorId) {
 
 async function migrateOrderNumbers() {
   try {
-    console.log("Starting order number migration...");
+    console.info("Starting order number migration...");
     
     // Find all orders without orderNumber
     const ordersWithoutNumber = await Order.find({ 
@@ -44,10 +44,10 @@ async function migrateOrderNumbers() {
       deleted: false
     }).sort({ createdAt: 1 }).lean();
     
-    console.log(`Found ${ordersWithoutNumber.length} orders without orderNumber`);
+    console.info(`Found ${ordersWithoutNumber.length} orders without orderNumber`);
     
     if (ordersWithoutNumber.length === 0) {
-      console.log("No orders need migration. All orders already have orderNumber.");
+      console.info("No orders need migration. All orders already have orderNumber.");
       return;
     }
     
@@ -63,7 +63,7 @@ async function migrateOrderNumbers() {
           { $set: { orderNumber } }
         );
         
-        console.log(`Updated order ${order._id} with orderNumber: ${orderNumber}`);
+        console.info(`Updated order ${order._id} with orderNumber: ${orderNumber}`);
         successCount++;
         
         // Small delay to prevent overwhelming the database
@@ -75,7 +75,7 @@ async function migrateOrderNumbers() {
       }
     }
     
-    console.log(`Migration completed. Success: ${successCount}, Errors: ${errorCount}`);
+    console.info(`Migration completed. Success: ${successCount}, Errors: ${errorCount}`);
     
   } catch (error) {
     console.error("Migration failed:", error);
@@ -87,7 +87,7 @@ async function migrateOrderNumbers() {
 if (require.main === module) {
   migrateOrderNumbers()
     .then(() => {
-      console.log("Migration completed successfully");
+      console.info("Migration completed successfully");
       process.exit(0);
     })
     .catch((error) => {

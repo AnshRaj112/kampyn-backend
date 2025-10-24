@@ -75,7 +75,7 @@ exports.getFavourites = async (req, res) => {
     const user = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: "User not found." });
 
-    console.log("User favorites:", user.favourites); // Debug log
+    console.info("User favorites:", user.favourites); // Debug log
 
     const favourites = await Promise.all(
       user.favourites.map(async (fav) => {
@@ -83,14 +83,14 @@ exports.getFavourites = async (req, res) => {
           const Model = fav.kind === "Retail" ? Retail : Produce;
           const item = await Model.findById(fav.itemId).lean();
           if (!item) {
-            console.log(`Item not found for ID: ${fav.itemId}`); // Debug log
+            console.info(`Item not found for ID: ${fav.itemId}`); // Debug log
             return null;
           }
 
           // Get the vendor directly from the favorite's vendorId
           const vendor = await Vendor.findById(fav.vendorId).lean();
           if (!vendor) {
-            console.log(`Vendor not found for ID: ${fav.vendorId}`); // Debug log
+            console.info(`Vendor not found for ID: ${fav.vendorId}`); // Debug log
             return null;
           }
 
@@ -107,7 +107,7 @@ exports.getFavourites = async (req, res) => {
       })
     );
 
-    console.log("Processed favorites:", favourites.filter(Boolean)); // Debug log
+    console.info("Processed favorites:", favourites.filter(Boolean)); // Debug log
     res.status(200).json({ favourites: favourites.filter(Boolean) });
   } catch (err) {
     console.error("Error in getFavourites:", err);

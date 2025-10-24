@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
 exports.sendContactEmail = async (req, res) => {
   const { name, email, message } = req.body;
 
-  console.log("Contact data received:", { name, email, message });
+  console.info("Contact data received:", { name, email, message });
 
   try {
     // Save the contact message to MongoDB
@@ -31,7 +31,7 @@ Message: ${message}`,
     };
 
     await transporter.sendMail(mailOptions);
-    console.log("Email sent successfully");
+    console.info("Email sent successfully");
 
     res
       .status(200)

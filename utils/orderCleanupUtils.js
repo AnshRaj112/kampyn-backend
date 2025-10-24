@@ -16,7 +16,7 @@ async function cleanupOrderAtomically(order, session) {
     // Use the shared atomic cancellation function
     const result = await cancelOrderAtomically(order._id, order, session);
     
-    console.log(`Order ${order._id} cleaned up atomically. Released ${result.locksReleased} locks`);
+    console.info(`Order ${order._id} cleaned up atomically. Released ${result.locksReleased} locks`);
     
     return result;
   } catch (error) {
@@ -45,7 +45,7 @@ async function cleanupExpiredOrders() {
   try {
     const now = new Date();
     
-    console.log(`🔍 Checking for expired orders at ${now.toISOString()}`);
+    console.info(`🔍 Checking for expired orders at ${now.toISOString()}`);
     
     // Find all expired pending orders
     const expiredOrders = await Order.find({
@@ -74,14 +74,14 @@ async function cleanupExpiredOrders() {
             }
             // Extra logging: fetch and log the current status before delete
             const currentOrder = await Order.findById(order._id).lean();
-            console.log(`[CLEANUP] Attempting to delete order ${order._id} with status '${currentOrder ? currentOrder.status : 'unknown'}' at ${new Date().toISOString()}`);
+            console.info(`[CLEANUP] Attempting to delete order ${order._id} with status '${currentOrder ? currentOrder.status : 'unknown'}' at ${new Date().toISOString()}`);
             // Atomic delete: only delete if status is still 'pendingPayment'
             const deleteResult = await Order.deleteOne({ _id: order._id, status: "pendingPayment" }, { session });
             if (deleteResult.deletedCount === 0) {
               console.warn(`[CLEANUP] SKIP: Order ${order._id} was not deleted because status changed (current status: '${currentOrder ? currentOrder.status : 'unknown'}').`);
               return { locksReleased: 0 };
             }
-            console.log(`[CLEANUP] SUCCESS: Order ${order._id} deleted from DB (status was '${currentOrder ? currentOrder.status : 'unknown'}').`);
+            console.info(`[CLEANUP] SUCCESS: Order ${order._id} deleted from DB (status was '${currentOrder ? currentOrder.status : 'unknown'}').`);
             // Remove from user and vendor
             await User.updateOne(
               { _id: order.userId },
@@ -99,7 +99,7 @@ async function cleanupExpiredOrders() {
           });
           totalLocksReleased += result.locksReleased;
           if (result.locksReleased > 0) {
-            console.log(`Cleaned up expired order ${order._id} atomically. Released ${result.locksReleased} locks`);
+            console.info(`Cleaned up expired order ${order._id} atomically. Released ${result.locksReleased} locks`);
           }
         } catch (error) {
           console.error(`Failed to cleanup order ${order._id} atomically:`, error);
@@ -188,13 +188,13 @@ function startPeriodicCleanup(intervalMs = 10 * 60 * 1000) { // 10 minutes defau
   const cleanupInterval = setInterval(async () => {
     try {
       const result = await cleanupExpiredOrders();
-      console.log(`Periodic cleanup: ${result.message}`);
+      console.info(`Periodic cleanup: ${result.message}`);
     } catch (error) {
       console.error("Periodic cleanup failed:", error);
     }
   }, intervalMs);
   
-  console.log(`Started periodic cleanup every ${intervalMs / 1000} seconds`);
+  console.info(`Started periodic cleanup every ${intervalMs / 1000} seconds`);
   return cleanupInterval;
 }
 

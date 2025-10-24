@@ -1085,13 +1085,13 @@ async function uploadPDFToCloudinary(pdfBuffer, filename) {
     
     // If fallback is enabled, try alternative approaches
     if (CLOUDINARY_CONFIG.enableFallback) {
-      console.log('🔄 Attempting fallback upload methods...');
+      console.info('🔄 Attempting fallback upload methods...');
       
       // Try enhanced PDF upload first
       try {
-        console.log('🔄 Trying enhanced PDF upload method...');
+        console.info('🔄 Trying enhanced PDF upload method...');
         const enhancedUrl = await uploadPDFWithEnhancedHandling(pdfBuffer, filename);
-        console.log('✅ Enhanced PDF upload successful:', enhancedUrl);
+        console.info('✅ Enhanced PDF upload successful:', enhancedUrl);
         return enhancedUrl;
       } catch (enhancedError) {
         console.warn('⚠️ Enhanced PDF upload failed, trying standard fallback...');
@@ -1100,7 +1100,7 @@ async function uploadPDFToCloudinary(pdfBuffer, filename) {
       // Try standard fallback upload
       try {
         const fallbackUrl = await fallbackUpload(pdfBuffer, filename);
-        console.log('✅ Standard fallback upload successful:', fallbackUrl);
+        console.info('✅ Standard fallback upload successful:', fallbackUrl);
         return fallbackUrl;
       } catch (fallbackError) {
         console.error('❌ All fallback upload methods failed');

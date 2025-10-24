@@ -401,7 +401,7 @@ exports.searchVendorsByName = async (req, res) => {
         .map((v) => v.vendorId.toString())
     );
 
-    console.log("Available vendor IDs:", Array.from(availableVendorIds));
+    console.info("Available vendor IDs:", Array.from(availableVendorIds));
 
     // Search in the Vendor collection with a more flexible query
     const vendors = await Vendor.find({
@@ -414,14 +414,14 @@ exports.searchVendorsByName = async (req, res) => {
       .select("_id fullName")
       .lean();
 
-    console.log("Found vendors before availability check:", vendors.length);
+    console.info("Found vendors before availability check:", vendors.length);
 
     // Filter vendors to only include available ones
     const availableVendors = vendors.filter((vendor) =>
       availableVendorIds.has(vendor._id.toString())
     );
 
-    console.log("Found available vendors:", availableVendors.length);
+    console.info("Found available vendors:", availableVendors.length);
 
     // Format the response
     const formattedVendors = availableVendors.map((vendor) => ({

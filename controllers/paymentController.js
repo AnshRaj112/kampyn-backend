@@ -42,9 +42,9 @@ async function verifyPaymentHandler(req, res, next) {
 
     // 2. Signature is valid → create the Order in DB
     // Retrieve order details from temporary storage using razorpay_order_id
-    console.log("🔍 Looking for order details with razorpay_order_id:", razorpay_order_id);
+    console.info("🔍 Looking for order details with razorpay_order_id:", razorpay_order_id);
     const orderDetails = orderUtils.getPendingOrderDetails(razorpay_order_id);
-    console.log("🔍 Order details found:", orderDetails ? "YES" : "NO");
+    console.info("🔍 Order details found:", orderDetails ? "YES" : "NO");
     
     if (!orderDetails) {
       console.error("❌ Order details not found for razorpay_order_id:", razorpay_order_id);
@@ -124,7 +124,7 @@ async function verifyPaymentHandler(req, res, next) {
       // Generate invoices asynchronously (don't wait for completion)
       invoiceUtils.generateOrderInvoices(orderDataForInvoice)
         .then(invoiceResults => {
-          console.log('📄 Invoice generation completed:', invoiceResults);
+          console.info('📄 Invoice generation completed:', invoiceResults);
         })
         .catch(error => {
           console.error('❌ Invoice generation failed:', error);

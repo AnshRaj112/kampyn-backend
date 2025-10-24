@@ -64,7 +64,7 @@ async function cancelOrderAtomically(orderId, order, session) {
     // 4) Release item locks (outside transaction since it's in-memory cache)
     const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
     
-    console.log('Order ' + String(orderId) + ' cancelled atomically. Released ' + String(lockReleaseResult.released.length) + ' locks');
+    console.info('Order ' + String(orderId) + ' cancelled atomically. Released ' + String(lockReleaseResult.released.length) + ' locks');
     
     return {
       success: true,
@@ -211,7 +211,7 @@ async function generateRazorpayOrderForUser({
   const cartDetails = await cartUtils.getCartDetails(userId);
   const populatedCart = cartDetails.cart;
 
-  console.log("🛒 Backend: Cart details fetched:", {
+  console.info("🛒 Backend: Cart details fetched:", {
     userId,
     cartLength: populatedCart.length,
     cartItems: populatedCart.map(item => ({
@@ -250,7 +250,7 @@ async function generateRazorpayOrderForUser({
   let itemTotal = 0;
   let packableItemsTotal = 0;
   
-  console.log("🔍 Cart items for calculation:", populatedCart.map(item => ({
+  console.info("🔍 Cart items for calculation:", populatedCart.map(item => ({
     name: item.name,
     price: item.price,
     quantity: item.quantity,
@@ -264,20 +264,20 @@ async function generateRazorpayOrderForUser({
     const itemQuantity = cartItem.quantity || 0;
     const itemTotalPrice = itemPrice * itemQuantity;
     
-    console.log('💰 Item calculation: ' + String(cartItem.name) + ' - Price: ' + String(itemPrice) + ' × Quantity: ' + String(itemQuantity) + ' = ' + String(itemTotalPrice));
+    console.info('💰 Item calculation: ' + String(cartItem.name) + ' - Price: ' + String(itemPrice) + ' × Quantity: ' + String(itemQuantity) + ' = ' + String(itemTotalPrice));
     
     itemTotal += itemTotalPrice;
     
     // Check if item is packable (produce items are packable by default)
     const isPackable = cartItem.packable === true || cartItem.kind === "Produce";
-    console.log('📦 Packable check for ' + String(cartItem.name) + ': packable=' + String(cartItem.packable) + ', kind=' + String(cartItem.kind) + ', isPackable=' + String(isPackable));
+    console.info('📦 Packable check for ' + String(cartItem.name) + ': packable=' + String(cartItem.packable) + ', kind=' + String(cartItem.kind) + ', isPackable=' + String(isPackable));
     
     if (isPackable) {
       packableItemsTotal += itemQuantity;
     }
   }
   
-  console.log("📊 Calculation summary:", {
+  console.info("📊 Calculation summary:", {
     itemTotal,
     packableItemsTotal,
     packingCharge,
@@ -291,7 +291,7 @@ async function generateRazorpayOrderForUser({
   
   const finalTotal = itemTotal + packaging + delivery + platformFee;
   
-  console.log("💰 Backend Order Calculation:", {
+  console.info("💰 Backend Order Calculation:", {
     itemTotal,
     packableItemsTotal,
     packaging,
@@ -311,7 +311,7 @@ async function generateRazorpayOrderForUser({
   });
 
   // Additional debugging for amount calculation
-  console.log("🔍 Amount Debug:", {
+  console.info("🔍 Amount Debug:", {
     finalTotal,
     finalTotalInPaise: finalTotal * 100,
     razorpayAmount: finalTotal * 100,
@@ -323,7 +323,7 @@ async function generateRazorpayOrderForUser({
   const shortUserId = userId.toString().slice(-6);
   const tempOrderId = `T${Date.now()}-${shortUserId}`; // always < 40 chars
   
-  console.log("💳 Creating Razorpay order with amount:", {
+  console.info("💳 Creating Razorpay order with amount:", {
     finalTotal,
     amountInPaise: finalTotal * 100,
     currency: "INR",
@@ -337,7 +337,7 @@ async function generateRazorpayOrderForUser({
     payment_capture: 1,
   });
   
-  console.log("💳 Razorpay order created:", {
+  console.info("💳 Razorpay order created:", {
     razorpayOrderId: razorpayOrder.id,
     amount: razorpayOrder.amount,
     currency: razorpayOrder.currency
@@ -380,7 +380,7 @@ async function generateRazorpayOrderForUser({
     finalTotal,
   };
 
-  console.log("📤 Backend Response:", {
+  console.info("📤 Backend Response:", {
     finalTotal: response.finalTotal,
     razorpayAmount: response.razorpayOptions.amount,
     amountInRupees: response.razorpayOptions.amount / 100
@@ -474,7 +474,7 @@ async function verifyAndProcessPaymentWithOrderId({
         return await cancelOrderAtomically(ourOrderId, order, session);
       });
       
-      console.log('Payment failed for order ' + String(ourOrderId) + ' - cancelled atomically. Released ' + String(locksReleased) + ' locks');
+      console.info('Payment failed for order ' + String(ourOrderId) + ' - cancelled atomically. Released ' + String(locksReleased) + ' locks');
       return { success: false, msg: "Invalid signature, payment failed" };
     } catch (error) {
       console.error('Failed to cancel order ' + String(ourOrderId) + ' atomically:', error);
@@ -653,7 +653,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
 
   // 5) Assemble each order's detailed items
   return orders.map((order) => {
-    console.log("Processing order:", order.orderNumber, "Total:", order.total);
+    console.info("Processing order:", order.orderNumber, "Total:", order.total);
     
     const detailedItems = order.items.map(({ itemId, kind, quantity }) => {
       const key = itemId.toString();
@@ -680,7 +680,7 @@ async function getOrdersWithDetails(vendorId, orderType) {
       items: detailedItems,
     };
     
-    console.log("Returning order result:", {
+    console.info("Returning order result:", {
       orderNumber: result.orderNumber,
       total: result.total,
       totalType: typeof result.total
@@ -710,7 +710,7 @@ async function getOrderWithDetails(orderId) {
     }).lean();
 
     if (!order) {
-      console.log('Order not found: ' + String(orderId));
+      console.info('Order not found: ' + String(orderId));
       return null;
     }
 

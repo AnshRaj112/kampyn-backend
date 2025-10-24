@@ -148,9 +148,9 @@ router.get('/common-hsn/:type', async (req, res) => {
     const allItems = [...retailItems, ...produceItems];
     
     // Debug: Log some items to see what we're getting
-    console.log(`Debug: Found ${allItems.length} items for type "${type}"`);
+    console.info(`Debug: Found ${allItems.length} items for type "${type}"`);
     if (allItems.length > 0) {
-      console.log('Sample items:', allItems.slice(0, 3).map(item => ({
+      console.info('Sample items:', allItems.slice(0, 3).map(item => ({
         name: item.name,
         hsnCode: item.hsnCode,
         gstPercentage: item.gstPercentage,
@@ -180,7 +180,7 @@ router.get('/common-hsn/:type', async (req, res) => {
     });
     
     // Debug: Log the HSN counts
-    console.log('HSN Counts:', Object.entries(hsnCounts).map(([hsn, data]) => ({
+    console.info('HSN Counts:', Object.entries(hsnCounts).map(([hsn, data]) => ({
       hsnCode: hsn,
       count: data.count,
       gstPercentage: data.gstPercentage,

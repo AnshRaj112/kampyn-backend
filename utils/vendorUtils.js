@@ -11,7 +11,7 @@ const Raw = require("../models/item/Raw");
  */
 async function populateVendorWithUniversityItems(vendor, uniId) {
   try {
-    console.log(`🔧 Populating vendor ${vendor._id} with items from university ${uniId}`);
+    console.info(`🔧 Populating vendor ${vendor._id} with items from university ${uniId}`);
 
     // Fetch all existing items for the university
     const [retailItems, produceItems, rawItems] = await Promise.all([
@@ -20,7 +20,7 @@ async function populateVendorWithUniversityItems(vendor, uniId) {
       Raw.find({}).select('_id unit').lean() // Raw items are not university-specific
     ]);
 
-    console.log(`📦 Found ${retailItems.length} retail, ${produceItems.length} produce, ${rawItems.length} raw items`);
+    console.info(`📦 Found ${retailItems.length} retail, ${produceItems.length} produce, ${rawItems.length} raw items`);
 
     // Add retail items to vendor inventory (quantity: 0)
     const retailInventory = retailItems.map(item => ({
@@ -52,7 +52,7 @@ async function populateVendorWithUniversityItems(vendor, uniId) {
 
     await vendor.save();
 
-    console.log(`✅ Successfully populated vendor with ${retailInventory.length} retail, ${produceInventory.length} produce, ${rawMaterialInventory.length} raw items`);
+    console.info(`✅ Successfully populated vendor with ${retailInventory.length} retail, ${produceInventory.length} produce, ${rawMaterialInventory.length} raw items`);
   } catch (error) {
     console.error(`❌ Error populating vendor with university items:`, error);
     throw error;
