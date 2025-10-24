@@ -363,7 +363,7 @@ Soft deletes a grievance (university only).
   description: String (required, max 1000 chars),
   severity: Enum ['low', 'medium', 'high', 'critical'],
   status: Enum ['open', 'in_progress', 'resolved', 'closed', 'rejected'],
-  category: Enum ['order_issue', 'payment_issue', 'delivery_issue', 'food_quality', 'service_issue', 'technical_issue', 'billing_issue', 'other'],
+  category: Enum ['order_issue', 'payment_issue', 'delivery_issue', 'food_quality', 'service_issue', 'technical_issue', 'billing_issue', 'something_broken', 'something_required', 'things_too', 'other'],
   raisedBy: {
     type: Enum ['vendor', 'university'],
     id: ObjectId

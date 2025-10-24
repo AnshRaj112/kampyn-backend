@@ -43,6 +43,9 @@ const grievanceSchema = new mongoose.Schema(
         "service_issue",
         "technical_issue",
         "billing_issue",
+        "something_broken",
+        "something_required",
+        "things_too",
         "other"
       ],
       required: true
@@ -57,8 +60,8 @@ const grievanceSchema = new mongoose.Schema(
       },
       id: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        refPath: "raisedBy.type"
+        required: true
+        // refPath: "raisedBy.type" // Temporarily disabled due to schema registration issues
       }
     },
     
@@ -72,7 +75,7 @@ const grievanceSchema = new mongoose.Schema(
     // Related entities (optional)
     relatedOrderId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
+      // ref: "Order", // Temporarily disabled due to schema registration issues
       default: null
     },
     

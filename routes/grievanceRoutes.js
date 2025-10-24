@@ -16,19 +16,17 @@ const {
 
 // Import middleware
 const authMiddleware = require("../middleware/authMiddleware").authMiddleware;
+const vendorAuthMiddleware = require("../middleware/vendorAuthMiddleware");
 const { uniAuthMiddleware } = require("../middleware/uniAuthMiddleware");
 
-// Apply authentication middleware to all routes
-router.use(authMiddleware);
-
 // Create grievance (both vendor and university can create)
-router.post("/:uniId/grievances", createGrievance);
+router.post("/:uniId/grievances", vendorAuthMiddleware, createGrievance);
 
 // Get specific grievance (both vendor and university can view)
 router.get("/:uniId/grievances/:grievanceId", getGrievanceById);
 
 // Get grievances raised by vendor (vendor only)
-router.get("/:uniId/vendor-grievances", getVendorGrievances);
+router.get("/:uniId/vendor-grievances", vendorAuthMiddleware, getVendorGrievances);
 
 // Get all grievances for university (university only)
 router.get("/:uniId/grievances", uniAuthMiddleware, getUniversityGrievances);
