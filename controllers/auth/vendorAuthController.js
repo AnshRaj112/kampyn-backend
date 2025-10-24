@@ -124,7 +124,7 @@ exports.verifyOtp = async (req, res) => {
     const sanitizedEmail = email.toLowerCase().trim();
     
     // Validate email format using regex
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(sanitizedEmail)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
@@ -279,7 +279,7 @@ exports.forgotPassword = async (req, res) => {
     
     if (identifier.includes('@')) {
       // Email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
       processedIdentifier = identifier.toLowerCase().trim();
       if (!emailRegex.test(processedIdentifier)) {
         return res.status(400).json({ message: "Invalid email format" });
@@ -338,7 +338,7 @@ exports.resetPassword = async (req, res) => {
     const sanitizedEmail = email.toLowerCase().trim();
     
     // Validate email format using regex
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(sanitizedEmail)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
