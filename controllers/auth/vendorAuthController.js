@@ -137,7 +137,7 @@ exports.verifyOtp = async (req, res) => {
     
     console.info("🔍 Looking for OTP with email:", sanitizedEmail, "and OTP:", otp);
     
-    const otpRecord = await Otp.findOne({ email: sanitizedEmail, otp });
+    const otpRecord = await Otp.findOne({ email: sanitizedEmail, otp: { $eq: otp } });
     console.info("🔍 Found OTP record:", otpRecord);
 
     if (!otpRecord) {
