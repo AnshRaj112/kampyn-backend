@@ -105,7 +105,7 @@ exports.verifyOtp = async (req, res) => {
 
     // Update user verification status
     const user = await Account.findOneAndUpdate(
-      { email },
+      { email: { $eq: email } },
       { isVerified: true },
       { new: true }
     );
