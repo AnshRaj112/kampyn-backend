@@ -1127,10 +1127,11 @@ exports.getInvoicesByDateRange = async (filters) => {
       };
     }
     
-    if (vendorId) query.vendorId = vendorId;
-    if (uniId) query.uniId = uniId;
-    if (invoiceType) query.invoiceType = invoiceType;
-    if (recipientType) query.recipientType = recipientType;
+    // Defensive type checks to prevent NoSQL injection
+    if (vendorId && typeof vendorId === "string") query.vendorId = vendorId;
+    if (uniId && typeof uniId === "string") query.uniId = uniId;
+    if (invoiceType && typeof invoiceType === "string") query.invoiceType = invoiceType;
+    if (recipientType && typeof recipientType === "string") query.recipientType = recipientType;
     
     const invoices = await Invoice.find(query)
       .populate({ path: 'vendorId', select: 'name', model: Vendor })
