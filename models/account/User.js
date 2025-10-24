@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       default: "user-standard",
     },
-    fullName: { type: String }, // Only for users
+    fullName: { type: String },
     email: { type: String, required: true, unique: true },
     phone: { type: String, required: true, unique: true },
     password: { type: String, required: true },
