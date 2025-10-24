@@ -10,6 +10,7 @@ const path = require("path");
 
 // Import CSRF protection middleware
 const lusca = require('lusca');
+const { csrfProtection, csrfTokenEndpoint, refreshCSRFToken } = require('./middleware/csrfMiddleware');
 
 // Import database connections
 const { Cluster_User, Cluster_Order, Cluster_Item, Cluster_Inventory, Cluster_Accounts, Cluster_Cache_Analytics } = require("./config/db");
@@ -78,7 +79,7 @@ app.use((req, res, next) => {
   ) {
     return next();
   }
-  return lusca.csrf()(req, res, next);
+  return csrfProtection()(req, res, next);
 });
 
 // ✅ Load environment variables
