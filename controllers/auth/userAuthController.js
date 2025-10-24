@@ -96,7 +96,7 @@ exports.verifyOtp = async (req, res) => {
     console.info("🔵 OTP Verification Request:", req.body);
 
     const { email, otp } = req.body;
-    const otpRecord = await Otp.findOne({ email, otp });
+    const otpRecord = await Otp.findOne({ email: { $eq: email }, otp: { $eq: otp } });
 
     if (!otpRecord) {
       console.info("⚠️ Invalid or expired OTP:", otp);
