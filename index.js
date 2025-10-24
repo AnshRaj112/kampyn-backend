@@ -68,7 +68,8 @@ const csrfExcludedPaths = [
   '/contact',
   '/razorpay/webhook',
   '/api/csrf/token',
-  '/api/csrf/refresh'
+  '/api/csrf/refresh',
+  '/api/admin/services'
 ];
 const csrfExcludedMethods = ['GET', 'HEAD', 'OPTIONS'];
 
