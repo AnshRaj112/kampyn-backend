@@ -8,6 +8,9 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 
+// Import CSRF protection middleware
+const { csrfProtection, csrfTokenEndpoint, refreshCSRFToken } = require("./middleware/csrfMiddleware");
+
 // Import database connections
 const { Cluster_User, Cluster_Order, Cluster_Item, Cluster_Inventory, Cluster_Accounts, Cluster_Cache_Analytics } = require("./config/db");
 
@@ -50,6 +53,25 @@ app.use(express.json()); // ✅ Parses incoming JSON data
 app.use(express.urlencoded({ extended: true })); // ✅ Parses form data
 app.use(cookieParser()); // 🔒 Parse cookies for admin authentication
 
+// 🔒 CSRF Protection - Apply to all routes except excluded ones
+app.use(csrfProtection({
+  excludedPaths: [
+    '/api/health',
+    '/api/user/auth/login',
+    '/api/user/auth/register',
+    '/api/uni/auth/login',
+    '/api/uni/auth/register',
+    '/api/vendor/auth/login',
+    '/api/vendor/auth/register',
+    '/api/admin/auth/login',
+    '/contact',
+    '/razorpay/webhook',
+    '/api/csrf/token',
+    '/api/csrf/refresh'
+  ],
+  excludedMethods: ['GET', 'HEAD', 'OPTIONS']
+}));
+
 // ✅ Load environment variables
 // const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const PORT = process.env.PORT || 5001;
@@ -88,7 +110,7 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-CSRF-Token"],
     exposedHeaders: ["Content-Range", "X-Content-Range"],
   })
 );
@@ -103,6 +125,10 @@ app.get("/api/health", (req, res) => {
     uptime: process.uptime(),
   });
 });
+
+// 🔒 CSRF Token endpoints
+app.get("/api/csrf/token", csrfTokenEndpoint);
+app.post("/api/csrf/refresh", refreshCSRFToken);
 
 // ✅ Serve static files for uploads (fallback for when Cloudinary fails)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
