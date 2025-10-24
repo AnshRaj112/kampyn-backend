@@ -72,7 +72,7 @@ async function cancelOrderAtomically(orderId, order, session) {
       failedLocks: lockReleaseResult.failed.length
     };
   } catch (error) {
-    console.error('Error in atomic order cancellation for ' + String(orderId) + ':', error);
+    console.error('Error in atomic order cancellation for order:', orderId, error);
     throw error;
   }
 }
@@ -477,10 +477,10 @@ async function verifyAndProcessPaymentWithOrderId({
       console.info('Payment failed for order ' + String(ourOrderId) + ' - cancelled atomically. Released ' + String(locksReleased) + ' locks');
       return { success: false, msg: "Invalid signature, payment failed" };
     } catch (error) {
-      console.error('Failed to cancel order ' + String(ourOrderId) + ' atomically:', error);
+      console.error('Failed to cancel order atomically:', ourOrderId, error);
       // Fallback: try to release locks even if database operations failed
       const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
-      console.warn('Fallback lock release for order ' + String(ourOrderId) + ': ' + String(lockReleaseResult.released.length) + ' released, ' + String(lockReleaseResult.failed.length) + ' failed');
+      console.warn('Fallback lock release for order:', ourOrderId, 'released:', lockReleaseResult.released.length, 'failed:', lockReleaseResult.failed.length);
       return { success: false, msg: "Invalid signature, payment failed" };
     } finally {
       await session.endSession();
@@ -765,7 +765,7 @@ async function getOrderWithDetails(orderId) {
       items: detailedItems,
     };
   } catch (error) {
-    console.error('Error in getOrderWithDetails for order ' + String(orderId) + ':', error);
+    console.error('Error in getOrderWithDetails for order:', orderId, error);
     return null;
   }
 }

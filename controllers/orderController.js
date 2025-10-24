@@ -372,7 +372,7 @@ exports.getPastOrders = async (req, res) => {
             };
           
         } catch (error) {
-          console.error('Error getting details for order ' + String(order._id) + ':', error);
+          console.error('Error getting details for order:', order._id, error);
           // Return basic order info if details fetch fails
           return {
             _id: order._id,
@@ -656,7 +656,7 @@ exports.getUserActiveOrders = async (req, res) => {
             };
           
         } catch (error) {
-          console.error('Error getting details for order ' + String(order._id) + ':', error);
+          console.error('Error getting details for order:', order._id, error);
           // Return basic order info if details fetch fails
           return {
             _id: order._id,
@@ -982,7 +982,7 @@ exports.cancelOrder = async (req, res) => {
         failedLocks: failedLocks
       });
     } catch (error) {
-      console.error('Failed to hard delete order ' + String(orderId) + ' atomically:', error);
+      console.error('Failed to hard delete order atomically:', orderId, error);
       return res.status(500).json({ 
         message: "Failed to cancel and delete order. Please try again.",
         error: error.message 
@@ -1069,7 +1069,7 @@ exports.cancelOrderManual = async (req, res) => {
         failedLocks: failedLocks
       });
     } catch (error) {
-      console.error('Failed to manually hard delete order ' + String(orderId) + ' atomically:', error);
+      console.error('Failed to manually hard delete order atomically:', orderId, error);
       return res.status(500).json({ 
         message: "Failed to cancel and delete order. Please try again.",
         error: error.message 
