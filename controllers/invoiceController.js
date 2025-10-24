@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const os = require('os'); // Added for os module
+const mongoose = require('mongoose');
 
 // Add fetch for Node.js (if not available)
 let fetch;
@@ -15,6 +16,32 @@ if (typeof globalThis.fetch === 'undefined') {
   fetch = require('node-fetch');
 } else {
   fetch = globalThis.fetch;
+}
+
+/**
+ * Validates and sanitizes MongoDB ObjectId
+ * @param {string} id - The ID to validate
+ * @returns {string} - Sanitized ObjectId string
+ * @throws {Error} - If ID is invalid
+ */
+function validateObjectId(id) {
+  if (!id || typeof id !== 'string') {
+    throw new Error('Invalid ID: must be a non-empty string');
+  }
+  
+  // Remove any potentially dangerous characters and validate ObjectId format
+  const sanitizedId = id.trim().replace(/[^a-f0-9]/gi, '');
+  
+  if (sanitizedId.length !== 24) {
+    throw new Error('Invalid ObjectId format');
+  }
+  
+  // Validate that it's a valid ObjectId
+  if (!mongoose.Types.ObjectId.isValid(sanitizedId)) {
+    throw new Error('Invalid ObjectId');
+  }
+  
+  return sanitizedId;
 }
 
 /**
@@ -620,8 +647,11 @@ exports.downloadOrderInvoices = async (req, res) => {
     
     console.info(`📦 ZIP download request for order: ${orderId}`);
     
+    // Validate and sanitize orderId to prevent path injection
+    const sanitizedOrderId = validateObjectId(orderId);
+    
     // Validate order exists
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(sanitizedOrderId);
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -630,7 +660,7 @@ exports.downloadOrderInvoices = async (req, res) => {
     }
     
     // Get all invoices for the order
-    const invoices = await Invoice.find({ orderId })
+    const invoices = await Invoice.find({ orderId: sanitizedOrderId })
       .populate({ path: 'vendorId', select: 'name', model: Vendor })
       .populate({ path: 'uniId', select: 'fullName', model: Uni })
       .sort({ createdAt: -1 })
@@ -645,10 +675,14 @@ exports.downloadOrderInvoices = async (req, res) => {
     
     console.info(`📄 Found ${invoices.length} invoices for order ${order.orderNumber}`);
     
-    // Create temporary directory for ZIP creation
-    const tempDir = path.join(os.tmpdir(), `invoices_${orderId}_${Date.now()}`);
+    // Create secure temporary directory using sanitized orderId and timestamp
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    const tempDir = path.join(os.tmpdir(), `invoices_${sanitizedOrderId}_${timestamp}_${randomSuffix}`);
+    
+    // Ensure the directory is created safely
     if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
+      fs.mkdirSync(tempDir, { recursive: true, mode: 0o700 });
     }
     
     const zipPath = path.join(tempDir, `invoices_${order.orderNumber}.zip`);
