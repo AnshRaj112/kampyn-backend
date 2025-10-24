@@ -4,6 +4,7 @@ const Vendor = require('../models/account/Vendor');
 const Uni = require('../models/account/Uni');
 const Admin = require('../models/account/Admin');
 const invoiceUtils = require('../utils/invoiceUtils');
+const { isValidCloudinaryUrl, isValidRazorpayUrl, isSafeExternalUrl } = require('../utils/urlValidation');
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
@@ -571,13 +572,13 @@ exports.downloadInvoice = async (req, res) => {
     }
     
     // Priority 2: Try Cloudinary URL
-    if (invoice.pdfUrl && invoice.pdfUrl.includes('cloudinary.com')) {
+    if (invoice.pdfUrl && isValidCloudinaryUrl(invoice.pdfUrl)) {
       console.info(`☁️ Redirecting to Cloudinary: ${invoice.pdfUrl}`);
       return res.redirect(invoice.pdfUrl);
     }
     
     // Priority 3: Try Razorpay URL
-    if (invoice.razorpayInvoiceUrl) {
+    if (invoice.razorpayInvoiceUrl && isValidRazorpayUrl(invoice.razorpayInvoiceUrl)) {
       console.info(`💳 Redirecting to Razorpay: ${invoice.razorpayInvoiceUrl}`);
       return res.redirect(invoice.razorpayInvoiceUrl);
     }
@@ -749,7 +750,7 @@ exports.downloadOrderInvoices = async (req, res) => {
         let filename = `invoice_${invoice.invoiceNumber}_${invoice.invoiceType}.pdf`;
         
         // Priority 1: Try Cloudinary URL
-        if (invoice.pdfUrl && invoice.pdfUrl.includes('cloudinary.com')) {
+        if (invoice.pdfUrl && isValidCloudinaryUrl(invoice.pdfUrl)) {
           console.info(`☁️ Downloading from Cloudinary: ${invoice.invoiceNumber}`);
           
           try {
@@ -766,7 +767,7 @@ exports.downloadOrderInvoices = async (req, res) => {
         }
         
         // Priority 2: Try Razorpay URL
-        if (!pdfBuffer && invoice.razorpayInvoiceUrl) {
+        if (!pdfBuffer && invoice.razorpayInvoiceUrl && isValidRazorpayUrl(invoice.razorpayInvoiceUrl)) {
           console.info(`💳 Downloading from Razorpay: ${invoice.invoiceNumber}`);
           
           try {
@@ -1036,7 +1037,7 @@ exports.bulkZipDownload = async (req, res) => {
         let filename = `invoice_${invoice.invoiceNumber}_${invoice.invoiceType}_order_${orderNumber}.pdf`;
         
         // Priority 1: Try Cloudinary URL
-        if (invoice.pdfUrl && invoice.pdfUrl.includes('cloudinary.com')) {
+        if (invoice.pdfUrl && isValidCloudinaryUrl(invoice.pdfUrl)) {
           console.info(`☁️ Downloading from Cloudinary: ${invoice.invoiceNumber}`);
           
           try {
@@ -1053,7 +1054,7 @@ exports.bulkZipDownload = async (req, res) => {
         }
         
         // Priority 2: Try Razorpay URL
-        if (!pdfBuffer && invoice.razorpayInvoiceUrl) {
+        if (!pdfBuffer && invoice.razorpayInvoiceUrl && isValidRazorpayUrl(invoice.razorpayInvoiceUrl)) {
           console.info(`💳 Downloading from Razorpay: ${invoice.invoiceNumber}`);
           
           try {
@@ -1363,7 +1364,7 @@ exports.redirectToCloudinary = async (req, res) => {
 		if (!invoice) {
 			return res.status(404).json({ success: false, message: 'Invoice not found' });
 		}
-		if (invoice.pdfUrl && invoice.pdfUrl.includes('cloudinary.com')) {
+		if (invoice.pdfUrl && isValidCloudinaryUrl(invoice.pdfUrl)) {
 			return res.redirect(invoice.pdfUrl);
 		}
 		return res.status(404).json({ success: false, message: 'Cloudinary PDF not available for this invoice' });
@@ -1386,7 +1387,7 @@ exports.getOrderCloudinaryLinks = async (req, res) => {
 		}
 		const invoices = await Invoice.find({ orderId }).select('invoiceNumber invoiceType pdfUrl').lean();
 		const cloudinaryInvoices = invoices
-			.filter(inv => inv.pdfUrl && inv.pdfUrl.includes('cloudinary.com'))
+			.filter(inv => inv.pdfUrl && isValidCloudinaryUrl(inv.pdfUrl))
 			.map(inv => ({
 				id: inv._id,
 				invoiceNumber: inv.invoiceNumber,
