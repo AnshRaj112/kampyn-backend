@@ -629,7 +629,7 @@ exports.downloadInvoice = async (req, res) => {
     });
     
   } catch (error) {
-    console.error(`❌ Error downloading invoice ${req.params.invoiceId}:`, error);
+    console.error('❌ Error downloading invoice:', req.params.invoiceId, error);
     res.status(500).json({
       success: false,
       message: 'Failed to download invoice',
@@ -685,7 +685,7 @@ exports.downloadOrderInvoices = async (req, res) => {
     const resolvedTempDir = path.resolve(tempDir);
     const tempRoot = path.resolve(os.tmpdir());
     if (!resolvedTempDir.startsWith(tempRoot + path.sep)) {
-      console.error(`Security violation: tempDir path escapes temp root (${resolvedTempDir})`);
+      console.error('Security violation: tempDir path escapes temp root:', resolvedTempDir);
       return res.status(400).json({
         success: false,
         message: 'Invalid path for invoice download.'
@@ -849,7 +849,7 @@ Please contact support for assistance.`;
         }
         
       } catch (invoiceError) {
-        console.error(`❌ Error processing invoice ${invoice.invoiceNumber}:`, invoiceError.message);
+        console.error('❌ Error processing invoice:', invoice.invoiceNumber, invoiceError.message);
         skippedCount++;
         
         // Add error placeholder
@@ -872,7 +872,7 @@ This invoice encountered an error during processing.`;
     await archive.finalize();
     
   } catch (error) {
-    console.error(`❌ Error creating ZIP for order ${req.params.orderId}:`, error);
+    console.error('❌ Error creating ZIP for order:', req.params.orderId, error);
     res.status(500).json({
       success: false,
       message: 'Failed to create ZIP file',
@@ -1136,7 +1136,7 @@ Please contact support for assistance.`;
         }
         
       } catch (invoiceError) {
-        console.error(`❌ Error processing invoice ${invoice.invoiceNumber}:`, invoiceError.message);
+        console.error('❌ Error processing invoice:', invoice.invoiceNumber, invoiceError.message);
         skippedCount++;
         
         // Add error placeholder
