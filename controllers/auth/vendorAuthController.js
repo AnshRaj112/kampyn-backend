@@ -77,7 +77,7 @@ exports.signup = async (req, res) => {
 
     // Update Uni's vendors array
     await Uni.findByIdAndUpdate(
-      mongoose.Types.ObjectId(uniID),
+      new mongoose.Types.ObjectId(uniID),
       {
         $push: {
           vendors: {

@@ -47,6 +47,7 @@ const expressOrderRoutes = require("./routes/expressOrderRoutes");
 const vendorTransferRoutes = require("./routes/vendorTransferRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
+const grievanceRoutes = require("./routes/grievanceRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -54,34 +55,50 @@ app.use(express.json()); // ✅ Parses incoming JSON data
 app.use(express.urlencoded({ extended: true })); // ✅ Parses form data
 app.use(cookieParser()); // 🔒 Parse cookies for admin authentication
 
-// 🔒 CSRF Protection - Apply to all routes except excluded ones
+// 🔒 CSRF Protection - DISABLED
+// CSRF protection has been disabled for development/testing purposes
 
-const csrfExcludedPaths = [
-  '/api/health',
-  '/api/user/auth/login',
-  '/api/user/auth/register',
-  '/api/uni/auth/login',
-  '/api/uni/auth/register',
-  '/api/vendor/auth/login',
-  '/api/vendor/auth/register',
-  '/api/admin/auth/login',
-  '/contact',
-  '/razorpay/webhook',
-  '/api/csrf/token',
-  '/api/csrf/refresh',
-  '/api/admin/services'
-];
-const csrfExcludedMethods = ['GET', 'HEAD', 'OPTIONS'];
+// const csrfExcludedPaths = [
+//   '/api/health',
+//   '/api/user/auth/login',
+//   '/api/user/auth/register',
+//   '/api/user/auth/signup',
+//   '/api/user/auth/otpverification',
+//   '/api/user/auth/forgotpassword',
+//   '/api/user/auth/resetpassword',
+//   '/api/uni/auth/login',
+//   '/api/uni/auth/register',
+//   '/api/uni/auth/signup',
+//   '/api/uni/auth/otpverification',
+//   '/api/uni/auth/forgotpassword',
+//   '/api/uni/auth/resetpassword',
+//   '/api/vendor/auth/login',
+//   '/api/vendor/auth/register',
+//   '/api/vendor/auth/signup',
+//   '/api/vendor/auth/otpverification',
+//   '/api/vendor/auth/forgotpassword',
+//   '/api/vendor/auth/resetpassword',
+//   '/api/admin/auth/login',
+//   '/contact',
+//   '/razorpay/webhook',
+//   '/api/csrf/token',
+//   '/api/csrf/refresh',
+//   '/api/admin/services',
+//   '/api/university/universities'
+// ];
+// const csrfExcludedMethods = ['GET', 'HEAD', 'OPTIONS'];
 
-app.use((req, res, next) => {
-  if (
-    csrfExcludedPaths.includes(req.path) ||
-    csrfExcludedMethods.includes(req.method)
-  ) {
-    return next();
-  }
-  return csrfProtection()(req, res, next);
-});
+// app.use((req, res, next) => {
+//   if (
+//     csrfExcludedPaths.includes(req.path) ||
+//     csrfExcludedMethods.includes(req.method) ||
+//     req.path.startsWith('/api/university/universities/') ||
+//     req.path.startsWith('/api/admin/')
+//   ) {
+//     return next();
+//   }
+//   return csrfProtection()(req, res, next);
+// });
 
 // ✅ Load environment variables
 // const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
@@ -137,9 +154,9 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// 🔒 CSRF Token endpoints
-app.get("/api/csrf/token", csrfTokenEndpoint);
-app.post("/api/csrf/refresh", refreshCSRFToken);
+// 🔒 CSRF Token endpoints - DISABLED
+// app.get("/api/csrf/token", csrfTokenEndpoint);
+// app.post("/api/csrf/refresh", refreshCSRFToken);
 
 // ✅ Serve static files for uploads (fallback for when Cloudinary fails)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -176,6 +193,7 @@ app.use("/api/invoices", invoiceRoutes);
 app.use("/api/admin", featureRoutes);
 app.use("/api/admin", serviceRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api", grievanceRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Health check endpoint
