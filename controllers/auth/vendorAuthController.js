@@ -1,5 +1,6 @@
 const Account = require("../../models/account/Vendor");
 const Uni = require("../../models/account/Uni");
+const mongoose = require("mongoose");
 const Otp = require("../../models/users/Otp");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -35,6 +36,14 @@ exports.signup = async (req, res) => {
     const { fullName, email, phone, password, location, uniID, sellerType } =
       req.body;
 
+    // Validate uniID is a string or valid ObjectId; otherwise, reject
+    if (
+      typeof uniID !== "string" ||
+      !mongoose.Types.ObjectId.isValid(uniID)
+    ) {
+      return res.status(400).json({ message: "Invalid university ID." });
+    }
+
     // Convert email to lowercase
     const emailLower = email.toLowerCase();
 
@@ -68,7 +77,7 @@ exports.signup = async (req, res) => {
 
     // Update Uni's vendors array
     await Uni.findByIdAndUpdate(
-      uniID,
+      mongoose.Types.ObjectId(uniID),
       {
         $push: {
           vendors: {
