@@ -20,7 +20,7 @@ async function cleanupOrderAtomically(order, session) {
     
     return result;
   } catch (error) {
-    console.error(`Error in atomic order cleanup for ${order._id}:`, error);
+    console.error('Error in atomic order cleanup for order:', order._id, error);
     throw error;
   }
 }
@@ -78,7 +78,7 @@ async function cleanupExpiredOrders() {
             // Atomic delete: only delete if status is still 'pendingPayment'
             const deleteResult = await Order.deleteOne({ _id: order._id, status: "pendingPayment" }, { session });
             if (deleteResult.deletedCount === 0) {
-              console.warn(`[CLEANUP] SKIP: Order ${order._id} was not deleted because status changed (current status: '${currentOrder ? currentOrder.status : 'unknown'}').`);
+              console.warn('[CLEANUP] SKIP: Order was not deleted because status changed (current status):', order._id, currentOrder ? currentOrder.status : 'unknown');
               return { locksReleased: 0 };
             }
             console.info(`[CLEANUP] SUCCESS: Order ${order._id} deleted from DB (status was '${currentOrder ? currentOrder.status : 'unknown'}').`);
@@ -102,7 +102,7 @@ async function cleanupExpiredOrders() {
             console.info(`Cleaned up expired order ${order._id} atomically. Released ${result.locksReleased} locks`);
           }
         } catch (error) {
-          console.error(`Failed to cleanup order ${order._id} atomically:`, error);
+          console.error('Failed to cleanup order atomically:', order._id, error);
           failedCleanups.push({
             orderId: order._id,
             error: error.message
@@ -111,7 +111,7 @@ async function cleanupExpiredOrders() {
           await session.endSession();
         }
       } catch (error) {
-        console.error(`Failed to cleanup order ${order._id}:`, error);
+        console.error('Failed to cleanup order:', order._id, error);
         failedCleanups.push({
           orderId: order._id,
           error: error.message
@@ -150,7 +150,7 @@ async function forceReleaseOrderLocks(orderId) {
       message: `Released ${lockReleaseResult.released.length} locks for order ${orderId}`
     };
   } catch (error) {
-    console.error(`Error force releasing locks for order ${orderId}:`, error);
+    console.error('Error force releasing locks for order:', orderId, error);
     throw error;
   }
 }
