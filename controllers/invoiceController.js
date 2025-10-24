@@ -680,9 +680,20 @@ exports.downloadOrderInvoices = async (req, res) => {
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     const tempDir = path.join(os.tmpdir(), `invoices_${sanitizedOrderId}_${timestamp}_${randomSuffix}`);
     
+    // Resolve tempDir and ensure it's within os.tmpdir()
+    const resolvedTempDir = path.resolve(tempDir);
+    const tempRoot = path.resolve(os.tmpdir());
+    if (!resolvedTempDir.startsWith(tempRoot + path.sep)) {
+      console.error(`Security violation: tempDir path escapes temp root (${resolvedTempDir})`);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid path for invoice download.'
+      });
+    }
+
     // Ensure the directory is created safely
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true, mode: 0o700 });
+    if (!fs.existsSync(resolvedTempDir)) {
+      fs.mkdirSync(resolvedTempDir, { recursive: true, mode: 0o700 });
     }
     
     const zipPath = path.join(tempDir, `invoices_${order.orderNumber}.zip`);
