@@ -5,6 +5,7 @@ const { atomicCache } = require("../utils/cacheUtils");
 const invoiceController = require("../controllers/invoiceController");
 const Uni = require("../models/account/Uni");
 const Vendor = require("../models/account/Vendor");
+const { adminLimiter, strictLimiter } = require("../middleware/rateLimit");
 
 // Authentication removed - anyone can access admin routes for now
 
@@ -194,7 +195,7 @@ router.get("/system/health", async (req, res) => {
  * Get all invoices with pagination and filtering
  * No authentication required
  */
-router.get("/invoices", async (req, res) => {
+router.get("/invoices", adminLimiter, async (req, res) => {
   try {
     const { page = 1, limit = 10, status, type, recipientType, startDate, endDate } = req.query;
     
@@ -229,7 +230,7 @@ router.get("/invoices", async (req, res) => {
  * Get invoice statistics
  * No authentication required
  */
-router.get("/invoices/stats", async (req, res) => {
+router.get("/invoices/stats", adminLimiter, async (req, res) => {
   try {
     const stats = await invoiceController.getInvoiceStats();
     
@@ -319,7 +320,7 @@ router.post("/invoices/generate-order-invoices", async (req, res) => {
  * Get all universities with full details including vendor counts
  * No authentication required
  */
-router.get("/universities", async (req, res) => {
+router.get("/universities", adminLimiter, async (req, res) => {
   try {
     console.info("🔵 Admin: Fetching all universities with details");
     
@@ -383,7 +384,7 @@ router.get("/universities", async (req, res) => {
  * Get detailed information about a specific university including all vendors
  * No authentication required
  */
-router.get("/universities/:uniId", async (req, res) => {
+router.get("/universities/:uniId", adminLimiter, async (req, res) => {
   try {
     const { uniId } = req.params;
     console.info(`🔵 Admin: Fetching details for university ${uniId}`);
@@ -709,7 +710,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
  * Get all help messages with pagination and filtering
  * No authentication required
  */
-router.get("/help-messages", async (req, res) => {
+router.get("/help-messages", adminLimiter, async (req, res) => {
   try {
     console.info("🔵 Admin: Fetching all help messages");
     
@@ -773,7 +774,7 @@ router.get("/help-messages", async (req, res) => {
  * Mark a help message as read
  * No authentication required
  */
-router.put("/help-messages/:messageId/read", async (req, res) => {
+router.put("/help-messages/:messageId/read", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
     console.info(`🔵 Admin: Marking message ${messageId} as read`);
@@ -819,7 +820,7 @@ router.put("/help-messages/:messageId/read", async (req, res) => {
  * Mark a help message as unread
  * No authentication required
  */
-router.put("/help-messages/:messageId/unread", async (req, res) => {
+router.put("/help-messages/:messageId/unread", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
     console.info(`🔵 Admin: Marking message ${messageId} as unread`);
@@ -865,7 +866,7 @@ router.put("/help-messages/:messageId/unread", async (req, res) => {
  * Get a specific help message by ID
  * No authentication required
  */
-router.get("/help-messages/:messageId", async (req, res) => {
+router.get("/help-messages/:messageId", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
     console.info(`🔵 Admin: Fetching help message ${messageId}`);
@@ -903,7 +904,7 @@ router.get("/help-messages/:messageId", async (req, res) => {
  * Delete a help message
  * No authentication required
  */
-router.delete("/help-messages/:messageId", async (req, res) => {
+router.delete("/help-messages/:messageId", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
     console.info(`🔵 Admin: Deleting help message ${messageId}`);
