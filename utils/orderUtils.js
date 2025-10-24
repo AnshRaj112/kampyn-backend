@@ -64,7 +64,7 @@ async function cancelOrderAtomically(orderId, order, session) {
     // 4) Release item locks (outside transaction since it's in-memory cache)
     const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
     
-    console.log(`Order ${orderId} cancelled atomically. Released ${lockReleaseResult.released.length} locks`);
+    console.log('Order ' + String(orderId) + ' cancelled atomically. Released ' + String(lockReleaseResult.released.length) + ' locks');
     
     return {
       success: true,
@@ -72,7 +72,7 @@ async function cancelOrderAtomically(orderId, order, session) {
       failedLocks: lockReleaseResult.failed.length
     };
   } catch (error) {
-    console.error(`Error in atomic order cancellation for ${orderId}:`, error);
+    console.error('Error in atomic order cancellation for ' + String(orderId) + ':', error);
     throw error;
   }
 }
@@ -264,13 +264,13 @@ async function generateRazorpayOrderForUser({
     const itemQuantity = cartItem.quantity || 0;
     const itemTotalPrice = itemPrice * itemQuantity;
     
-    console.log(`💰 Item calculation: ${cartItem.name} - Price: ${itemPrice} × Quantity: ${itemQuantity} = ${itemTotalPrice}`);
+    console.log('💰 Item calculation: ' + String(cartItem.name) + ' - Price: ' + String(itemPrice) + ' × Quantity: ' + String(itemQuantity) + ' = ' + String(itemTotalPrice));
     
     itemTotal += itemTotalPrice;
     
     // Check if item is packable (produce items are packable by default)
     const isPackable = cartItem.packable === true || cartItem.kind === "Produce";
-    console.log(`📦 Packable check for ${cartItem.name}: packable=${cartItem.packable}, kind=${cartItem.kind}, isPackable=${isPackable}`);
+    console.log('📦 Packable check for ' + String(cartItem.name) + ': packable=' + String(cartItem.packable) + ', kind=' + String(cartItem.kind) + ', isPackable=' + String(isPackable));
     
     if (isPackable) {
       packableItemsTotal += itemQuantity;
@@ -474,13 +474,13 @@ async function verifyAndProcessPaymentWithOrderId({
         return await cancelOrderAtomically(ourOrderId, order, session);
       });
       
-      console.log(`Payment failed for order ${ourOrderId} - cancelled atomically. Released ${locksReleased} locks`);
+      console.log('Payment failed for order ' + String(ourOrderId) + ' - cancelled atomically. Released ' + String(locksReleased) + ' locks');
       return { success: false, msg: "Invalid signature, payment failed" };
     } catch (error) {
-      console.error(`Failed to cancel order ${ourOrderId} atomically:`, error);
+      console.error('Failed to cancel order ' + String(ourOrderId) + ' atomically:', error);
       // Fallback: try to release locks even if database operations failed
       const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
-      console.warn(`Fallback lock release for order ${ourOrderId}: ${lockReleaseResult.released.length} released, ${lockReleaseResult.failed.length} failed`);
+      console.warn('Fallback lock release for order ' + String(ourOrderId) + ': ' + String(lockReleaseResult.released.length) + ' released, ' + String(lockReleaseResult.failed.length) + ' failed');
       return { success: false, msg: "Invalid signature, payment failed" };
     } finally {
       await session.endSession();
@@ -710,7 +710,7 @@ async function getOrderWithDetails(orderId) {
     }).lean();
 
     if (!order) {
-      console.log(`Order not found: ${orderId}`);
+      console.log('Order not found: ' + String(orderId));
       return null;
     }
 
@@ -765,7 +765,7 @@ async function getOrderWithDetails(orderId) {
       items: detailedItems,
     };
   } catch (error) {
-    console.error(`Error in getOrderWithDetails for order ${orderId}:`, error);
+    console.error('Error in getOrderWithDetails for order ' + String(orderId) + ':', error);
     return null;
   }
 }
