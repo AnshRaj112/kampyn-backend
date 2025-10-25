@@ -48,6 +48,7 @@ const expressOrderRoutes = require("./routes/expressOrderRoutes");
 const vendorTransferRoutes = require("./routes/vendorTransferRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
+const grievanceRoutes = require("./routes/grievanceRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -194,6 +195,7 @@ app.use("/api/admin", featureRoutes);
 app.use("/api/admin", serviceRoutes);
 app.use("/api/access", accessRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api", grievanceRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Health check endpoint
