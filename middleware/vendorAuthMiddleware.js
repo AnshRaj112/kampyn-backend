@@ -43,8 +43,9 @@ const vendorAuthMiddleware = async (req, res, next) => {
     // Update last activity
     await updateUserActivity(decoded.userId, 'vendor');
 
-    // Add vendor info to request
+    // Add vendor info to request (support both _id and vendorId for compatibility)
     req.vendor = {
+      _id: vendor._id,
       vendorId: vendor._id,
       email: vendor.email,
       fullName: vendor.fullName,

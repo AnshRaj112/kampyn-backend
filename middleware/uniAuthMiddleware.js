@@ -62,6 +62,12 @@ const uniAuthMiddleware = async (req, res, next) => {
       deliveryCharge: university.deliveryCharge
     };
 
+    console.log("uniAuthMiddleware - Setting req.uni:", {
+      hasUniId: !!req.uni._id,
+      uniId: req.uni._id,
+      fullName: req.uni.fullName
+    });
+
     next();
   } catch (error) {
     console.error("University auth middleware error:", error);

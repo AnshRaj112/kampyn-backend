@@ -7,7 +7,20 @@ const Uni = require("../models/account/Uni");
  */
 exports.createRecipe = async (req, res) => {
   try {
-    const vendorId = req.vendor._id;
+    // Check if vendor info exists in request
+    if (!req.vendor || (!req.vendor._id && !req.vendor.vendorId)) {
+      console.error("createRecipe - Missing vendor info:", {
+        hasReqVendor: !!req.vendor,
+        reqVendorKeys: req.vendor ? Object.keys(req.vendor) : []
+      });
+      return res.status(401).json({
+        success: false,
+        message: "Vendor authentication required"
+      });
+    }
+
+    // Support both naming conventions
+    const vendorId = req.vendor._id || req.vendor.vendorId;
     const uniId = req.vendor.uniID;
 
     // Validate required fields
@@ -67,7 +80,7 @@ exports.createRecipe = async (req, res) => {
  */
 exports.getVendorRecipes = async (req, res) => {
   try {
-    const vendorId = req.vendor._id;
+    const vendorId = req.vendor._id || req.vendor.vendorId;
     const { status = 'published', page = 1, limit = 10, category, cuisine, search } = req.query;
 
     // Build query
@@ -130,9 +143,25 @@ exports.getVendorRecipes = async (req, res) => {
  */
 exports.getUniversityRecipes = async (req, res) => {
   try {
-    const uniId = req.university._id;
+    // Try to get university ID from middleware
+    const uniId = req.uni?._id || req.university?._id;
+    
+    if (!uniId) {
+      console.error("getUniversityRecipes - Missing university ID:", {
+        hasReqUni: !!req.uni,
+        hasReqUniversity: !!req.university,
+        reqUniKeys: req.uni ? Object.keys(req.uni) : [],
+        reqUniversityKeys: req.university ? Object.keys(req.university) : []
+      });
+      return res.status(401).json({
+        success: false,
+        message: "University ID not found. Authentication required.",
+        error: "Cannot read properties of undefined (reading '_id')"
+      });
+    }
+    
     const { 
-      status = 'published', 
+      status = 'all', 
       page = 1, 
       limit = 10, 
       category, 
@@ -156,7 +185,7 @@ exports.getUniversityRecipes = async (req, res) => {
       query.cuisine = cuisine;
     }
     
-    if (vendorId) {
+    if (vendorId && vendorId !== 'all') {
       query.vendorId = vendorId;
     }
     
@@ -176,12 +205,21 @@ exports.getUniversityRecipes = async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
+    // Validate populated data
+    const validRecipes = recipes.filter(recipe => {
+      if (!recipe.vendorId || !recipe.uniId) {
+        console.error("Recipe with missing vendorId or uniId:", recipe._id);
+        return false;
+      }
+      return true;
+    });
+
     // Get total count for pagination
     const totalRecipes = await Recipe.countDocuments(query);
 
     res.json({
       success: true,
-      data: recipes,
+      data: validRecipes,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalRecipes / parseInt(limit)),
@@ -212,9 +250,9 @@ exports.getRecipeById = async (req, res) => {
     let query = { _id: recipeId };
     
     if (userType === 'vendor') {
-      query.vendorId = req.vendor._id;
+      query.vendorId = req.vendor._id || req.vendor.vendorId;
     } else if (userType === 'university') {
-      query.uniId = req.university._id;
+      query.uniId = req.uni?._id || req.university?._id;
     }
 
     const recipe = await Recipe.findOne(query)
@@ -254,7 +292,7 @@ exports.getRecipeById = async (req, res) => {
 exports.updateRecipe = async (req, res) => {
   try {
     const { recipeId } = req.params;
-    const vendorId = req.vendor._id;
+    const vendorId = req.vendor._id || req.vendor.vendorId;
 
     // Check if recipe exists and belongs to vendor
     const existingRecipe = await Recipe.findOne({ _id: recipeId, vendorId });
@@ -299,7 +337,7 @@ exports.updateRecipe = async (req, res) => {
 exports.deleteRecipe = async (req, res) => {
   try {
     const { recipeId } = req.params;
-    const vendorId = req.vendor._id;
+    const vendorId = req.vendor._id || req.vendor.vendorId;
 
     // Check if recipe exists and belongs to vendor
     const recipe = await Recipe.findOne({ _id: recipeId, vendorId });
@@ -334,7 +372,7 @@ exports.updateRecipeStatus = async (req, res) => {
   try {
     const { recipeId } = req.params;
     const { status } = req.body;
-    const vendorId = req.vendor._id;
+    const vendorId = req.vendor._id || req.vendor.vendorId;
 
     if (!['draft', 'published', 'archived'].includes(status)) {
       return res.status(400).json({
@@ -428,7 +466,7 @@ exports.toggleRecipeLike = async (req, res) => {
  */
 exports.getRecipeStats = async (req, res) => {
   try {
-    const vendorId = req.vendor._id;
+    const vendorId = req.vendor._id || req.vendor.vendorId;
 
     const stats = await Recipe.aggregate([
       { $match: { vendorId: vendorId } },
