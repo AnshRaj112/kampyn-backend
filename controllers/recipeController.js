@@ -81,7 +81,15 @@ exports.createRecipe = async (req, res) => {
 exports.getVendorRecipes = async (req, res) => {
   try {
     const vendorId = req.vendor._id || req.vendor.vendorId;
-    const { status = 'published', page = 1, limit = 10, category, cuisine, search } = req.query;
+    const { status = 'all', page = 1, limit = 10, category, cuisine, search } = req.query;
+
+    console.log("getVendorRecipes - Request details:", {
+      vendorId,
+      hasReqVendor: !!req.vendor,
+      reqVendorKeys: req.vendor ? Object.keys(req.vendor) : [],
+      status,
+      queryParams: req.query
+    });
 
     // Build query
     const query = { vendorId };
@@ -102,6 +110,8 @@ exports.getVendorRecipes = async (req, res) => {
       query.$text = { $search: search };
     }
 
+    console.log("getVendorRecipes - Query:", query);
+
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -113,6 +123,8 @@ exports.getVendorRecipes = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
+
+    console.log("getVendorRecipes - Found recipes:", recipes.length);
 
     // Get total count for pagination
     const totalRecipes = await Recipe.countDocuments(query);
@@ -405,6 +417,71 @@ exports.updateRecipeStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("updateRecipeStatus error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update recipe status",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Update recipe status by university (to approve/manage vendor recipes)
+ */
+exports.updateRecipeStatusByUniversity = async (req, res) => {
+  try {
+    const { recipeId } = req.params;
+    const { status } = req.body;
+    const uniId = req.uni?._id || req.university?._id;
+
+    if (!uniId) {
+      return res.status(401).json({
+        success: false,
+        message: "University authentication required"
+      });
+    }
+
+    if (!['draft', 'published', 'archived'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status. Must be draft, published, or archived"
+      });
+    }
+
+    // Check if recipe exists and belongs to the university
+    const recipe = await Recipe.findOne({ _id: recipeId, uniId });
+    
+    if (!recipe) {
+      return res.status(404).json({
+        success: false,
+        message: "Recipe not found or you don't have permission to update it"
+      });
+    }
+
+    // Set publishedAt timestamp if publishing for the first time
+    const updateData = { 
+      status, 
+      updatedAt: new Date() 
+    };
+    
+    if (status === 'published' && recipe.status !== 'published') {
+      updateData.publishedAt = new Date();
+    }
+
+    const updatedRecipe = await Recipe.findByIdAndUpdate(
+      recipeId,
+      updateData,
+      { new: true }
+    ).populate('vendorId', 'fullName vendorName')
+     .populate('uniId', 'fullName');
+
+    res.json({
+      success: true,
+      message: `Recipe ${status} successfully`,
+      data: updatedRecipe
+    });
+  } catch (error) {
+    console.error("updateRecipeStatusByUniversity error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update recipe status",

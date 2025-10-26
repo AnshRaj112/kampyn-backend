@@ -13,12 +13,12 @@ router.get("/vendor", vendorAuthMiddleware, recipeController.getVendorRecipes);
 router.get("/vendor/stats", vendorAuthMiddleware, recipeController.getRecipeStats);
 router.get("/vendor/:recipeId", vendorAuthMiddleware, recipeController.getRecipeById);
 router.put("/vendor/:recipeId", vendorAuthMiddleware, recipeController.updateRecipe);
-router.delete("/vendor/:recipeId", vendorAuthMiddleware, recipeController.deleteRecipe);
-router.patch("/vendor/:recipeId/status", vendorAuthMiddleware, recipeController.updateRecipeStatus);
+// Vendor can no longer delete recipes or change status - only university can manage status
 
 // University Routes (Protected)
 router.get("/university", uniAuthMiddleware, recipeController.getUniversityRecipes);
 router.get("/university/:recipeId", uniAuthMiddleware, recipeController.getRecipeById);
+router.patch("/university/:recipeId/status", uniAuthMiddleware, recipeController.updateRecipeStatusByUniversity);
 
 // Public Routes (for users to view recipes)
 router.get("/public", recipeController.getUniversityRecipes); // Public access to published recipes
