@@ -217,6 +217,23 @@ const recipeSchema = new mongoose.Schema({
     min: 0
   },
 
+  // Recipe Works - Output type for this recipe
+  outputType: {
+    type: String,
+    enum: ['retail', 'produce', null],
+    default: null
+  },
+  outputItemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    refPath: 'outputModel',
+    default: null
+  },
+  outputModel: {
+    type: String,
+    enum: ['Retail', 'Produce', null],
+    default: null
+  },
+
   // Vendor and University Information
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,

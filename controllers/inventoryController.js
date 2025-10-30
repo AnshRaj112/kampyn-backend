@@ -3,6 +3,7 @@ const Retail = require("../models/item/Retail"); // Cluster_Item
 const Produce = require("../models/item/Produce"); // Cluster_Item
 const Raw = require("../models/item/Raw"); // Cluster_Item
 const InventoryReport = require("../models/inventory/InventoryReport"); // Cluster_Inventory
+const Recipe = require("../models/Recipe");
 const { clearRawMaterialInventory } = require("../utils/inventoryReportUtils");
 
 const validateSameUniversity = (vendor, item) => {
@@ -382,5 +383,572 @@ exports.clearAllRawMaterialInventory = async (req, res) => {
   } catch (error) {
     console.error("Error clearing all raw material inventory:", error);
     return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * Simple retail production: increments retail inventory and deducts raw usages.
+ * Body: { vendorId, quantity, outputRetailItemId?, outputName?, rawUsages: [{ rawItemId, quantity, unit? }] }
+ */
+exports.produceRetailSimple = async (req, res) => {
+  try {
+    const { vendorId, quantity, outputRetailItemId, outputName, rawUsages } = req.body;
+    if (!vendorId || !quantity || quantity <= 0) {
+      return res.status(400).json({ success: false, message: "Missing vendorId or invalid quantity" });
+    }
+    if (!outputRetailItemId && !outputName) {
+      return res.status(400).json({ success: false, message: "Provide outputRetailItemId or outputName" });
+    }
+    if (!Array.isArray(rawUsages) || rawUsages.length === 0) {
+      return res.status(400).json({ success: false, message: "rawUsages required" });
+    }
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
+
+    // Resolve retail item
+    let retailId = outputRetailItemId;
+    if (!retailId && outputName) {
+      const match = await Retail.findOne({ uniId: vendor.uniID, name: outputName }).select('_id').lean();
+      if (match) retailId = match._id;
+    }
+    if (!retailId) return res.status(400).json({ success: false, message: "Could not resolve output retail item" });
+
+    // Validate and prepare raw deductions
+    const deductions = [];
+    for (const usage of rawUsages) {
+      if (!usage.rawItemId || typeof usage.quantity !== 'number' || usage.quantity < 0) {
+        return res.status(400).json({ success: false, message: "Invalid rawUsages entry" });
+      }
+      const inv = vendor.rawMaterialInventory?.find(e => e.itemId.toString() === String(usage.rawItemId));
+      if (!inv) {
+        return res.status(400).json({ success: false, message: `Raw item not in vendor inventory: ${usage.rawItemId}` });
+      }
+      const available = inv.closingAmount > 0 ? inv.closingAmount : (inv.openingAmount || 0);
+      if (available < usage.quantity) {
+        return res.status(400).json({ success: false, message: `Insufficient raw. Needed ${usage.quantity}${inv.unit}, available ${available}${inv.unit}` });
+      }
+      deductions.push({ itemId: usage.rawItemId, qty: usage.quantity });
+    }
+
+    // Initialize closings where needed and apply raw decrements (with fallbacks)
+    for (const d of deductions) {
+      const cur = vendor.rawMaterialInventory.find(e => e.itemId.toString() === String(d.itemId));
+      if (cur && (cur.closingAmount <= 0) && (cur.openingAmount > 0)) {
+        await Vendor.updateOne(
+          { _id: vendorId, "rawMaterialInventory.itemId": d.itemId },
+          { $set: { "rawMaterialInventory.$.closingAmount": cur.openingAmount } }
+        );
+      }
+      let dec = await Vendor.updateOne(
+        { _id: vendorId, "rawMaterialInventory.itemId": d.itemId },
+        { $inc: { "rawMaterialInventory.$.closingAmount": -d.qty } }
+      );
+      if (!dec || !dec.modifiedCount) {
+        dec = await Vendor.updateOne(
+          { _id: vendorId },
+          { $inc: { "rawMaterialInventory.$[elem].closingAmount": -d.qty } },
+          { arrayFilters: [{ "elem.itemId": d.itemId }] }
+        );
+      }
+    }
+
+    // Increment retail; fallback to arrayFilters; push if absent
+    let inc = await Vendor.updateOne(
+      { _id: vendorId, "retailInventory.itemId": retailId },
+      { $inc: { "retailInventory.$.quantity": Number(quantity) } }
+    );
+    if (!inc || !inc.modifiedCount) {
+      inc = await Vendor.updateOne(
+        { _id: vendorId },
+        { $inc: { "retailInventory.$[elem].quantity": Number(quantity) } },
+        { arrayFilters: [{ "elem.itemId": retailId }] }
+      );
+    }
+    if (!inc || !inc.modifiedCount) {
+      await Vendor.updateOne(
+        { _id: vendorId },
+        { $push: { retailInventory: { itemId: retailId, quantity: Number(quantity), isSpecial: "N", isAvailable: "Y" } } }
+      );
+    }
+
+    // Build report entry
+    const { startOfDay } = getTodayRange();
+    let report = await InventoryReport.findOne({ vendorId, date: { $gte: startOfDay, $lt: new Date(startOfDay.getTime() + 86400000) } });
+    if (!report) report = new InventoryReport({ vendorId, date: startOfDay, retailEntries: [], produceEntries: [], rawEntries: [], itemReceived: [], itemSend: [] });
+    report.itemReceived.push({ itemId: retailId, kind: "Retail", quantity: Number(quantity), date: new Date() });
+    for (const d of deductions) {
+      report.itemSend.push({ itemId: d.itemId, kind: "Raw", quantity: d.qty, date: new Date() });
+    }
+    await report.save();
+
+    // Return refreshed snapshot
+    const refreshed = await Vendor.findById(vendorId).select("retailInventory rawMaterialInventory").lean();
+    const retailEntry = (refreshed.retailInventory || []).find(e => e.itemId.toString() === String(retailId));
+    const updatedRaw = deductions.map(d => ({ itemId: d.itemId, closingAmount: (refreshed.rawMaterialInventory || []).find(e => e.itemId.toString() === String(d.itemId))?.closingAmount }));
+
+    return res.json({ success: true, message: "Retail produced and inventory updated", retail: retailEntry, raw: updatedRaw });
+  } catch (e) {
+    console.error("produceRetailSimple error:", e);
+    return res.status(500).json({ success: false, message: "Failed to produce retail", error: e.message });
+  }
+};
+
+/**
+ * Recipe Works - Get recipes available for production
+ */
+exports.getRecipeWorksRecipes = async (req, res) => {
+  try {
+    const vendorId = req.vendor._id || req.vendor.vendorId;
+    
+    if (!vendorId) {
+      return res.status(401).json({ message: "Vendor authentication required" });
+    }
+
+    // Get all recipes for this vendor that have outputType set
+    const recipes = await Recipe.find({ 
+      vendorId,
+      outputType: { $in: ['retail', 'produce'] }
+    })
+    .populate('outputItemId')
+    .lean();
+
+    // Group recipes by output type
+    const retailRecipes = recipes.filter(r => r.outputType === 'retail');
+    const produceRecipes = recipes.filter(r => r.outputType === 'produce');
+
+    res.json({
+      success: true,
+      data: {
+        retail: retailRecipes,
+        produce: produceRecipes,
+        all: recipes
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching recipe works recipes:", error);
+    res.status(500).json({ message: "Failed to fetch recipes", error: error.message });
+  }
+};
+
+/**
+ * Recipe Works - Validate raw material inventory
+ */
+exports.validateRecipeIngredients = async (req, res) => {
+  try {
+    const { vendorId, recipeId, quantity } = req.body;
+    
+    if (!vendorId || !recipeId || !quantity || quantity <= 0) {
+      return res.status(400).json({ message: "Missing or invalid required fields" });
+    }
+
+    const vendor = await Vendor.findById(vendorId).lean();
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+
+    const recipe = await Recipe.findById(recipeId).lean();
+    if (!recipe) return res.status(404).json({ message: "Recipe not found" });
+
+    // Calculate required ingredients based on quantity
+    const multiplier = quantity / recipe.servings;
+    const requiredIngredients = recipe.ingredients.map(ing => ({
+      name: ing.name,
+      quantity: ing.quantity * multiplier,
+      unit: ing.unit
+    }));
+
+    // Check availability in raw material inventory
+    const missingIngredients = [];
+    const availableIngredients = [];
+
+    for (const required of requiredIngredients) {
+      // Find the raw material in inventory
+      const rawMaterialEntry = vendor.rawMaterialInventory?.find(
+        inv => {
+          const rawId = inv.itemId.toString();
+          return rawId; // We'll check by name matching since we don't have direct itemId linkage
+        }
+      );
+
+      if (!rawMaterialEntry) {
+        missingIngredients.push({
+          name: required.name,
+          quantity: required.quantity,
+          unit: required.unit
+        });
+      } else {
+        // Check if enough quantity is available
+        const availableQty = rawMaterialEntry.closingAmount || 0;
+        if (availableQty < required.quantity) {
+          missingIngredients.push({
+            name: required.name,
+            required: required.quantity,
+            available: availableQty,
+            unit: required.unit
+          });
+        } else {
+          availableIngredients.push({
+            name: required.name,
+            quantity: required.quantity,
+            unit: required.unit,
+            available: availableQty
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      canProduce: missingIngredients.length === 0,
+      missingIngredients,
+      availableIngredients
+    });
+  } catch (error) {
+    console.error("Error validating recipe ingredients:", error);
+    res.status(500).json({ message: "Failed to validate ingredients", error: error.message });
+  }
+};
+
+/**
+ * Recipe Works - Create items from recipe
+ */
+exports.createItemsFromRecipe = async (req, res) => {
+  try {
+    const { vendorId, recipeId, quantity, mode } = req.body; // mode: 'quantity' or 'amount'
+    console.log("[RecipeWorks] createItemsFromRecipe called", { vendorId, recipeId, quantity, mode });
+    
+    if (!vendorId || !recipeId || !quantity || !mode) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+
+    const recipe = await Recipe.findById(recipeId).populate('outputItemId').lean();
+    if (!recipe) return res.status(404).json({ message: "Recipe not found" });
+    console.log("[RecipeWorks] Loaded recipe", { outputType: recipe.outputType, servings: recipe.servings, outputItemId: recipe.outputItemId?._id || recipe.outputItemId });
+
+    // If output item is missing, try to auto-resolve by matching recipe title to Retail/Produce name within same uni
+    let resolvedOutputItemId = recipe.outputItemId;
+    let resolvedOutputType = recipe.outputType;
+    if (!resolvedOutputItemId && resolvedOutputType === 'retail') {
+      const fallbackRetail = await Retail.findOne({ uniId: recipe.uniId, name: recipe.title }).select('_id').lean();
+      if (fallbackRetail) {
+        resolvedOutputItemId = fallbackRetail._id;
+        console.log("[RecipeWorks] Auto-resolved retail outputItemId via title match", { itemId: String(resolvedOutputItemId) });
+      }
+    } else if (!resolvedOutputItemId && resolvedOutputType === 'produce') {
+      const fallbackProduce = await Produce.findOne({ uniId: recipe.uniId, name: recipe.title }).select('_id').lean();
+      if (fallbackProduce) {
+        resolvedOutputItemId = fallbackProduce._id;
+        console.log("[RecipeWorks] Auto-resolved produce outputItemId via title match", { itemId: String(resolvedOutputItemId) });
+      }
+    }
+
+    if (!resolvedOutputType || !resolvedOutputItemId) {
+      return res.status(400).json({ message: "Recipe does not have an output item configured", detail: { outputType: recipe.outputType, outputItemId: recipe.outputItemId } });
+    }
+
+    // Calculate required ingredients
+    let multiplier;
+    if (mode === 'quantity') {
+      multiplier = quantity / recipe.servings;
+    } else {
+      // For amount mode, user specifies ingredient amounts, calculate output
+      // This would need additional logic, for now use quantity
+      multiplier = quantity / recipe.servings;
+    }
+
+    const requiredIngredients = (recipe.ingredients || []).map(ing => ({
+      name: ing.name,
+      quantity: ing.quantity * multiplier,
+      unit: ing.unit
+    }));
+    console.log("[RecipeWorks] Computed required ingredients", requiredIngredients);
+
+    // Helper: normalize and convert units to vendor inventory units (kg/l when applicable)
+    const normalizeUnit = (unit) => String(unit || "").trim().toLowerCase();
+    const massToKg = {
+      g: 1 / 1000,
+      gram: 1 / 1000,
+      grams: 1 / 1000,
+      kg: 1,
+      kilogram: 1,
+      kilograms: 1,
+      oz: 0.0283495,
+      ounce: 0.0283495,
+      ounces: 0.0283495,
+      lb: 0.45359237,
+      lbs: 0.45359237,
+      pound: 0.45359237,
+      pounds: 0.45359237,
+    };
+    const volumeToL = {
+      ml: 1 / 1000,
+      milliliter: 1 / 1000,
+      milliliters: 1 / 1000,
+      l: 1,
+      liter: 1,
+      liters: 1,
+      cup: 0.24,
+      cups: 0.24,
+      tbsp: 0.015,
+      tablespoon: 0.015,
+      tablespoons: 0.015,
+      tsp: 0.005,
+      teaspoon: 0.005,
+      teaspoons: 0.005,
+    };
+    const convertToVendorUnit = (qty, fromUnit, vendorUnit) => {
+      const f = normalizeUnit(fromUnit);
+      const v = normalizeUnit(vendorUnit);
+      if (!qty || !f || !v) return qty;
+      if (v === "kg") {
+        const factor = massToKg[f];
+        return factor ? qty * factor : qty; // fallback: assume same unit
+      }
+      if (v === "l") {
+        const factor = volumeToL[f];
+        return factor ? qty * factor : qty;
+      }
+      // Unknown vendor unit: no conversion
+      return qty;
+    };
+
+    const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // Validate and prepare raw material deductions
+    const ingredientDeductions = [];
+    for (const required of requiredIngredients) {
+      // Find raw material by case-insensitive exact name
+      const rawItem = await Raw.findOne({ name: { $regex: new RegExp(`^${escapeRegex(required.name)}$`, "i") } }).lean();
+      if (!rawItem) {
+        return res.status(400).json({ message: `Raw material '${required.name}' not found in database`, detail: { required } });
+      }
+      console.log("[RecipeWorks] Matched raw item", { ingredient: required.name, rawItemId: rawItem._id });
+
+      const inventoryEntry = vendor.rawMaterialInventory?.find(
+        (inv) => inv.itemId.toString() === rawItem._id.toString()
+      );
+
+      if (!inventoryEntry) {
+        return res.status(400).json({ message: `Raw material '${required.name}' not found in vendor inventory`, detail: { rawItemId: rawItem._id } });
+      }
+      console.log("[RecipeWorks] Vendor raw inventory entry", { rawItemId: rawItem._id, unit: inventoryEntry.unit, closingAmount: inventoryEntry.closingAmount });
+
+      // Convert required qty to the vendor inventory unit (kg/l)
+      const requiredInVendorUnit = convertToVendorUnit(required.quantity, required.unit, inventoryEntry.unit);
+      console.log("[RecipeWorks] Required converted", { name: required.name, from: required.unit, to: inventoryEntry.unit, qty: required.quantity, converted: requiredInVendorUnit });
+
+      const availableQty = (inventoryEntry.closingAmount > 0 ? inventoryEntry.closingAmount : (inventoryEntry.openingAmount || 0));
+      if (availableQty < requiredInVendorUnit) {
+        return res.status(400).json({
+          message: `Insufficient ${required.name}. Required: ${requiredInVendorUnit.toFixed(2)}${inventoryEntry.unit}, Available: ${availableQty.toFixed(2)}${inventoryEntry.unit}`,
+          detail: { requiredInVendorUnit, available: availableQty, unit: inventoryEntry.unit }
+        });
+      }
+
+      ingredientDeductions.push({
+        itemId: rawItem._id,
+        quantity: requiredInVendorUnit,
+        entry: inventoryEntry,
+      });
+    }
+
+    // Deduct raw materials from inventory (atomic updates)
+    for (const deduction of ingredientDeductions) {
+      // If closingAmount is zero but openingAmount exists, initialize closing to opening for today before deducting
+      const currentEntry = vendor.rawMaterialInventory.find(e => e.itemId.toString() === deduction.itemId.toString());
+      if (currentEntry && (currentEntry.closingAmount <= 0) && (currentEntry.openingAmount > 0)) {
+        const setRes = await Vendor.updateOne(
+          { _id: vendorId, "rawMaterialInventory.itemId": deduction.itemId },
+          { $set: { "rawMaterialInventory.$.closingAmount": currentEntry.openingAmount } }
+        );
+        console.log("[RecipeWorks] Raw initialized closing from opening", { itemId: deduction.itemId.toString(), opening: currentEntry.openingAmount, modifiedCount: setRes.modifiedCount });
+      }
+      let ures = await Vendor.updateOne(
+        { _id: vendorId, "rawMaterialInventory.itemId": deduction.itemId },
+        { $inc: { "rawMaterialInventory.$.closingAmount": -deduction.quantity } }
+      );
+      if (!ures || !ures.modifiedCount) {
+        // Fallback using arrayFilters
+        ures = await Vendor.updateOne(
+          { _id: vendorId },
+          { $inc: { "rawMaterialInventory.$[elem].closingAmount": -deduction.quantity } },
+          { arrayFilters: [{ "elem.itemId": deduction.itemId }] }
+        );
+        console.log("[RecipeWorks] Raw decrement via arrayFilters", { itemId: deduction.itemId.toString(), qty: deduction.quantity, modifiedCount: ures.modifiedCount });
+      } else {
+        console.log("[RecipeWorks] Raw material decremented", { itemId: deduction.itemId.toString(), qty: deduction.quantity, modifiedCount: ures.modifiedCount });
+      }
+    }
+
+    // Add output items to inventory
+    let outputItemsAdded = 0;
+    const { startOfDay, endOfDay } = getTodayRange();
+    let report = await InventoryReport.findOne({
+      vendorId,
+      date: { $gte: startOfDay, $lt: endOfDay },
+    });
+
+    if (!report) {
+      report = new InventoryReport({
+        vendorId,
+        date: startOfDay,
+        retailEntries: [],
+        produceEntries: [],
+        rawEntries: [],
+        itemReceived: [],
+        itemSend: []
+      });
+    }
+
+    if (resolvedOutputType === 'retail') {
+      // Add to retail inventory
+      const outputRetail = await Retail.findById(resolvedOutputItemId);
+      if (!outputRetail) {
+        return res.status(404).json({ message: "Output retail item not found" });
+      }
+
+      // Atomic increment of existing retail inventory; on miss, push a new element
+      let incResult = await Vendor.updateOne(
+        { _id: vendorId, "retailInventory.itemId": outputRetail._id },
+        { $inc: { "retailInventory.$.quantity": Number(quantity || 0) } }
+      );
+      console.log("[RecipeWorks] Retail increment result", { itemId: outputRetail._id.toString(), incQty: Number(quantity || 0), modifiedCount: incResult.modifiedCount });
+      if (!incResult || !incResult.modifiedCount) {
+        // Fallback using arrayFilters in case positional match failed
+        incResult = await Vendor.updateOne(
+          { _id: vendorId },
+          { $inc: { "retailInventory.$[elem].quantity": Number(quantity || 0) } },
+          { arrayFilters: [{ "elem.itemId": outputRetail._id }] }
+        );
+        console.log("[RecipeWorks] Retail increment via arrayFilters", { itemId: outputRetail._id.toString(), incQty: Number(quantity || 0), modifiedCount: incResult.modifiedCount });
+      }
+      if (!incResult || !incResult.modifiedCount) {
+        const pushRes = await Vendor.updateOne(
+          { _id: vendorId },
+          { $push: { retailInventory: { itemId: outputRetail._id, quantity: Number(quantity || 0), isSpecial: "N", isAvailable: "Y" } } }
+        );
+        console.log("[RecipeWorks] Retail pushed new entry", { modifiedCount: pushRes.modifiedCount, acknowledged: pushRes.acknowledged });
+      }
+      // Reload quantity after update
+      const refreshedRetailDoc = await Vendor.findById(vendorId).select("retailInventory").lean();
+      const afterRetail = (refreshedRetailDoc.retailInventory || []).find(e => e.itemId.toString() === outputRetail._id.toString());
+      outputItemsAdded = afterRetail ? afterRetail.quantity : Number(quantity || 0);
+      console.log("[RecipeWorks] Retail post-update quantity", { itemId: outputRetail._id.toString(), quantity: outputItemsAdded });
+
+      // Update inventory report
+      report.itemReceived.push({
+        itemId: outputRetail._id,
+        kind: "Retail",
+        quantity: quantity,
+        date: new Date()
+      });
+
+      const retailEntry = report.retailEntries.find(
+        e => e.item.toString() === outputRetail._id.toString()
+      );
+      
+      if (retailEntry) {
+        retailEntry.closingQty = outputItemsAdded;
+      } else {
+        report.retailEntries.push({
+          item: outputRetail._id,
+          openingQty: Math.max(0, outputItemsAdded - quantity),
+          closingQty: outputItemsAdded,
+          soldQty: 0
+        });
+      }
+    } else if (resolvedOutputType === 'produce') {
+      // Add to produce inventory
+      const outputProduce = await Produce.findById(resolvedOutputItemId);
+      if (!outputProduce) {
+        return res.status(404).json({ message: "Output produce item not found" });
+      }
+
+      const existingProduce = vendor.produceInventory.find(
+        inv => inv.itemId.toString() === outputProduce._id.toString()
+      );
+
+      if (existingProduce) {
+        existingProduce.isAvailable = 'Y';
+      } else {
+        vendor.produceInventory.push({
+          itemId: outputProduce._id,
+          isAvailable: 'Y',
+          isSpecial: "N"
+        });
+      }
+
+      // Update inventory report
+      report.itemReceived.push({
+        itemId: outputProduce._id,
+        kind: "Produce",
+        quantity: quantity,
+        date: new Date()
+      });
+
+      const produceEntry = report.produceEntries.find(
+        e => e.item.toString() === outputProduce._id.toString()
+      );
+
+      if (!produceEntry) {
+        report.produceEntries.push({
+          item: outputProduce._id,
+          soldQty: 0
+        });
+      }
+    }
+
+    // Fetch latest vendor inventory for report entries
+    const vendorAfter = await Vendor.findById(vendorId).select("rawMaterialInventory retailInventory produceInventory").lean();
+    console.log("[RecipeWorks] Vendor inventory reloaded for report");
+
+    // Update raw material entries in report
+    for (const deduction of ingredientDeductions) {
+      const rawEntry = report.rawEntries.find(
+        e => e.item.toString() === deduction.itemId.toString()
+      );
+
+      const entry = (vendorAfter.rawMaterialInventory || []).find(
+        inv => inv.itemId.toString() === deduction.itemId.toString()
+      );
+
+      if (rawEntry) {
+        rawEntry.closingQty = entry.closingAmount;
+      } else {
+        report.rawEntries.push({
+          item: deduction.itemId,
+          openingQty: entry.openingAmount,
+          closingQty: entry.closingAmount
+        });
+      }
+
+      // Add to itemSend to track raw material usage
+      report.itemSend.push({
+        itemId: deduction.itemId,
+        kind: "Raw",
+        quantity: deduction.quantity,
+        date: new Date()
+      });
+    }
+
+    // Vendor already updated via atomic operations
+    await report.save();
+
+    res.json({
+      success: true,
+      message: `${quantity} ${resolvedOutputType === 'retail' ? 'item(s)' : 'serving(s)'} created successfully`,
+      outputType: resolvedOutputType,
+      quantity,
+      ingredientsUsed: requiredIngredients,
+      updatedRetailItemId: resolvedOutputType === 'retail' ? resolvedOutputItemId : undefined,
+      retailInventory: resolvedOutputType === 'retail' ? (vendorAfter.retailInventory || []).find(e => e.itemId.toString() === String(resolvedOutputItemId)) : undefined,
+      updatedRaw: ingredientDeductions.map(d => ({ itemId: d.itemId, newClosingAmount: (vendorAfter.rawMaterialInventory || []).find(e => e.itemId.toString() === d.itemId.toString())?.closingAmount }))
+    });
+    console.log("[RecipeWorks] Response sent successfully");
+  } catch (error) {
+    console.error("Error creating items from recipe:", error);
+    res.status(500).json({ message: "Failed to create items", error: error.message });
   }
 };
