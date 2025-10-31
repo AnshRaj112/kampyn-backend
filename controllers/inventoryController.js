@@ -495,6 +495,91 @@ exports.produceRetailSimple = async (req, res) => {
 };
 
 /**
+ * Simple produce production: deducts raw usages only (no produce inventory changes)
+ * Body: { vendorId, rawUsages: [{ rawItemId, quantity, unit? }] }
+ */
+exports.produceProduceSimple = async (req, res) => {
+  try {
+    const { vendorId, rawUsages, outputProduceItemId, outputName } = req.body;
+    if (!vendorId || !Array.isArray(rawUsages) || rawUsages.length === 0) {
+      return res.status(400).json({ success: false, message: "vendorId and rawUsages are required" });
+    }
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
+
+    // Resolve produce item (optional, for reporting)
+    let produceId = outputProduceItemId;
+    if (!produceId && outputName) {
+      const match = await Produce.findOne({ uniId: vendor.uniID, name: outputName }).select('_id').lean();
+      if (match) produceId = match._id;
+    }
+
+    // Validate and prepare raw deductions
+    const deductions = [];
+    for (const usage of rawUsages) {
+      if (!usage.rawItemId || typeof usage.quantity !== 'number' || usage.quantity < 0) {
+        return res.status(400).json({ success: false, message: "Invalid rawUsages entry" });
+      }
+      const inv = vendor.rawMaterialInventory?.find(e => e.itemId.toString() === String(usage.rawItemId));
+      if (!inv) {
+        return res.status(400).json({ success: false, message: `Raw item not in vendor inventory: ${usage.rawItemId}` });
+      }
+      const available = inv.closingAmount > 0 ? inv.closingAmount : (inv.openingAmount || 0);
+      if (available < usage.quantity) {
+        return res.status(400).json({ success: false, message: `Insufficient raw. Needed ${usage.quantity}${inv.unit}, available ${available}${inv.unit}` });
+      }
+      deductions.push({ itemId: usage.rawItemId, qty: usage.quantity });
+    }
+
+    // Initialize closings where needed and apply raw decrements (with fallbacks)
+    for (const d of deductions) {
+      const cur = vendor.rawMaterialInventory.find(e => e.itemId.toString() === String(d.itemId));
+      if (cur && (cur.closingAmount <= 0) && (cur.openingAmount > 0)) {
+        await Vendor.updateOne(
+          { _id: vendorId, "rawMaterialInventory.itemId": d.itemId },
+          { $set: { "rawMaterialInventory.$.closingAmount": cur.openingAmount } }
+        );
+      }
+      let dec = await Vendor.updateOne(
+        { _id: vendorId, "rawMaterialInventory.itemId": d.itemId },
+        { $inc: { "rawMaterialInventory.$.closingAmount": -d.qty } }
+      );
+      if (!dec || !dec.modifiedCount) {
+        dec = await Vendor.updateOne(
+          { _id: vendorId },
+          { $inc: { "rawMaterialInventory.$[elem].closingAmount": -d.qty } },
+          { arrayFilters: [{ "elem.itemId": d.itemId }] }
+        );
+      }
+    }
+
+    // Update report: raw sends and optional produce received entry
+    const { startOfDay } = getTodayRange();
+    let report = await InventoryReport.findOne({ vendorId, date: { $gte: startOfDay, $lt: new Date(startOfDay.getTime() + 86400000) } });
+    if (!report) report = new InventoryReport({ vendorId, date: startOfDay, retailEntries: [], produceEntries: [], rawEntries: [], itemReceived: [], itemSend: [] });
+    for (const d of deductions) {
+      report.itemSend.push({ itemId: d.itemId, kind: "Raw", quantity: d.qty, date: new Date() });
+    }
+    if (produceId) {
+      report.itemReceived.push({ itemId: produceId, kind: "Produce", quantity: 1, date: new Date() });
+      const existing = (report.produceEntries || []).find(e => e.item.toString() === String(produceId));
+      if (!existing) {
+        report.produceEntries.push({ item: produceId, soldQty: 0 });
+      }
+    }
+    await report.save();
+
+    const refreshed = await Vendor.findById(vendorId).select("rawMaterialInventory").lean();
+    const updatedRaw = deductions.map(d => ({ itemId: d.itemId, closingAmount: (refreshed.rawMaterialInventory || []).find(e => e.itemId.toString() === String(d.itemId))?.closingAmount }));
+    return res.json({ success: true, message: "Raw materials deducted", raw: updatedRaw });
+  } catch (e) {
+    console.error("produceProduceSimple error:", e);
+    return res.status(500).json({ success: false, message: "Failed to process produce", error: e.message });
+  }
+};
+
+/**
  * Recipe Works - Get recipes available for production
  */
 exports.getRecipeWorksRecipes = async (req, res) => {

@@ -10,6 +10,7 @@ const {
   validateRecipeIngredients,
   createItemsFromRecipe,
   produceRetailSimple,
+  produceProduceSimple,
 } = require("../controllers/inventoryController");
 const vendorAuthMiddleware = require("../middleware/vendorAuthMiddleware");
 
@@ -27,5 +28,6 @@ router.post("/recipe-works/create", vendorAuthMiddleware, createItemsFromRecipe)
 
 // Simple retail production endpoint
 router.post("/produce-retail-simple", vendorAuthMiddleware, produceRetailSimple);
+router.post("/produce-produce-simple", vendorAuthMiddleware, produceProduceSimple);
 
 module.exports = router;
