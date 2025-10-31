@@ -50,6 +50,8 @@ const invoiceRoutes = require("./routes/invoiceRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const grievanceRoutes = require("./routes/grievanceRoutes");
 const recipeRoutes = require("./routes/recipeRoutes");
+// NEW: Order approval workflow routes (new file) - handles vendor accept/deny order requests
+const orderApprovalRoutes = require("./routes/orderApprovalRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -179,6 +181,7 @@ app.use("/cart", cartRoutes);
 app.use("/inventory", inventoryRoutes);
 app.use("/fav", favouriteRoutes);
 app.use("/order", orderRoutes);
+app.use("/order-approval", orderApprovalRoutes); // NEW: Order approval workflow routes
 app.use("/payment", paymentRoutes);
 app.use("/api/vendor", vendorRoutes);
 app.use("/api/university", universityRoutes);

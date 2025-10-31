@@ -53,6 +53,8 @@ const orderSchema = new mongoose.Schema({
     type: String,
     enum: [
       "pendingPayment",
+      "pendingVendorApproval", // New: Order waiting for vendor to accept/deny
+      "denied", // New: Order denied by vendor
       "inProgress",
       "completed",
       "onTheWay",
@@ -61,6 +63,7 @@ const orderSchema = new mongoose.Schema({
     ],
     default: "pendingPayment",
   },
+  denialReason: { type: String }, // Reason provided when vendor denies order
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Vendor",

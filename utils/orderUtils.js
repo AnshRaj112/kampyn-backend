@@ -389,6 +389,109 @@ async function generateRazorpayOrderForUser({
   return response;
 }
 
+// NEW FUNCTION: Create order for vendor approval (without payment)
+async function createOrderForApproval({
+  userId,
+  orderType,
+  collectorName,
+  collectorPhone,
+  address,
+}) {
+  const user = await User.findById(userId).select("cart vendorId").lean();
+  if (!user) throw new Error("User not found");
+  if (!user.cart || !user.cart.length) throw new Error("Cart is empty");
+
+  // Get populated cart details with price information
+  const cartUtils = require("./cartUtils");
+  const cartDetails = await cartUtils.getCartDetails(userId);
+  const populatedCart = cartDetails.cart;
+
+  if (!["takeaway", "delivery", "dinein"].includes(orderType)) {
+    throw new Error(`Invalid orderType "${orderType}".`);
+  }
+  if (orderType === "delivery" && (!address || !address.trim())) {
+    throw new Error("Address is required for delivery orders.");
+  }
+
+  // Get vendor to find university and check delivery settings
+  const vendor = await Vendor.findById(user.vendorId).select('uniID deliverySettings').lean();
+  if (!vendor) throw new Error("Vendor not found");
+  
+  // Check if vendor offers delivery for delivery orders
+  if (orderType === "delivery") {
+    if (!vendor.deliverySettings?.offersDelivery) {
+      throw new Error("This vendor does not offer delivery service.");
+    }
+  }
+  
+  // Get university charges
+  const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge').lean();
+  const packingCharge = university?.packingCharge ?? DEFAULT_PRODUCE_SURCHARGE;
+  const deliveryCharge = university?.deliveryCharge ?? DEFAULT_DELIVERY_CHARGE;
+  
+  // Calculate total - use the same logic as frontend
+  let itemTotal = 0;
+  let packableItemsTotal = 0;
+  
+  for (const cartItem of populatedCart) {
+    const itemPrice = cartItem.price || 0;
+    const itemQuantity = cartItem.quantity || 0;
+    itemTotal += itemPrice * itemQuantity;
+    
+    // Check if item is packable (produce items are packable by default)
+    const isPackable = cartItem.packable === true || cartItem.kind === "Produce";
+    if (isPackable) {
+      packableItemsTotal += itemQuantity;
+    }
+  }
+  
+  // Calculate packaging and delivery charges
+  const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
+  const delivery = (orderType === "delivery") ? deliveryCharge : 0;
+  const platformFee = 2; // Flat platform fee (including GST)
+  
+  const finalTotal = itemTotal + packaging + delivery + platformFee;
+
+  // Generate unique order number
+  const orderNumber = await generateUltraHighPerformanceOrderNumberWithDailyReset(userId, user.vendorId);
+  
+  // Create order items array
+  const itemsForOrder = populatedCart.map(item => ({
+    itemId: item.itemId,
+    kind: item.kind,
+    quantity: item.quantity,
+  }));
+
+  // Create order with pendingVendorApproval status
+  const newOrder = await Order.create({
+    orderNumber,
+    userId,
+    orderType,
+    collectorName,
+    collectorPhone,
+    items: itemsForOrder,
+    total: finalTotal,
+    address: orderType === "delivery" ? address : "",
+    status: "pendingVendorApproval", // New status for approval workflow
+    vendorId: user.vendorId,
+  });
+
+  // Note: We don't add to user's activeOrders yet - that happens when vendor accepts
+  // We also don't clear the cart yet - that happens after acceptance
+
+  return {
+    orderId: newOrder._id,
+    orderNumber: newOrder.orderNumber,
+    cart: populatedCart,
+    vendorId: user.vendorId,
+    orderType,
+    collectorName,
+    collectorPhone,
+    address,
+    finalTotal,
+  };
+}
+
 // New function: create the Order in DB after payment is verified
 async function createOrderAfterPayment({
   userId,
@@ -603,13 +706,23 @@ async function postPaymentProcessing(orderDoc) {
  * Fetches all in-progress orders for a vendor (and optional type),
  * populating item details *in two queries* instead of N per-item calls.
  */
-async function getOrdersWithDetails(vendorId, orderType) {
+async function getOrdersWithDetails(vendorId, orderType, statusFilter = null) {
   // 1) Fetch the orders
   const filter = {
     vendorId,
-    status: { $in: ["inProgress", "ready", "completed"] }, // Include ready and completed statuses
     deleted: false
   };
+
+  // Support status filter - if provided, use it; otherwise default to active orders
+  if (statusFilter) {
+    if (Array.isArray(statusFilter)) {
+      filter.status = { $in: statusFilter };
+    } else {
+      filter.status = statusFilter;
+    }
+  } else {
+    filter.status = { $in: ["inProgress", "ready", "completed"] }; // Default: active orders
+  }
 
   if (orderType) filter.orderType = orderType;
   const orders = await Order.find(filter, {
@@ -936,6 +1049,7 @@ module.exports = {
   generateUltraHighPerformanceOrderNumberWithDailyReset,
   generateRazorpayOrderForUser,
   createOrderAfterPayment,
+  createOrderForApproval, // NEW: Export function for order approval workflow
   verifyAndProcessPaymentWithOrderId,
   postPaymentProcessing,
   getOrdersWithDetails,
