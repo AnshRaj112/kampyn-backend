@@ -76,6 +76,10 @@ async function getVendorReport(req, res, next) {
     const { vendorId } = req.params;
     const date = req.query.date;
     const report = await getInventoryReport(vendorId, date);
+    // If utility indicates no report exists, surface that clearly to the client
+    if (report && report.error) {
+      return res.json({ success: false, message: report.error, data: report });
+    }
     return res.json({ success: true, data: report });
   } catch (err) {
     return next(err);

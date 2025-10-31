@@ -102,7 +102,7 @@ const Retail = require("../models/item/Retail");
     await InventoryReport.findOneAndUpdate(
       { vendorId: sender._id, date: { $gte: start } },
       {
-        $push: { itemSend: { $each: transferredItems } },
+        $push: { itemSend: { $each: transferredItems.map(t => ({ ...t, targetVendorId: receiver._id, targetVendorName: receiver.fullName, date: new Date() })) } },
         $setOnInsert: { retailEntries: [], produceEntries: [], rawEntries: [] },
       },
       { upsert: true, new: true }
@@ -346,35 +346,31 @@ exports.confirmTransfer = async (req, res) => {
           quantity: item.quantity,
           date: new Date(),
           confirmed: true,
+          targetVendorId: receiverVendor._id,
+          targetVendorName: receiverVendor.fullName,
         });
       } else {
         if (!existingSenderSend.confirmed) existingSenderSend.confirmed = true;
+        if (!existingSenderSend.targetVendorId) {
+          existingSenderSend.targetVendorId = receiverVendor._id;
+          existingSenderSend.targetVendorName = receiverVendor.fullName;
+        }
       }
 
-      // Update/create sender retailEntries and increment soldQty only once
+      // Update/create sender retailEntries - transfers should NOT increment soldQty
       let senderEntry = (senderReport.retailEntries || []).find(
         (e) => e.item && e.item.toString() === item.itemId.toString()
       );
-
-      const newlyConfirmedForSold =
-        !existingSenderSend ||
-        (existingSenderSend && !existingSenderSend._wasConfirmedForSoldUpdate);
 
       if (!senderEntry) {
         senderReport.retailEntries.push({
           item: item.itemId,
           openingQty: senderOpening,
           closingQty: senderClosing,
-          soldQty: newlyConfirmedForSold ? item.quantity : 0,
+          soldQty: 0,
         });
-        if (existingSenderSend)
-          existingSenderSend._wasConfirmedForSoldUpdate = true;
       } else {
-        if (newlyConfirmedForSold) {
-          senderEntry.soldQty = (senderEntry.soldQty || 0) + item.quantity;
-          if (existingSenderSend)
-            existingSenderSend._wasConfirmedForSoldUpdate = true;
-        }
+        // Don't increment soldQty for transfers
         senderEntry.openingQty = senderEntry.openingQty || senderOpening;
         senderEntry.closingQty = senderClosing;
       }
@@ -393,10 +389,17 @@ exports.confirmTransfer = async (req, res) => {
           quantity: item.quantity,
           date: new Date(),
           confirmed: true,
+          source: "received",
+          sourceVendorId: senderVendor._id,
+          sourceVendorName: senderVendor.fullName,
         });
       } else {
         if (!existingReceiverRecv.confirmed)
           existingReceiverRecv.confirmed = true;
+        if (!existingReceiverRecv.sourceVendorId) {
+          existingReceiverRecv.sourceVendorId = senderVendor._id;
+          existingReceiverRecv.sourceVendorName = senderVendor.fullName;
+        }
       }
 
       // Update/create receiver retailEntries (soldQty stays 0 for receiver on transfers)

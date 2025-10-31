@@ -86,7 +86,8 @@ exports.addInventory = async (req, res) => {
         itemId: itemId,
         kind: "Retail",
         quantity: quantity,
-        date: new Date()
+        date: new Date(),
+        source: "received",
       });
 
       // Update the inventory report
@@ -476,7 +477,7 @@ exports.produceRetailSimple = async (req, res) => {
     const { startOfDay } = getTodayRange();
     let report = await InventoryReport.findOne({ vendorId, date: { $gte: startOfDay, $lt: new Date(startOfDay.getTime() + 86400000) } });
     if (!report) report = new InventoryReport({ vendorId, date: startOfDay, retailEntries: [], produceEntries: [], rawEntries: [], itemReceived: [], itemSend: [] });
-    report.itemReceived.push({ itemId: retailId, kind: "Retail", quantity: Number(quantity), date: new Date() });
+    report.itemReceived.push({ itemId: retailId, kind: "Retail", quantity: Number(quantity), date: new Date(), source: "produced" });
     for (const d of deductions) {
       report.itemSend.push({ itemId: d.itemId, kind: "Raw", quantity: d.qty, date: new Date() });
     }
@@ -562,7 +563,7 @@ exports.produceProduceSimple = async (req, res) => {
       report.itemSend.push({ itemId: d.itemId, kind: "Raw", quantity: d.qty, date: new Date() });
     }
     if (produceId) {
-      report.itemReceived.push({ itemId: produceId, kind: "Produce", quantity: 1, date: new Date() });
+      report.itemReceived.push({ itemId: produceId, kind: "Produce", quantity: 1, date: new Date(), source: "produced" });
       const existing = (report.produceEntries || []).find(e => e.item.toString() === String(produceId));
       if (!existing) {
         report.produceEntries.push({ item: produceId, soldQty: 0 });
@@ -927,7 +928,8 @@ exports.createItemsFromRecipe = async (req, res) => {
         itemId: outputRetail._id,
         kind: "Retail",
         quantity: quantity,
-        date: new Date()
+        date: new Date(),
+        source: "produced"
       });
 
       const retailEntry = report.retailEntries.find(
@@ -970,7 +972,8 @@ exports.createItemsFromRecipe = async (req, res) => {
         itemId: outputProduce._id,
         kind: "Produce",
         quantity: quantity,
-        date: new Date()
+        date: new Date(),
+        source: "produced"
       });
 
       const produceEntry = report.produceEntries.find(

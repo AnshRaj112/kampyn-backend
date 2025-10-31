@@ -281,32 +281,102 @@ async function getInventoryReport(vendorId, forDate) {
   report.vendor = { _id: vendor._id, fullName: vendor.fullName };
   report.date = formatDateIST(report.date);
 
-  // 4) Resolve item names for retailEntries
-  if (report.retailEntries?.length) {
+  // 4) Resolve item names for retailEntries and build entries from movements if missing
+  {
+    report.retailEntries = Array.isArray(report.retailEntries) ? report.retailEntries : [];
+
+    // Calculate received and produced amounts from itemReceived array
+    const receivedMap = new Map();
+    const producedMap = new Map();
+    if (report.itemReceived?.length) {
+      report.itemReceived.forEach((received) => {
+        if (received.kind === "Retail") {
+          const itemId = received.itemId.toString();
+          if (received.source === "produced") {
+            producedMap.set(itemId, (producedMap.get(itemId) || 0) + received.quantity);
+          } else {
+            receivedMap.set(itemId, (receivedMap.get(itemId) || 0) + received.quantity);
+          }
+        }
+      });
+    }
+
+    // Calculate sent amounts from itemSend array
+    const sentMap = new Map();
+    if (report.itemSend?.length) {
+      report.itemSend.forEach((sent) => {
+        if (sent.kind === "Retail") {
+          const itemId = sent.itemId.toString();
+          sentMap.set(itemId, (sentMap.get(itemId) || 0) + sent.quantity);
+        }
+      });
+    }
+
+    // Ensure any items that have movements (produced/received/sent) are present as entries
+    const existingEntryIds = new Set(report.retailEntries.map((e) => e.item.toString()));
+    const movementIds = new Set([
+      ...Array.from(receivedMap.keys()),
+      ...Array.from(producedMap.keys()),
+      ...Array.from(sentMap.keys()),
+    ]);
+
+    // Fetch previous day's closing map for openingQty inference
+    const y = new Date(dayStart);
+    y.setDate(y.getDate() - 1);
+    const yStart = startOfDay(y);
+    const yEnd = endOfDay(y);
+    let prevDayClosingMap = new Map();
+    const prevDay = await InventoryReport.findOne({
+      vendorId: vendorObjectId,
+      date: { $gte: yStart, $lte: yEnd },
+    }).lean();
+    if (prevDay?.retailEntries?.length) {
+      prevDayClosingMap = new Map(
+        prevDay.retailEntries.map((e) => [e.item.toString(), e.closingQty || 0])
+      );
+    }
+
+    movementIds.forEach((id) => {
+      if (!existingEntryIds.has(id)) {
+        const openingQty = prevDayClosingMap.get(id) || 0;
+        const receivedQty = receivedMap.get(id) || 0;
+        const producedQty = producedMap.get(id) || 0;
+        const soldQty = 0;
+        const sentQty = sentMap.get(id) || 0;
+        const closingQty = openingQty + receivedQty + producedQty - soldQty - sentQty;
+        report.retailEntries.push({
+          item: new mongoose.Types.ObjectId(id),
+          openingQty,
+          closingQty,
+          soldQty,
+        });
+        existingEntryIds.add(id);
+      }
+    });
+
     const ids = report.retailEntries.map((e) => e.item);
     const docs = await Retail.find({ _id: { $in: ids } })
       .lean()
       .select("name");
     const map = Object.fromEntries(docs.map((d) => [d._id.toString(), d.name]));
-    
-    // Calculate received amounts from itemReceived array
-    const receivedMap = new Map();
-    if (report.itemReceived?.length) {
-      report.itemReceived.forEach((received) => {
-        if (received.kind === "Retail") {
-          const itemId = received.itemId.toString();
-          receivedMap.set(itemId, (receivedMap.get(itemId) || 0) + received.quantity);
-        }
-      });
-    }
-    
-    report.retailEntries = report.retailEntries.map((e) => ({
-      item: { _id: e.item, name: map[e.item.toString()] || null },
-      openingQty: e.openingQty,
-      closingQty: e.closingQty,
-      soldQty: e.soldQty,
-      receivedQty: receivedMap.get(e.item.toString()) || 0,
-    }));
+
+    report.retailEntries = report.retailEntries.map((e) => {
+      const openingQty = e.openingQty || 0;
+      const soldQty = e.soldQty || 0;
+      const receivedQty = receivedMap.get(e.item.toString()) || 0;
+      const producedQty = producedMap.get(e.item.toString()) || 0;
+      const sentQty = sentMap.get(e.item.toString()) || 0;
+      // Calculate closing from conservation: closing = opening + produced + received - sold - sent
+      const closingQty = openingQty + producedQty + receivedQty - soldQty - sentQty;
+      return {
+        item: { _id: e.item, name: map[e.item.toString()] || null },
+        openingQty,
+        closingQty,
+        soldQty,
+        receivedQty,
+        producedQty,
+      };
+    });
   }
 
   // 5) Resolve produceEntries similarly
@@ -338,6 +408,96 @@ async function getInventoryReport(vendorId, forDate) {
       openingQty: e.openingQty,
       closingQty: e.closingQty,
     }));
+  }
+
+  // 6.5) Aggregate received from vendor sources for reporting
+  if (Array.isArray(report.itemReceived) && report.itemReceived.length) {
+    const retailReceived = report.itemReceived.filter((r) => r.kind === "Retail" && r.source === "received");
+    if (retailReceived.length) {
+      const receivedFromMap = new Map(); // "itemId_sourceVendorId" -> { itemId, qty, fromVendor }
+      const nameCache = new Map();
+
+      for (const r of retailReceived) {
+        const itemIdStr = r.itemId.toString();
+        if (r.sourceVendorId) {
+          const key = `${itemIdStr}_${r.sourceVendorId.toString()}`;
+          const existing = receivedFromMap.get(key);
+          if (existing) {
+            existing.quantity += (r.quantity || 0);
+          } else {
+            receivedFromMap.set(key, {
+              itemId: r.itemId,
+              quantity: r.quantity || 0,
+              fromVendorId: r.sourceVendorId,
+              fromVendorName: r.sourceVendorName || null,
+            });
+          }
+        }
+      }
+
+      if (receivedFromMap.size > 0) {
+        const allItemIds = Array.from(new Set(Array.from(receivedFromMap.values()).map(v => v.itemId.toString())));
+        const itemIds = allItemIds.map((id) => new mongoose.Types.ObjectId(id));
+        const retailDocs = await Retail.find({ _id: { $in: itemIds } }).lean().select("name");
+        retailDocs.forEach((d) => nameCache.set(d._id.toString(), d.name));
+
+        report.receivedFrom = Array.from(receivedFromMap.values()).map((row) => ({
+          item: { _id: row.itemId, name: nameCache.get(row.itemId.toString()) || null },
+          quantity: row.quantity,
+          from: row.fromVendorId ? { _id: row.fromVendorId, name: row.fromVendorName || null } : null,
+        }));
+      }
+    }
+  }
+
+  // 7) Aggregate vendor-to-vendor retail sends for reporting
+  if (Array.isArray(report.itemSend) && report.itemSend.length) {
+    const retailSends = report.itemSend.filter((s) => s.kind === "Retail");
+    if (retailSends.length) {
+      // Group totals by item
+      const sentByItem = new Map(); // itemId -> qty
+      // Group by item+targetVendor combination
+      const sentToMap = new Map(); // "itemId_targetVendorId" -> { itemId, qty, toVendor }
+      const nameCache = new Map();
+
+      for (const s of retailSends) {
+        const itemIdStr = s.itemId.toString();
+        sentByItem.set(itemIdStr, (sentByItem.get(itemIdStr) || 0) + (s.quantity || 0));
+
+        // Aggregate by item+vendor
+        if (s.targetVendorId) {
+          const key = `${itemIdStr}_${s.targetVendorId.toString()}`;
+          const existing = sentToMap.get(key);
+          if (existing) {
+            existing.quantity += (s.quantity || 0);
+          } else {
+            sentToMap.set(key, {
+              itemId: s.itemId,
+              quantity: s.quantity || 0,
+              toVendorId: s.targetVendorId,
+              toVendorName: s.targetVendorName || null,
+            });
+          }
+        }
+      }
+
+      // Resolve item names
+      const allItemIds = new Set([...sentByItem.keys(), ...Array.from(sentToMap.values()).map(v => v.itemId.toString())]);
+      const itemIds = Array.from(allItemIds).map((id) => new mongoose.Types.ObjectId(id));
+      const retailDocs = await Retail.find({ _id: { $in: itemIds } }).lean().select("name");
+      retailDocs.forEach((d) => nameCache.set(d._id.toString(), d.name));
+
+      report.sent = Array.from(sentByItem.entries()).map(([itemId, qty]) => ({
+        item: { _id: itemId, name: nameCache.get(itemId) || null },
+        quantity: qty,
+      }));
+
+      report.sentTo = Array.from(sentToMap.values()).map((row) => ({
+        item: { _id: row.itemId, name: nameCache.get(row.itemId.toString()) || null },
+        quantity: row.quantity,
+        to: row.toVendorId ? { _id: row.toVendorId, name: row.toVendorName || null } : null,
+      }));
+    }
   }
 
   return report;
