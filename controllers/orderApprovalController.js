@@ -149,19 +149,9 @@ exports.acceptOrder = async (req, res) => {
     order.status = "inProgress";
     await order.save();
 
-    // Clear user's cart and add order to activeOrders
-    // CHANGED: Now clears cart when order is accepted by vendor (previously cart was cleared during payment)
+    // Ensure order is in user's activeOrders
     await User.updateOne(
       { _id: order.userId },
-      { 
-        $addToSet: { activeOrders: order._id },
-        $set: { cart: [], vendorId: null } // Clear cart after order acceptance
-      }
-    );
-
-    // Add order to vendor's activeOrders
-    await Vendor.updateOne(
-      { _id: order.vendorId },
       { $addToSet: { activeOrders: order._id } }
     );
 

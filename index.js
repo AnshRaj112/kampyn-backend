@@ -50,8 +50,7 @@ const invoiceRoutes = require("./routes/invoiceRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const grievanceRoutes = require("./routes/grievanceRoutes");
 const recipeRoutes = require("./routes/recipeRoutes");
-// NEW: Order approval workflow routes (new file) - handles vendor accept/deny order requests
-const orderApprovalRoutes = require("./routes/orderApprovalRoutes");
+const orderApprovalRoutes = require("./routes/orderApprovalRoutes"); // NEW: Order approval workflow routes
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
