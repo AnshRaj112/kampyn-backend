@@ -17,6 +17,12 @@ router.post("/:orderId/accept", orderApprovalController.acceptOrder);
 // Vendor denies an order
 router.post("/:orderId/deny", orderApprovalController.denyOrder);
 
+// User cancels a pending approval order
+router.post("/:orderId/cancel", orderApprovalController.cancelPendingOrder);
+
+// User cancels all pending approval orders (when changing cart)
+router.post("/cancel-all/:userId", orderApprovalController.cancelAllPendingOrders);
+
 // Get all pending approval orders for a vendor
 router.get("/pending/:vendorId", orderApprovalController.getPendingApprovalOrders);
 

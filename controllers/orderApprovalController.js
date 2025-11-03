@@ -8,6 +8,65 @@ const orderUtils = require("../utils/orderUtils");
 const mongoose = require("mongoose");
 
 /**
+ * Helper function: Cancel all pending vendor approval orders for a user
+ * Used when user changes cart or cancels order
+ */
+async function cancelAllPendingOrdersForUser(userId) {
+  try {
+    // Find all pending approval orders for this user
+    const pendingOrders = await Order.find({
+      userId,
+      status: "pendingVendorApproval",
+    }).lean();
+
+    if (pendingOrders.length === 0) {
+      return { cancelled: 0 };
+    }
+
+    // Perform best-effort cancellations without a cross-database transaction
+    let cancelledCount = 0;
+    for (const order of pendingOrders) {
+      try {
+        await Promise.all([
+          User.updateOne(
+            { _id: order.userId },
+            { $pull: { activeOrders: order._id, pastOrders: order._id } }
+          ),
+          Vendor.updateOne(
+            { _id: order.vendorId },
+            { $pull: { activeOrders: order._id } }
+          ),
+        ]);
+      } catch (relErr) {
+        console.error("Error unlinking order from user/vendor:", relErr);
+      }
+
+      try {
+        await Order.deleteOne({ _id: order._id });
+      } catch (delErr) {
+        console.error("Error deleting order:", delErr);
+      }
+
+      try {
+        const { atomicCache } = require("../utils/cacheUtils");
+        atomicCache.releaseOrderLocks(order.items, order.userId);
+      } catch (lockError) {
+        console.error("Error releasing locks:", lockError);
+      }
+
+      cancelledCount++;
+    }
+
+    console.info(`Cancelled ${cancelledCount} pending order(s) for user ${userId}`);
+    return { cancelled: cancelledCount };
+  } catch (err) {
+    console.error("Error in cancelAllPendingOrdersForUser:", err);
+    // Don't throw - allow order creation to continue even if cancellation fails
+    return { cancelled: 0, error: err.message };
+  }
+}
+
+/**
  * POST /order-approval/submit/:userId
  * Submit order for vendor approval (without payment)
  */
@@ -23,6 +82,10 @@ exports.submitOrderForApproval = async (req, res) => {
         message: "orderType, collectorName, and collectorPhone are required.",
       });
     }
+
+    // IMPORTANT: Cancel any existing pending orders for this user before creating new one
+    // This ensures that if user cancelled or changed cart, old pending orders don't appear to vendor
+    await cancelAllPendingOrdersForUser(userId);
 
     // Create order with pendingVendorApproval status
     // This uses similar logic to generateRazorpayOrderForUser but without payment
@@ -244,6 +307,123 @@ exports.denyOrder = async (req, res) => {
     });
   } catch (err) {
     console.error("Error in denyOrder:", err);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Server error." 
+    });
+  }
+};
+
+/**
+ * POST /order-approval/:orderId/cancel
+ * Cancel a pending vendor approval order (by user)
+ */
+exports.cancelPendingOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { userId } = req.body;
+
+    if (!orderId || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID and User ID are required.",
+      });
+    }
+
+    // Find order and verify ownership
+    const order = await Order.findById(orderId);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found.",
+      });
+    }
+
+    if (order.userId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to cancel this order.",
+      });
+    }
+
+    // Only pendingVendorApproval orders can be cancelled by user
+    if (order.status !== "pendingVendorApproval") {
+      return res.status(400).json({
+        success: false,
+        message: `Order cannot be cancelled. Current status: ${order.status}`,
+      });
+    }
+
+    // Perform best-effort cancellation without a cross-database transaction
+    try {
+      await Promise.all([
+        User.updateOne(
+          { _id: order.userId },
+          { $pull: { activeOrders: orderId, pastOrders: orderId } }
+        ),
+        Vendor.updateOne(
+          { _id: order.vendorId },
+          { $pull: { activeOrders: orderId } }
+        ),
+      ]);
+    } catch (relErr) {
+      console.error("Error unlinking order from user/vendor:", relErr);
+    }
+
+    try {
+      await Order.deleteOne({ _id: orderId });
+    } catch (delErr) {
+      console.error("Error deleting order:", delErr);
+    }
+
+    try {
+      const { atomicCache } = require("../utils/cacheUtils");
+      atomicCache.releaseOrderLocks(order.items, order.userId);
+    } catch (lockError) {
+      console.error("Error releasing locks:", lockError);
+    }
+
+    console.info(`Order ${orderId} cancelled successfully by user`);
+    return res.json({
+      success: true,
+      message: "Order cancelled successfully.",
+      orderId: order._id,
+    });
+  } catch (err) {
+    console.error("Error in cancelPendingOrder:", err);
+    return res.status(500).json({ 
+      success: false,
+      message: "Server error." 
+    });
+  }
+};
+
+/**
+ * POST /order-approval/cancel-all/:userId
+ * Cancel all pending approval orders for a user
+ * Used when user changes cart or wants to cancel all pending orders
+ */
+exports.cancelAllPendingOrders = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required.",
+      });
+    }
+
+    const result = await cancelAllPendingOrdersForUser(userId);
+
+    return res.json({
+      success: true,
+      message: `Cancelled ${result.cancelled} pending order(s).`,
+      cancelled: result.cancelled,
+    });
+  } catch (err) {
+    console.error("Error in cancelAllPendingOrders:", err);
     return res.status(500).json({ 
       success: false, 
       message: "Server error." 
