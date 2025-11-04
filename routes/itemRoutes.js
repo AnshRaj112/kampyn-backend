@@ -70,14 +70,45 @@ router.get("/:category/item/:id", itemController.getItemById);
 // Get vendor-specific items (items that belong only to a specific vendor)
 router.get("/vendor/:vendorId/:category", itemController.getVendorSpecificItems);
 
-router.get('/types/retail', (req, res) => {
-  const retailTypes = Retail.schema.path('type').enumValues;
-  res.json({ types: retailTypes });
+router.get('/types/retail', async (req, res) => {
+  try {
+    // Get unique types from all retail items in the database
+    const retailTypes = await Retail.distinct('type');
+    res.json({ types: retailTypes });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.get('/types/produce', (req, res) => {
-  const produceTypes = Produce.schema.path('type').enumValues;
-  res.json({ types: produceTypes });
+router.get('/types/produce', async (req, res) => {
+  try {
+    // Get unique types from all produce items in the database
+    const produceTypes = await Produce.distinct('type');
+    res.json({ types: produceTypes });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get unique types for a specific university
+router.get('/types/retail/uni/:uniId', async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const retailTypes = await Retail.distinct('type', { uniId });
+    res.json({ types: retailTypes });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/types/produce/uni/:uniId', async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const produceTypes = await Produce.distinct('type', { uniId });
+    res.json({ types: produceTypes });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Get HSN code suggestions based on item type

@@ -450,17 +450,6 @@ exports.searchItems = async (req, res) => {
   try {
     const regex = new RegExp(_.escapeRegExp(query), "i"); // case-insensitive partial match
 
-    // Define retail types
-    const retailTypes = [
-      "biscuits",
-      "chips",
-      "icecream",
-      "drinks",
-      "snacks",
-      "sweets",
-      "nescafe",
-    ];
-
     // First, find items that match the query directly
     const [retailItems, produceItems] = await Promise.all([
       Retail.find({
@@ -478,7 +467,7 @@ exports.searchItems = async (req, res) => {
         .lean(),
     ]);
 
-    // If we found any items, get their types for enum matching
+    // If we found any items, get their types for matching
     const matchedTypes = new Set();
     [...retailItems, ...produceItems].forEach((item) => {
       if (item.type) matchedTypes.add(item.type);
@@ -487,25 +476,29 @@ exports.searchItems = async (req, res) => {
     // If no types were matched but searchByType is true, try to infer the type from the query
     let typesToSearch = Array.from(matchedTypes);
     if (typesToSearch.length === 0 && searchByType === "true") {
-      // Try to match the query against known types
+      // Try to match the query against all existing types in the database
       const queryLower = query.toLowerCase();
-      typesToSearch = retailTypes.filter((type) => type.includes(queryLower));
+      const [allRetailItems, allProduceItems] = await Promise.all([
+        Retail.find({ uniId: uniID }).select("name type").lean(),
+        Produce.find({ uniId: uniID }).select("name type").lean(),
+      ]);
 
-      // If still no types found, try to match against item names to infer type
-      if (typesToSearch.length === 0) {
-        const [allRetailItems] = await Promise.all([
-          Retail.find({ uniId: uniID }).select("name type").lean(),
-        ]);
+      // Find items that contain the search query in name or type
+      const matchingRetailItems = allRetailItems.filter((item) =>
+        item.name.toLowerCase().includes(queryLower) || 
+        item.type.toLowerCase().includes(queryLower)
+      );
+      const matchingProduceItems = allProduceItems.filter((item) =>
+        item.name.toLowerCase().includes(queryLower) || 
+        item.type.toLowerCase().includes(queryLower)
+      );
 
-        // Find items that contain the search query
-        const matchingItems = allRetailItems.filter((item) =>
-          item.name.toLowerCase().includes(queryLower)
-        );
-
-        // Get unique types from matching items
-        const inferredTypes = new Set(matchingItems.map((item) => item.type));
-        typesToSearch = Array.from(inferredTypes);
-      }
+      // Get unique types from matching items
+      const inferredTypes = new Set([
+        ...matchingRetailItems.map((item) => item.type),
+        ...matchingProduceItems.map((item) => item.type)
+      ]);
+      typesToSearch = Array.from(inferredTypes);
     }
 
     // If we have types to search for, get all items of those types
@@ -543,28 +536,36 @@ exports.searchItems = async (req, res) => {
 
     // Combine results, ensuring no duplicates and correct source assignment
     const itemMap = new Map();
-    [...retailItems, ...produceItems].forEach((item) => {
+    // Retail items come from Retail model, so source is "retail"
+    retailItems.forEach((item) => {
       const key = `${item._id}-${item.type}`;
       if (!itemMap.has(key)) {
-        // Determine source based on type
-        const isRetailType = retailTypes.includes(item.type.toLowerCase());
         itemMap.set(key, {
           ...item,
-          source: isRetailType ? "retail" : "produce",
+          source: "retail",
+          isTypeMatch: false,
+        });
+      }
+    });
+    // Produce items come from Produce model, so source is "produce"
+    produceItems.forEach((item) => {
+      const key = `${item._id}-${item.type}`;
+      if (!itemMap.has(key)) {
+        itemMap.set(key, {
+          ...item,
+          source: "produce",
           isTypeMatch: false,
         });
       }
     });
 
     // Add additional items (type matches) if they don't already exist
+    // Additional items already have source set correctly from the queries above
     additionalItems.forEach((item) => {
       const key = `${item._id}-${item.type}`;
       if (!itemMap.has(key)) {
-        // Determine source based on type for additional items
-        const isRetailType = retailTypes.includes(item.type.toLowerCase());
         itemMap.set(key, {
           ...item,
-          source: isRetailType ? "retail" : "produce",
           isTypeMatch: true,
         });
       }

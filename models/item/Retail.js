@@ -7,16 +7,6 @@ const retailSchema = new mongoose.Schema({
   name: { type: String, required: true },
   type: {
     type: String,
-    enum: [
-      "biscuits",
-      "chips",
-      "icecream",
-      "drinks",
-      "snacks",
-      "sweets",
-      "nescafe",
-      "others",
-    ],
     required: true,
   },
   uniId: { type: mongoose.Schema.Types.ObjectId, ref: "Uni", required: true },

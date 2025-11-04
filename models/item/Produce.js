@@ -5,16 +5,6 @@ const produceSchema = new mongoose.Schema({
   name: { type: String, required: true },
   type: {
     type: String,
-    enum: [
-      "combos-veg",
-      "combos-nonveg",
-      "veg",
-      "shakes",
-      "juices",
-      "soups",
-      "non-veg",
-      "others",
-    ],
     required: true,
   },
   uniId: { type: mongoose.Schema.Types.ObjectId, ref: "Uni", required: true },
