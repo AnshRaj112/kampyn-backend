@@ -83,19 +83,19 @@ async function getItemsForVendorId(vendorId) {
   const produceItemIds = produceEntries.map((e) => String(e.itemId));
 
   // 5. Batch‐fetch item docs from Retail & Produce in parallel
-  //    We select the fields needed by the frontend: name, price, image, type
+  //    We select the fields needed by the frontend: name, description, price, image, type
   const [retailDocs, produceDocs] = await Promise.all([
     Retail.find({
       _id: { $in: retailItemIds.map(toObjectId) },
       uniId: vendor.uniID,
     })
-      .select("name price image type")
+      .select("name description price image type subtype")
       .lean(),
     Produce.find({
       _id: { $in: produceItemIds.map(toObjectId) },
       uniId: vendor.uniID,
     })
-      .select("name price image type")
+      .select("name description price image type subtype")
       .lean(),
   ]);
 
@@ -112,6 +112,7 @@ async function getItemsForVendorId(vendorId) {
       return {
         itemId: doc._id,
         name: doc.name,
+        description: doc.description,
         price: doc.price,
         quantity, // how many units left
         image: doc.image,
@@ -130,9 +131,11 @@ async function getItemsForVendorId(vendorId) {
       return {
         itemId: doc._id,
         name: doc.name,
+        description: doc.description,
         price: doc.price,
         image: doc.image,
         type: doc.type,
+        subtype: doc.subtype,
         isAvailable,
         isSpecial, // from vendor's inventory
       };
@@ -230,7 +233,7 @@ async function getRetailItemsForVendorId(vendorId) {
     _id: { $in: retailItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name price type image") // include image field
+    .select("name description price type image") // include image field
     .lean();
 
   const retailMap = new Map(retailDocs.map((d) => [String(d._id), d]));
@@ -241,6 +244,7 @@ async function getRetailItemsForVendorId(vendorId) {
       return {
         itemId: doc._id,
         name: doc.name,
+        description: doc.description,
         price: doc.price,
         quantity,
         type: doc.type,
@@ -270,7 +274,7 @@ async function getProduceItemsForVendorId(vendorId) {
     _id: { $in: produceItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name price type image") // include image field
+    .select("name description price type subtype image") // include image field
     .lean();
 
   const produceMap = new Map(produceDocs.map((d) => [String(d._id), d]));
@@ -281,9 +285,11 @@ async function getProduceItemsForVendorId(vendorId) {
       return {
         itemId: doc._id,
         name: doc.name,
+        description: doc.description,
         price: doc.price,
         isAvailable,
         type: doc.type,
+        subtype: doc.subtype,
         image: doc.image,
         isSpecial, // from vendor's inventory
       };

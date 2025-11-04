@@ -165,7 +165,7 @@ exports.getItemsByTypeAndUni = async (req, res) => {
 
     const ItemModel = getModel(category);
     const items = await ItemModel.find({ type, uniId })
-      .select("name price image type packable")
+      .select("name description price image type subtype packable")
       .lean();
     res.status(200).json(items);
   } catch (error) {
@@ -191,7 +191,7 @@ exports.getItemsByUniId = async (req, res) => {
 
     const [items, total] = await Promise.all([
       ItemModel.find({ uniId })
-        .select("name price image type packable")
+        .select("name description price image type subtype packable")
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -216,7 +216,7 @@ exports.getItemsByTypeAndUniDetailed = async (req, res) => {
 
     const ItemModel = getModel(category);
     const items = await ItemModel.find({ type, uniId })
-      .select("name hsnCode gstPercentage sgstPercentage cgstPercentage priceExcludingTax price image type packable")
+      .select("name description hsnCode gstPercentage sgstPercentage cgstPercentage priceExcludingTax price image type packable")
       .lean();
     res.status(200).json({ success: true, items });
   } catch (error) {
@@ -454,16 +454,16 @@ exports.searchItems = async (req, res) => {
     const [retailItems, produceItems] = await Promise.all([
       Retail.find({
         uniId: uniID,
-        $or: [{ name: regex }, { type: regex }],
+        $or: [{ name: regex }, { type: regex }, { subtype: regex }],
       })
-        .select("name price image type")
+        .select("name description price image type subtype")
         .lean(),
 
       Produce.find({
         uniId: uniID,
-        $or: [{ name: regex }, { type: regex }],
+        $or: [{ name: regex }, { type: regex }, { subtype: regex }],
       })
-        .select("name price image type")
+        .select("name description price image type subtype")
         .lean(),
     ]);
 
@@ -479,18 +479,20 @@ exports.searchItems = async (req, res) => {
       // Try to match the query against all existing types in the database
       const queryLower = query.toLowerCase();
       const [allRetailItems, allProduceItems] = await Promise.all([
-        Retail.find({ uniId: uniID }).select("name type").lean(),
-        Produce.find({ uniId: uniID }).select("name type").lean(),
+        Retail.find({ uniId: uniID }).select("name type subtype").lean(),
+        Produce.find({ uniId: uniID }).select("name type subtype").lean(),
       ]);
 
       // Find items that contain the search query in name or type
       const matchingRetailItems = allRetailItems.filter((item) =>
         item.name.toLowerCase().includes(queryLower) || 
-        item.type.toLowerCase().includes(queryLower)
+        item.type.toLowerCase().includes(queryLower) ||
+        (item.subtype && item.subtype.toLowerCase().includes(queryLower))
       );
       const matchingProduceItems = allProduceItems.filter((item) =>
         item.name.toLowerCase().includes(queryLower) || 
-        item.type.toLowerCase().includes(queryLower)
+        item.type.toLowerCase().includes(queryLower) ||
+        (item.subtype && item.subtype.toLowerCase().includes(queryLower))
       );
 
       // Get unique types from matching items
@@ -509,14 +511,14 @@ exports.searchItems = async (req, res) => {
           uniId: uniID,
           type: { $in: typesToSearch },
         })
-          .select("name price image type")
+          .select("name description price image type subtype")
           .lean(),
 
         Produce.find({
           uniId: uniID,
           type: { $in: typesToSearch },
         })
-          .select("name price image type")
+          .select("name description price image type subtype")
           .lean(),
       ]);
 
