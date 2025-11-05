@@ -14,7 +14,8 @@ const produceSchema = new mongoose.Schema({
   unit: { type: String, required: true },
   price: { type: Number, required: true },
   priceExcludingTax: { type: Number, required: true },
-
+  hsnCode: { type: String, required: true },
+  gstPercentage: { type: Number, required: true },
   sgstPercentage: { type: Number, required: true },
   cgstPercentage: { type: Number, required: true },
   image: { type: String, required: true },
