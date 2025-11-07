@@ -89,13 +89,13 @@ async function getItemsForVendorId(vendorId) {
       _id: { $in: retailItemIds.map(toObjectId) },
       uniId: vendor.uniID,
     })
-      .select("name description price image type subtype")
+      .select("name description price image type subtype isVeg")
       .lean(),
     Produce.find({
       _id: { $in: produceItemIds.map(toObjectId) },
       uniId: vendor.uniID,
     })
-      .select("name description price image type subtype")
+      .select("name description price image type subtype isVeg")
       .lean(),
   ]);
 
@@ -117,6 +117,7 @@ async function getItemsForVendorId(vendorId) {
         quantity, // how many units left
         image: doc.image,
         type: doc.type,
+        isVeg: doc.isVeg,
         isSpecial, // from vendor's inventory
         isAvailable, // from vendor's inventory
       };
@@ -136,6 +137,7 @@ async function getItemsForVendorId(vendorId) {
         image: doc.image,
         type: doc.type,
         subtype: doc.subtype,
+        isVeg: doc.isVeg,
         isAvailable,
         isSpecial, // from vendor's inventory
       };
@@ -233,7 +235,7 @@ async function getRetailItemsForVendorId(vendorId) {
     _id: { $in: retailItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name description price type image") // include image field
+    .select("name description price type image isVeg") // include image field
     .lean();
 
   const retailMap = new Map(retailDocs.map((d) => [String(d._id), d]));
@@ -249,6 +251,7 @@ async function getRetailItemsForVendorId(vendorId) {
         quantity,
         type: doc.type,
         image: doc.image,
+        isVeg: doc.isVeg,
         isSpecial, // from vendor's inventory
         isAvailable, // from vendor's inventory
       };
@@ -274,7 +277,7 @@ async function getProduceItemsForVendorId(vendorId) {
     _id: { $in: produceItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name description price type subtype image") // include image field
+    .select("name description price type subtype image isVeg") // include image field
     .lean();
 
   const produceMap = new Map(produceDocs.map((d) => [String(d._id), d]));
@@ -291,6 +294,7 @@ async function getProduceItemsForVendorId(vendorId) {
         type: doc.type,
         subtype: doc.subtype,
         image: doc.image,
+        isVeg: doc.isVeg,
         isSpecial, // from vendor's inventory
       };
     })

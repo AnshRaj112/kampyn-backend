@@ -452,7 +452,7 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
              customer: {
          name: 'KAMPYN Platform',
          contact: '9999999999',
-         email: 'platform@bitesbay.com',
+         email: 'platform@kampyn.com',
          billing_address: {
            line1: 'KAMPYN Platform',
            city: 'Mumbai',

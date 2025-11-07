@@ -20,6 +20,7 @@ const retailSchema = new mongoose.Schema({
   cgstPercentage: { type: Number, required: true },
   image: { type: String, required: true },
   packable: { type: Boolean, default: false },
+  isVeg: { type: Boolean, default: true },
 });
 retailSchema.index({ uniId: 1, type: 1 });
 retailSchema.post("findOneAndDelete", async function (doc) {

@@ -227,7 +227,7 @@ POST /api/admin/auth/login
 Content-Type: application/json
 
 {
-  "email": "admin@bitesbay.com",
+  "email": "admin@kampyn.com",
   "password": "admin_password"
 }
 ```

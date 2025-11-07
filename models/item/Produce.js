@@ -20,6 +20,7 @@ const produceSchema = new mongoose.Schema({
   cgstPercentage: { type: Number, required: true },
   image: { type: String, required: true },
   packable: { type: Boolean, default: true },
+  isVeg: { type: Boolean, default: true },
 });
 produceSchema.index({ uniId: 1, type: 1 });
 // Helpful for subtype-based lookups if used
