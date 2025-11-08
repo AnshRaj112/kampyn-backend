@@ -52,6 +52,7 @@ const grievanceRoutes = require("./routes/grievanceRoutes");
 const recipeRoutes = require("./routes/recipeRoutes");
 // NEW: Order approval workflow routes (new file) - handles vendor accept/deny order requests
 const orderApprovalRoutes = require("./routes/orderApprovalRoutes");
+const menuSortRoutes = require("./routes/menuSortRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const app = express();
 
@@ -201,6 +202,7 @@ app.use("/api/access", accessRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api", grievanceRoutes);
 app.use("/api/recipes", recipeRoutes);
+app.use("/api/menu-sort", menuSortRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Health check endpoint
