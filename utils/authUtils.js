@@ -2,6 +2,7 @@ const User = require('../models/account/User');
 const Vendor = require('../models/account/Vendor');
 const Uni = require('../models/account/Uni');
 const Admin = require('../models/account/Admin');
+const logger = require('./pinoLogger');
 
 /**
  * Check if user should be logged out based on last activity
@@ -40,7 +41,7 @@ async function checkUserActivity(userId, userType) {
     
     return { shouldLogout, user };
   } catch (error) {
-    console.error('Error checking user activity:', error);
+    logger.error({ error: error.message, userId, userType }, 'Error checking user activity');
     return { shouldLogout: true, user: null };
   }
 }
@@ -73,7 +74,7 @@ async function updateUserActivity(userId, userType) {
 
     return !!updateResult;
   } catch (error) {
-    console.error('Error updating user activity:', error);
+    logger.error({ error: error.message, userId, userType }, 'Error updating user activity');
     return false;
   }
 }

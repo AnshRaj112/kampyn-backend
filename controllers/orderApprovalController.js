@@ -6,6 +6,7 @@ const User = require("../models/account/User");
 const Vendor = require("../models/account/Vendor");
 const orderUtils = require("../utils/orderUtils");
 const mongoose = require("mongoose");
+const logger = require("../utils/pinoLogger");
 
 /**
  * Helper function: Cancel all pending vendor approval orders for a user
@@ -38,29 +39,29 @@ async function cancelAllPendingOrdersForUser(userId) {
           ),
         ]);
       } catch (relErr) {
-        console.error("Error unlinking order from user/vendor:", relErr);
+        logger.error("Error unlinking order from user/vendor:", relErr);
       }
 
       try {
         await Order.deleteOne({ _id: order._id });
       } catch (delErr) {
-        console.error("Error deleting order:", delErr);
+        logger.error("Error deleting order:", delErr);
       }
 
       try {
         const { atomicCache } = require("../utils/cacheUtils");
         atomicCache.releaseOrderLocks(order.items, order.userId);
       } catch (lockError) {
-        console.error("Error releasing locks:", lockError);
+        logger.error("Error releasing locks:", lockError);
       }
 
       cancelledCount++;
     }
 
-    console.info(`Cancelled ${cancelledCount} pending order(s) for user ${userId}`);
+    logger.info(`Cancelled ${cancelledCount} pending order(s) for user ${userId}`);
     return { cancelled: cancelledCount };
   } catch (err) {
-    console.error("Error in cancelAllPendingOrdersForUser:", err);
+    logger.error("Error in cancelAllPendingOrdersForUser:", err);
     // Don't throw - allow order creation to continue even if cancellation fails
     return { cancelled: 0, error: err.message };
   }
@@ -110,7 +111,7 @@ exports.submitOrderForApproval = async (req, res) => {
       status: "pendingVendorApproval",
     });
   } catch (err) {
-    console.error("Error in submitOrderForApproval:", err);
+    logger.error("Error in submitOrderForApproval:", err);
     
     if (err.code === 11000) {
       return res.status(409).json({ 
@@ -159,7 +160,7 @@ exports.getOrderApprovalStatus = async (req, res) => {
       createdAt: order.createdAt,
     });
   } catch (err) {
-    console.error("Error in getOrderApprovalStatus:", err);
+    logger.error("Error in getOrderApprovalStatus:", err);
     return res.status(500).json({ 
       success: false, 
       message: "Server error." 
@@ -235,7 +236,7 @@ exports.acceptOrder = async (req, res) => {
       status: order.status,
     });
   } catch (err) {
-    console.error("Error in acceptOrder:", err);
+    logger.error("Error in acceptOrder:", err);
     return res.status(500).json({ 
       success: false, 
       message: "Server error." 
@@ -294,7 +295,7 @@ exports.denyOrder = async (req, res) => {
       const { atomicCache } = require("../utils/cacheUtils");
       atomicCache.releaseOrderLocks(order.items, order.userId);
     } catch (lockError) {
-      console.error("Error releasing locks:", lockError);
+      logger.error("Error releasing locks:", lockError);
       // Continue even if lock release fails
     }
 
@@ -306,7 +307,7 @@ exports.denyOrder = async (req, res) => {
       denialReason: order.denialReason,
     });
   } catch (err) {
-    console.error("Error in denyOrder:", err);
+    logger.error("Error in denyOrder:", err);
     return res.status(500).json({ 
       success: false, 
       message: "Server error." 
@@ -368,30 +369,30 @@ exports.cancelPendingOrder = async (req, res) => {
         ),
       ]);
     } catch (relErr) {
-      console.error("Error unlinking order from user/vendor:", relErr);
+      logger.error("Error unlinking order from user/vendor:", relErr);
     }
 
     try {
       await Order.deleteOne({ _id: orderId });
     } catch (delErr) {
-      console.error("Error deleting order:", delErr);
+      logger.error("Error deleting order:", delErr);
     }
 
     try {
       const { atomicCache } = require("../utils/cacheUtils");
       atomicCache.releaseOrderLocks(order.items, order.userId);
     } catch (lockError) {
-      console.error("Error releasing locks:", lockError);
+      logger.error("Error releasing locks:", lockError);
     }
 
-    console.info(`Order ${orderId} cancelled successfully by user`);
+    logger.info(`Order ${orderId} cancelled successfully by user`);
     return res.json({
       success: true,
       message: "Order cancelled successfully.",
       orderId: order._id,
     });
   } catch (err) {
-    console.error("Error in cancelPendingOrder:", err);
+    logger.error("Error in cancelPendingOrder:", err);
     return res.status(500).json({ 
       success: false,
       message: "Server error." 
@@ -423,7 +424,7 @@ exports.cancelAllPendingOrders = async (req, res) => {
       cancelled: result.cancelled,
     });
   } catch (err) {
-    console.error("Error in cancelAllPendingOrders:", err);
+    logger.error("Error in cancelAllPendingOrders:", err);
     return res.status(500).json({ 
       success: false, 
       message: "Server error." 
@@ -469,7 +470,7 @@ exports.getPendingApprovalOrders = async (req, res) => {
       orders, // array of { orderId, orderType, status, collectorName, collectorPhone, items, total, etc. }
     });
   } catch (err) {
-    console.error("Error in getPendingApprovalOrders:", err);
+    logger.error("Error in getPendingApprovalOrders:", err);
     return res.status(500).json({ 
       success: false, 
       message: "Server error." 

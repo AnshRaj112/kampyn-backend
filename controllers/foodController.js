@@ -46,13 +46,14 @@
 //       await item.save();
 //     }
 //   } catch (err) {
-//     console.error("Error incrementing search count:", err);
+//     logger.error("Error incrementing search count:", err);
 //   }
 // };
 
 const Produce = require("../models/item/Produce");
 const Retail = require("../models/item/Retail");
 const User = require("../models/account/User");
+const logger = require("../utils/pinoLogger");
 
 // Search food items across both collections
 exports.searchFoods = async (req, res) => {
@@ -112,6 +113,6 @@ exports.incrementSearchCount = async (foodName) => {
       await item.save();
     }
   } catch (err) {
-    console.error("Error incrementing search count:", err);
+    logger.error("Error incrementing search count:", err);
   }
 };

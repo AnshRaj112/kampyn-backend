@@ -91,7 +91,7 @@ router.get("/:vendorId/university-charges", async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching vendor university charges:', error);
+    logger.error('Error fetching vendor university charges:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -134,7 +134,7 @@ router.get("/:vendorId/assignments", async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching vendor assignments:', error);
+    logger.error('Error fetching vendor assignments:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch vendor assignments'

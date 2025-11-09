@@ -7,6 +7,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
+const logger = require("./utils/pinoLogger");
 
 // Import CSRF protection middleware
 const lusca = require('lusca');
@@ -136,8 +137,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.info("CORS blocked for origin:", origin);
-        console.info("Allowed origins:", allowedOrigins);
+        logger.info({ origin, allowedOrigins }, "CORS blocked for origin");
         callback(new Error("CORS not allowed: " + origin));
       }
     },
@@ -212,7 +212,7 @@ app.get("/api/health", (req, res) => {
 
 // ✅ Global error handling
 app.use((err, req, res, next) => {
-  console.error("🔥 Server Error:", err);
+  logger.error({ err, url: req.url, method: req.method }, "Server Error");
   res.status(500).json({ message: "Internal Server Error" });
 });
 
@@ -231,23 +231,25 @@ module.exports = app;
 
 // ✅ Start Server
 app.listen(PORT, () => {
-  console.info(`🚀 Server running on port ${PORT}`);
+  logger.info({ port: PORT }, "Server running");
 
   // ✅ Log database connection status
-  console.info("📊 Database Connection Status:");
-  console.info(`   Users: ${Cluster_User.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.info(`   Orders: ${Cluster_Order.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.info(`   Items: ${Cluster_Item.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.info(`   Inventory: ${Cluster_Inventory.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.info(`   Accounts: ${Cluster_Accounts.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.info(`   Cache: ${Cluster_Cache_Analytics.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  const dbStatus = {
+    Users: Cluster_User.readyState === 1 ? 'Connected' : 'Disconnected',
+    Orders: Cluster_Order.readyState === 1 ? 'Connected' : 'Disconnected',
+    Items: Cluster_Item.readyState === 1 ? 'Connected' : 'Disconnected',
+    Inventory: Cluster_Inventory.readyState === 1 ? 'Connected' : 'Disconnected',
+    Accounts: Cluster_Accounts.readyState === 1 ? 'Connected' : 'Disconnected',
+    Cache: Cluster_Cache_Analytics.readyState === 1 ? 'Connected' : 'Disconnected'
+  };
+  logger.info({ dbStatus }, "Database Connection Status");
 
   // 🔒 Start periodic cleanup of expired orders and locks
   startPeriodicCleanup(10 * 60 * 1000); // 10 minutes
-  console.info("🔒 Cache locking system initialized with periodic cleanup");
-  console.info("🔐 Admin authentication system ready");
+  logger.info("Cache locking system initialized with periodic cleanup");
+  logger.info("Admin authentication system ready");
 
   // 🧹 Initialize daily raw material inventory clearing
   initializeDailyClearing();
-  console.info("🧹 Daily raw material clearing schedule initialized");
+  logger.info("Daily raw material clearing schedule initialized");
 });

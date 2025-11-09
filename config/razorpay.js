@@ -1,4 +1,5 @@
 require('dotenv').config();
+const logger = require('../utils/pinoLogger');
 
 const razorpayConfig = {
   keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_kR4r4rtzasoKWl',
@@ -10,20 +11,20 @@ const razorpayConfig = {
 
 // Validate configuration
 if (!razorpayConfig.keySecret) {
-  console.warn('⚠️ RAZORPAY_KEY_SECRET not found in environment variables');
-  console.warn('⚠️ Razorpay API calls will fail without proper authentication');
+  logger.warn('RAZORPAY_KEY_SECRET not found in environment variables');
+  logger.warn('Razorpay API calls will fail without proper authentication');
 }
 
 if (!razorpayConfig.keyId) {
-  console.warn('⚠️ RAZORPAY_KEY_ID not found in environment variables');
-  console.warn('⚠️ Using default test key: rzp_test_kR4r4rtzasoKWl');
+  logger.warn('RAZORPAY_KEY_ID not found in environment variables');
+  logger.warn({ defaultKey: 'rzp_test_kR4r4rtzasoKWl' }, 'Using default test key');
 }
 
-console.info('🔑 Razorpay Configuration:', {
+logger.info({
   keyId: razorpayConfig.keyId,
   environment: razorpayConfig.environment,
   apiBase: razorpayConfig.apiBase,
   hasSecret: !!razorpayConfig.keySecret
-});
+}, 'Razorpay Configuration');
 
 module.exports = razorpayConfig;

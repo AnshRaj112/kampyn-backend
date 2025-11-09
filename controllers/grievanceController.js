@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Grievance = require("../models/account/Grievance");
 const Vendor = require("../models/account/Vendor");
+const logger = require("../utils/pinoLogger");
 
 // Create a new grievance (vendor only)
 exports.createGrievance = async (req, res) => {
@@ -51,7 +52,7 @@ exports.createGrievance = async (req, res) => {
       data: populatedGrievance
     });
   } catch (error) {
-    console.error("Error creating grievance:", error);
+    logger.error("Error creating grievance:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create grievance"
@@ -74,7 +75,7 @@ exports.getVendorGrievances = async (req, res) => {
       data: grievances
     });
   } catch (error) {
-    console.error("Error fetching vendor grievances:", error);
+    logger.error("Error fetching vendor grievances:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch grievances"
@@ -106,7 +107,7 @@ exports.getUniversityGrievances = async (req, res) => {
       data: grievances
     });
   } catch (error) {
-    console.error("Error fetching university grievances:", error);
+    logger.error("Error fetching university grievances:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch grievances"
@@ -135,7 +136,7 @@ exports.getGrievanceById = async (req, res) => {
       data: grievance
     });
   } catch (error) {
-    console.error("Error fetching grievance:", error);
+    logger.error("Error fetching grievance:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch grievance"
@@ -187,7 +188,7 @@ exports.updateGrievanceStatus = async (req, res) => {
       data: grievance
     });
   } catch (error) {
-    console.error("Error updating grievance:", error);
+    logger.error("Error updating grievance:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update grievance"
@@ -249,7 +250,7 @@ exports.getGrievanceStats = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error fetching grievance stats:", error);
+    logger.error("Error fetching grievance stats:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch grievance statistics"

@@ -5,6 +5,7 @@ require("dotenv").config();
 const { Cluster_Item } = require("../config/db");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
+const logger = require("../utils/pinoLogger");
 
 async function migrateIsVeg() {
   try {
@@ -20,7 +21,7 @@ async function migrateIsVeg() {
       }
     });
 
-    console.log("Connected to Items database cluster");
+    logger.info("Connected to Items database cluster");
 
     // Update all Retail items that don't have isVeg field
     const retailResult = await Retail.updateMany(
@@ -28,7 +29,7 @@ async function migrateIsVeg() {
       { $set: { isVeg: true } }
     );
 
-    console.log(`Updated ${retailResult.modifiedCount} Retail items (missing isVeg)`);
+    logger.info({ modifiedCount: retailResult.modifiedCount }, "Updated Retail items (missing isVeg)");
 
     // Update all Produce items that don't have isVeg field
     const produceResult = await Produce.updateMany(
@@ -36,7 +37,7 @@ async function migrateIsVeg() {
       { $set: { isVeg: true } }
     );
 
-    console.log(`Updated ${produceResult.modifiedCount} Produce items (missing isVeg)`);
+    logger.info({ modifiedCount: produceResult.modifiedCount }, "Updated Produce items (missing isVeg)");
 
     // Also update items where isVeg is null
     const retailNullResult = await Retail.updateMany(
@@ -44,37 +45,35 @@ async function migrateIsVeg() {
       { $set: { isVeg: true } }
     );
 
-    console.log(`Updated ${retailNullResult.modifiedCount} Retail items (null isVeg)`);
+    logger.info({ modifiedCount: retailNullResult.modifiedCount }, "Updated Retail items (null isVeg)");
 
     const produceNullResult = await Produce.updateMany(
       { isVeg: null },
       { $set: { isVeg: true } }
     );
 
-    console.log(`Updated ${produceNullResult.modifiedCount} Produce items (null isVeg)`);
+    logger.info({ modifiedCount: produceNullResult.modifiedCount }, "Updated Produce items (null isVeg)");
 
     // Get total counts
     const retailCount = await Retail.countDocuments();
     const produceCount = await Produce.countDocuments();
     
-    console.log(`\nTotal Retail items: ${retailCount}`);
-    console.log(`Total Produce items: ${produceCount}`);
+    logger.info({ retailCount, produceCount }, "Total items count");
 
     // Verify migration
     const retailWithoutVeg = await Retail.countDocuments({ isVeg: { $ne: true } });
     const produceWithoutVeg = await Produce.countDocuments({ isVeg: { $ne: true } });
     
-    console.log(`\nRetail items without isVeg=true: ${retailWithoutVeg}`);
-    console.log(`Produce items without isVeg=true: ${produceWithoutVeg}`);
+    logger.info({ retailWithoutVeg, produceWithoutVeg }, "Items without isVeg=true");
 
-    console.log("\n✅ Migration completed successfully!");
+    logger.info("Migration completed successfully");
 
   } catch (error) {
-    console.error("❌ Migration failed:", error);
+    logger.error({ error: error.message }, "Migration failed");
     process.exit(1);
   } finally {
     await Cluster_Item.close();
-    console.log("Database connection closed");
+    logger.info("Database connection closed");
     process.exit(0);
   }
 }

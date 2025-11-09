@@ -13,6 +13,7 @@ const InventoryReport = require("../models/inventory/InventoryReport");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const { atomicCache } = require("./cacheUtils");
+const logger = require("./pinoLogger");
 
 // Temporary storage for order details during payment flow
 const pendingOrderDetails = new Map();
@@ -64,7 +65,7 @@ async function cancelOrderAtomically(orderId, order, session) {
     // 4) Release item locks (outside transaction since it's in-memory cache)
     const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
     
-    console.info('Order ' + String(orderId) + ' cancelled atomically. Released ' + String(lockReleaseResult.released.length) + ' locks');
+    logger.info({ orderId, locksReleased: lockReleaseResult.released.length }, 'Order cancelled atomically');
     
     return {
       success: true,
@@ -72,7 +73,7 @@ async function cancelOrderAtomically(orderId, order, session) {
       failedLocks: lockReleaseResult.failed.length
     };
   } catch (error) {
-    console.error('Error in atomic order cancellation for order:', orderId, error);
+    logger.error({ error: error.message, orderId }, 'Error in atomic order cancellation');
     throw error;
   }
 }
@@ -211,7 +212,7 @@ async function generateRazorpayOrderForUser({
   const cartDetails = await cartUtils.getCartDetails(userId);
   const populatedCart = cartDetails.cart;
 
-  console.info("🛒 Backend: Cart details fetched:", {
+  logger.debug({
     userId,
     cartLength: populatedCart.length,
     cartItems: populatedCart.map(item => ({
@@ -221,7 +222,7 @@ async function generateRazorpayOrderForUser({
       packable: item.packable,
       kind: item.kind
     }))
-  });
+  }, "Backend: Cart details fetched");
 
   if (!["takeaway", "delivery", "dinein"].includes(orderType)) {
     throw new Error(`Invalid orderType "${orderType}".`);
@@ -250,39 +251,39 @@ async function generateRazorpayOrderForUser({
   let itemTotal = 0;
   let packableItemsTotal = 0;
   
-  console.info("🔍 Cart items for calculation:", populatedCart.map(item => ({
+  logger.debug({ cartItems: populatedCart.map(item => ({
     name: item.name,
     price: item.price,
     quantity: item.quantity,
     packable: item.packable,
     kind: item.kind,
     totalPrice: (item.price || 0) * (item.quantity || 0)
-  })));
+  })) }, "Cart items for calculation");
   
   for (const cartItem of populatedCart) {
     const itemPrice = cartItem.price || 0;
     const itemQuantity = cartItem.quantity || 0;
     const itemTotalPrice = itemPrice * itemQuantity;
     
-    console.info('💰 Item calculation: ' + String(cartItem.name) + ' - Price: ' + String(itemPrice) + ' × Quantity: ' + String(itemQuantity) + ' = ' + String(itemTotalPrice));
+    logger.debug({ name: cartItem.name, price: itemPrice, quantity: itemQuantity, total: itemTotalPrice }, 'Item calculation');
     
     itemTotal += itemTotalPrice;
     
     // Check if item is packable (produce items are packable by default)
     const isPackable = cartItem.packable === true || cartItem.kind === "Produce";
-    console.info('📦 Packable check for ' + String(cartItem.name) + ': packable=' + String(cartItem.packable) + ', kind=' + String(cartItem.kind) + ', isPackable=' + String(isPackable));
+    logger.debug({ name: cartItem.name, packable: cartItem.packable, kind: cartItem.kind, isPackable }, 'Packable check');
     
     if (isPackable) {
       packableItemsTotal += itemQuantity;
     }
   }
   
-  console.info("📊 Calculation summary:", {
+  logger.debug({
     itemTotal,
     packableItemsTotal,
     packingCharge,
     deliveryCharge
-  });
+  }, "Calculation summary");
   
   // Calculate packaging and delivery charges
   const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
@@ -291,7 +292,7 @@ async function generateRazorpayOrderForUser({
   
   const finalTotal = itemTotal + packaging + delivery + platformFee;
   
-  console.info("💰 Backend Order Calculation:", {
+  logger.debug({
     itemTotal,
     packableItemsTotal,
     packaging,
@@ -308,27 +309,27 @@ async function generateRazorpayOrderForUser({
       packable: item.packable,
       kind: item.kind
     }))
-  });
+  }, "Backend Order Calculation");
 
   // Additional debugging for amount calculation
-  console.info("🔍 Amount Debug:", {
+  logger.debug({
     finalTotal,
     finalTotalInPaise: finalTotal * 100,
     razorpayAmount: finalTotal * 100,
     expectedFrontendTotal: 140, // Based on user's log
     difference: Math.abs(finalTotal - 140)
-  });
+  }, "Amount Debug");
 
   // Generate Razorpay order
   const shortUserId = userId.toString().slice(-6);
   const tempOrderId = `T${Date.now()}-${shortUserId}`; // always < 40 chars
   
-  console.info("💳 Creating Razorpay order with amount:", {
+  logger.debug({
     finalTotal,
     amountInPaise: finalTotal * 100,
     currency: "INR",
     receipt: tempOrderId
-  });
+  }, "Creating Razorpay order with amount");
   
   const razorpayOrder = await razorpay.orders.create({
     amount: finalTotal * 100,
@@ -337,11 +338,11 @@ async function generateRazorpayOrderForUser({
     payment_capture: 1,
   });
   
-  console.info("💳 Razorpay order created:", {
+  logger.info({
     razorpayOrderId: razorpayOrder.id,
     amount: razorpayOrder.amount,
     currency: razorpayOrder.currency
-  });
+  }, "Razorpay order created");
 
   // Store order details for payment verification
   pendingOrderDetails.set(razorpayOrder.id, {
@@ -380,11 +381,11 @@ async function generateRazorpayOrderForUser({
     finalTotal,
   };
 
-  console.info("📤 Backend Response:", {
+  logger.debug({
     finalTotal: response.finalTotal,
     razorpayAmount: response.razorpayOptions.amount,
     amountInRupees: response.razorpayOptions.amount / 100
-  });
+  }, "Backend Response");
 
   return response;
 }
@@ -577,13 +578,13 @@ async function verifyAndProcessPaymentWithOrderId({
         return await cancelOrderAtomically(ourOrderId, order, session);
       });
       
-      console.info('Payment failed for order ' + String(ourOrderId) + ' - cancelled atomically. Released ' + String(locksReleased) + ' locks');
+      logger.info({ orderId: ourOrderId, locksReleased }, 'Payment failed for order - cancelled atomically');
       return { success: false, msg: "Invalid signature, payment failed" };
     } catch (error) {
-      console.error('Failed to cancel order atomically:', ourOrderId, error);
+      logger.error({ error: error.message, orderId: ourOrderId }, 'Failed to cancel order atomically');
       // Fallback: try to release locks even if database operations failed
       const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
-      console.warn('Fallback lock release for order:', ourOrderId, 'released:', lockReleaseResult.released.length, 'failed:', lockReleaseResult.failed.length);
+      logger.warn({ orderId: ourOrderId, released: lockReleaseResult.released.length, failed: lockReleaseResult.failed.length }, 'Fallback lock release for order');
       return { success: false, msg: "Invalid signature, payment failed" };
     } finally {
       await session.endSession();
@@ -766,7 +767,7 @@ async function getOrdersWithDetails(vendorId, orderType, statusFilter = null) {
 
   // 5) Assemble each order's detailed items
   return orders.map((order) => {
-    console.info("Processing order:", order.orderNumber, "Total:", order.total);
+    logger.debug({ orderNumber: order.orderNumber, total: order.total }, "Processing order");
     
     const detailedItems = order.items.map(({ itemId, kind, quantity }) => {
       const key = itemId.toString();
@@ -793,11 +794,11 @@ async function getOrdersWithDetails(vendorId, orderType, statusFilter = null) {
       items: detailedItems,
     };
     
-    console.info("Returning order result:", {
+    logger.debug({
       orderNumber: result.orderNumber,
       total: result.total,
       totalType: typeof result.total
-    });
+    }, "Returning order result");
     
     return result;
   });
@@ -823,7 +824,7 @@ async function getOrderWithDetails(orderId) {
     }).lean();
 
     if (!order) {
-      console.info('Order not found: ' + String(orderId));
+      logger.info({ orderId }, 'Order not found');
       return null;
     }
 
@@ -878,7 +879,7 @@ async function getOrderWithDetails(orderId) {
       items: detailedItems,
     };
   } catch (error) {
-    console.error('Error in getOrderWithDetails for order:', orderId, error);
+    logger.error({ error: error.message, orderId }, 'Error in getOrderWithDetails for order');
     return null;
   }
 }

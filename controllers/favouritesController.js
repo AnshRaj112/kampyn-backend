@@ -2,6 +2,7 @@ const User = require("../models/account/User");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const Vendor = require("../models/account/Vendor");
+const logger = require("../utils/pinoLogger");
 
 exports.toggleFavourite = async (req, res) => {
   try {
@@ -62,7 +63,7 @@ exports.toggleFavourite = async (req, res) => {
       return res.status(200).json({ message: "Favourite added." });
     
   } catch (err) {
-    console.error("Error in toggleFavourite:", err);
+    logger.error("Error in toggleFavourite:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
@@ -75,7 +76,7 @@ exports.getFavourites = async (req, res) => {
     const user = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: "User not found." });
 
-    console.info("User favorites:", user.favourites); // Debug log
+    logger.info("User favorites:", user.favourites); // Debug log
 
     const favourites = await Promise.all(
       user.favourites.map(async (fav) => {
@@ -83,14 +84,14 @@ exports.getFavourites = async (req, res) => {
           const Model = fav.kind === "Retail" ? Retail : Produce;
           const item = await Model.findById(fav.itemId).lean();
           if (!item) {
-            console.info(`Item not found for ID: ${fav.itemId}`); // Debug log
+            logger.info(`Item not found for ID: ${fav.itemId}`); // Debug log
             return null;
           }
 
           // Get the vendor directly from the favorite's vendorId
           const vendor = await Vendor.findById(fav.vendorId).lean();
           if (!vendor) {
-            console.info(`Vendor not found for ID: ${fav.vendorId}`); // Debug log
+            logger.info(`Vendor not found for ID: ${fav.vendorId}`); // Debug log
             return null;
           }
 
@@ -101,16 +102,16 @@ exports.getFavourites = async (req, res) => {
             vendorName: vendor.fullName
           };
         } catch (err) {
-          console.error("Error processing favorite:", err); // Debug log
+          logger.error("Error processing favorite:", err); // Debug log
           return null;
         }
       })
     );
 
-    console.info("Processed favorites:", favourites.filter(Boolean)); // Debug log
+    logger.info("Processed favorites:", favourites.filter(Boolean)); // Debug log
     res.status(200).json({ favourites: favourites.filter(Boolean) });
   } catch (err) {
-    console.error("Error in getFavourites:", err);
+    logger.error("Error in getFavourites:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
@@ -150,7 +151,7 @@ exports.getFavouritesByUni = async (req, res) => {
       favourites: filteredFavourites.filter(Boolean),
     });
   } catch (err) {
-    console.error("Error in getFavouritesByUni:", err);
+    logger.error("Error in getFavouritesByUni:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };

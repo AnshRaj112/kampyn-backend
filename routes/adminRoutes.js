@@ -6,6 +6,7 @@ const invoiceController = require("../controllers/invoiceController");
 const Uni = require("../models/account/Uni");
 const Vendor = require("../models/account/Vendor");
 const { adminLimiter, strictLimiter } = require("../middleware/rateLimit");
+const logger = require("../utils/pinoLogger");
 
 // Authentication removed - anyone can access admin routes for now
 
@@ -23,7 +24,7 @@ router.get("/locks/stats", async (req, res) => {
       requestedBy: 'anonymous' // Changed from req.admin.email
     });
   } catch (error) {
-    console.error("Error getting lock statistics:", error);
+    logger.error("Error getting lock statistics:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get lock statistics",
@@ -46,7 +47,7 @@ router.get("/locks/detailed-stats", (req, res) => {
       requestedBy: 'anonymous' // Changed from req.admin.email
     });
   } catch (error) {
-    console.error("Error getting detailed lock statistics:", error);
+    logger.error("Error getting detailed lock statistics:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get detailed lock statistics",
@@ -72,7 +73,7 @@ router.post("/locks/release/:orderId", async (req, res) => {
       timestamp: new Date()
     });
   } catch (error) {
-    console.error("Error force releasing locks:", error);
+    logger.error("Error force releasing locks:", error);
     res.status(500).json({
       success: false,
       message: "Failed to release locks",
@@ -97,7 +98,7 @@ router.post("/locks/cleanup", async (req, res) => {
       timestamp: new Date()
     });
   } catch (error) {
-    console.error("Error cleaning up expired orders:", error);
+    logger.error("Error cleaning up expired orders:", error);
     res.status(500).json({
       success: false,
       message: "Failed to cleanup expired orders",
@@ -122,7 +123,7 @@ router.post("/locks/clear-all", async (req, res) => {
       timestamp: new Date()
     });
   } catch (error) {
-    console.error("Error clearing all locks:", error);
+    logger.error("Error clearing all locks:", error);
     res.status(500).json({
       success: false,
       message: "Failed to clear all locks",
@@ -148,7 +149,7 @@ router.get("/locks/items/:itemId", async (req, res) => {
       timestamp: new Date()
     });
   } catch (error) {
-    console.error("Error getting locks for item:", error);
+    logger.error("Error getting locks for item:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get locks for item",
@@ -181,7 +182,7 @@ router.get("/system/health", async (req, res) => {
       requestedBy: 'anonymous' // Changed from req.admin.email
     });
   } catch (error) {
-    console.error("Error getting system health:", error);
+    logger.error("Error getting system health:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get system health",
@@ -216,7 +217,7 @@ router.get("/invoices", adminLimiter, async (req, res) => {
       requestedBy: 'anonymous' // Changed from req.admin.email
     });
   } catch (error) {
-    console.error("Error getting admin invoices:", error);
+    logger.error("Error getting admin invoices:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get admin invoices",
@@ -240,7 +241,7 @@ router.get("/invoices/stats", adminLimiter, async (req, res) => {
       requestedBy: 'anonymous' // Changed from req.admin.email
     });
   } catch (error) {
-    console.error("Error getting invoice stats:", error);
+    logger.error("Error getting invoice stats:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get invoice stats",
@@ -273,7 +274,7 @@ router.post("/invoices/bulk-download", async (req, res) => {
       requestedBy: 'anonymous' // Changed from req.admin.email
     });
   } catch (error) {
-    console.error("Error getting invoices for bulk download:", error);
+    logger.error("Error getting invoices for bulk download:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get invoices for bulk download",
@@ -306,7 +307,7 @@ router.post("/invoices/generate-order-invoices", async (req, res) => {
       requestedBy: 'anonymous' // Changed from req.admin.email
     });
   } catch (error) {
-    console.error("Error generating order invoices:", error);
+    logger.error("Error generating order invoices:", error);
     res.status(500).json({
       success: false,
       message: "Failed to generate order invoices",
@@ -322,7 +323,7 @@ router.post("/invoices/generate-order-invoices", async (req, res) => {
  */
 router.get("/universities", adminLimiter, async (req, res) => {
   try {
-    console.info("🔵 Admin: Fetching all universities with details");
+    logger.info("🔵 Admin: Fetching all universities with details");
     
     // Fetch all universities with full details
     const universities = await Uni.find({})
@@ -361,7 +362,7 @@ router.get("/universities", adminLimiter, async (req, res) => {
     // Sort by creation date (newest first)
     universitiesWithVendorCounts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    console.info(`✅ Admin: Found ${universitiesWithVendorCounts.length} universities`);
+    logger.info(`✅ Admin: Found ${universitiesWithVendorCounts.length} universities`);
     
     res.json({
       success: true,
@@ -370,7 +371,7 @@ router.get("/universities", adminLimiter, async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error fetching universities:", error);
+    logger.error("❌ Admin: Error fetching universities:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch universities",
@@ -387,7 +388,7 @@ router.get("/universities", adminLimiter, async (req, res) => {
 router.get("/universities/:uniId", adminLimiter, async (req, res) => {
   try {
     const { uniId } = req.params;
-    console.info(`🔵 Admin: Fetching details for university ${uniId}`);
+    logger.info(`🔵 Admin: Fetching details for university ${uniId}`);
     
     // Fetch university details
     const university = await Uni.findById(uniId)
@@ -450,7 +451,7 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
       }
     };
 
-    console.info(`✅ Admin: Found university with ${totalVendors} vendors`);
+    logger.info(`✅ Admin: Found university with ${totalVendors} vendors`);
     
     res.json({
       success: true,
@@ -458,7 +459,7 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error fetching university details:", error);
+    logger.error("❌ Admin: Error fetching university details:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch university details",
@@ -484,7 +485,7 @@ router.patch("/universities/:uniId/availability", async (req, res) => {
       });
     }
 
-    console.info(`🔵 Admin: Updating availability for university ${uniId} to ${isAvailable}`);
+    logger.info(`🔵 Admin: Updating availability for university ${uniId} to ${isAvailable}`);
 
     const university = await Uni.findByIdAndUpdate(
       uniId,
@@ -499,7 +500,7 @@ router.patch("/universities/:uniId/availability", async (req, res) => {
       });
     }
 
-    console.info(`✅ Admin: University ${university.fullName} availability updated to ${isAvailable}`);
+    logger.info(`✅ Admin: University ${university.fullName} availability updated to ${isAvailable}`);
 
     res.json({
       success: true,
@@ -512,7 +513,7 @@ router.patch("/universities/:uniId/availability", async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error updating university availability:", error);
+    logger.error("❌ Admin: Error updating university availability:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update university availability",
@@ -531,7 +532,7 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
     const { uniId } = req.params;
     const { platformFee } = req.body;
 
-    console.info(`🔵 Admin: Updating platform fee for university ${uniId} to ₹${platformFee}`);
+    logger.info(`🔵 Admin: Updating platform fee for university ${uniId} to ₹${platformFee}`);
 
     // Validate input
     if (platformFee === undefined || platformFee === null) {
@@ -562,7 +563,7 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
       });
     }
 
-    console.info(`✅ Admin: Platform fee updated for ${university.fullName} to ₹${platformFee}`);
+    logger.info(`✅ Admin: Platform fee updated for ${university.fullName} to ₹${platformFee}`);
 
     res.json({
       success: true,
@@ -576,7 +577,7 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error updating platform fee:", error);
+    logger.error("❌ Admin: Error updating platform fee:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update platform fee",
@@ -594,7 +595,7 @@ router.put("/universities/bulk-platform-fees", async (req, res) => {
   try {
     const { updates } = req.body;
 
-    console.info(`🔵 Admin: Bulk updating platform fees for ${updates.length} universities`);
+    logger.info(`🔵 Admin: Bulk updating platform fees for ${updates.length} universities`);
 
     // Validate input
     if (!Array.isArray(updates) || updates.length === 0) {
@@ -642,7 +643,7 @@ router.put("/universities/bulk-platform-fees", async (req, res) => {
 
     const result = await Uni.bulkWrite(bulkOps);
 
-    console.info(`✅ Admin: Bulk updated platform fees for ${result.modifiedCount} universities`);
+    logger.info(`✅ Admin: Bulk updated platform fees for ${result.modifiedCount} universities`);
 
     res.json({
       success: true,
@@ -652,7 +653,7 @@ router.put("/universities/bulk-platform-fees", async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error bulk updating platform fees:", error);
+    logger.error("❌ Admin: Error bulk updating platform fees:", error);
     res.status(500).json({
       success: false,
       message: "Failed to bulk update platform fees",
@@ -670,7 +671,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
   try {
     const { uniId } = req.params;
 
-    console.info(`🔵 Admin: Fetching platform fee for university ${uniId}`);
+    logger.info(`🔵 Admin: Fetching platform fee for university ${uniId}`);
 
     const university = await Uni.findById(uniId)
       .select('_id fullName email platformFee')
@@ -683,7 +684,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
       });
     }
 
-    console.info(`✅ Admin: Retrieved platform fee for ${university.fullName}: ₹${university.platformFee}`);
+    logger.info(`✅ Admin: Retrieved platform fee for ${university.fullName}: ₹${university.platformFee}`);
 
     res.json({
       success: true,
@@ -696,7 +697,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error fetching platform fee:", error);
+    logger.error("❌ Admin: Error fetching platform fee:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch platform fee",
@@ -712,7 +713,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
  */
 router.get("/help-messages", adminLimiter, async (req, res) => {
   try {
-    console.info("🔵 Admin: Fetching all help messages");
+    logger.info("🔵 Admin: Fetching all help messages");
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -740,7 +741,7 @@ router.get("/help-messages", adminLimiter, async (req, res) => {
     const unreadCount = await ContactMessage.countDocuments({ isRead: false });
     const readCount = await ContactMessage.countDocuments({ isRead: true });
     
-    console.info(`✅ Admin: Found ${messages.length} help messages (${unreadCount} unread)`);
+    logger.info(`✅ Admin: Found ${messages.length} help messages (${unreadCount} unread)`);
     
     res.json({
       success: true,
@@ -760,7 +761,7 @@ router.get("/help-messages", adminLimiter, async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error fetching help messages:", error);
+    logger.error("❌ Admin: Error fetching help messages:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch help messages",
@@ -777,7 +778,7 @@ router.get("/help-messages", adminLimiter, async (req, res) => {
 router.put("/help-messages/:messageId/read", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
-    console.info(`🔵 Admin: Marking message ${messageId} as read`);
+    logger.info(`🔵 Admin: Marking message ${messageId} as read`);
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -794,7 +795,7 @@ router.put("/help-messages/:messageId/read", strictLimiter, async (req, res) => 
       });
     }
     
-    console.info(`✅ Admin: Message ${messageId} marked as read`);
+    logger.info(`✅ Admin: Message ${messageId} marked as read`);
     
     res.json({
       success: true,
@@ -806,7 +807,7 @@ router.put("/help-messages/:messageId/read", strictLimiter, async (req, res) => 
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error marking message as read:", error);
+    logger.error("❌ Admin: Error marking message as read:", error);
     res.status(500).json({
       success: false,
       message: "Failed to mark message as read",
@@ -823,7 +824,7 @@ router.put("/help-messages/:messageId/read", strictLimiter, async (req, res) => 
 router.put("/help-messages/:messageId/unread", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
-    console.info(`🔵 Admin: Marking message ${messageId} as unread`);
+    logger.info(`🔵 Admin: Marking message ${messageId} as unread`);
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -840,7 +841,7 @@ router.put("/help-messages/:messageId/unread", strictLimiter, async (req, res) =
       });
     }
     
-    console.info(`✅ Admin: Message ${messageId} marked as unread`);
+    logger.info(`✅ Admin: Message ${messageId} marked as unread`);
     
     res.json({
       success: true,
@@ -852,7 +853,7 @@ router.put("/help-messages/:messageId/unread", strictLimiter, async (req, res) =
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error marking message as unread:", error);
+    logger.error("❌ Admin: Error marking message as unread:", error);
     res.status(500).json({
       success: false,
       message: "Failed to mark message as unread",
@@ -869,7 +870,7 @@ router.put("/help-messages/:messageId/unread", strictLimiter, async (req, res) =
 router.get("/help-messages/:messageId", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
-    console.info(`🔵 Admin: Fetching help message ${messageId}`);
+    logger.info(`🔵 Admin: Fetching help message ${messageId}`);
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -882,7 +883,7 @@ router.get("/help-messages/:messageId", strictLimiter, async (req, res) => {
       });
     }
     
-    console.info(`✅ Admin: Retrieved help message ${messageId}`);
+    logger.info(`✅ Admin: Retrieved help message ${messageId}`);
     
     res.json({
       success: true,
@@ -890,7 +891,7 @@ router.get("/help-messages/:messageId", strictLimiter, async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error fetching help message:", error);
+    logger.error("❌ Admin: Error fetching help message:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch help message",
@@ -907,7 +908,7 @@ router.get("/help-messages/:messageId", strictLimiter, async (req, res) => {
 router.delete("/help-messages/:messageId", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
-    console.info(`🔵 Admin: Deleting help message ${messageId}`);
+    logger.info(`🔵 Admin: Deleting help message ${messageId}`);
     
     const ContactMessage = require("../models/users/ContactMessage");
     
@@ -920,7 +921,7 @@ router.delete("/help-messages/:messageId", strictLimiter, async (req, res) => {
       });
     }
     
-    console.info(`✅ Admin: Deleted help message ${messageId}`);
+    logger.info(`✅ Admin: Deleted help message ${messageId}`);
     
     res.json({
       success: true,
@@ -928,7 +929,7 @@ router.delete("/help-messages/:messageId", strictLimiter, async (req, res) => {
       requestedBy: 'anonymous'
     });
   } catch (error) {
-    console.error("❌ Admin: Error deleting help message:", error);
+    logger.error("❌ Admin: Error deleting help message:", error);
     res.status(500).json({
       success: false,
       message: "Failed to delete help message",

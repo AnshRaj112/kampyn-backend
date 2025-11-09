@@ -10,6 +10,7 @@ const {
   generateUltraHighPerformanceOrderNumberWithDailyReset,
   postPaymentProcessing,
 } = require("./orderUtils");
+const logger = require("./pinoLogger");
 
 const EXPRESS_EXPIRATION_MINUTES = 36;
 const DEFAULT_PRODUCE_SURCHARGE = 5;
@@ -112,10 +113,10 @@ async function initiateExpressOrder({
     deleted: false,
   });
 
-  console.info("✅ ExpressOrder created:", {
+  logger.info({
     id: expressOrder._id.toString(),
     expires: expressOrder.reservationExpiresAt.toISOString(),
-  });
+  }, "ExpressOrder created");
 
   return expressOrder;
 }
@@ -135,7 +136,7 @@ async function getVendorExpressOrders(vendorId) {
     reservationExpiresAt: { $gt: now },
     deleted: false,
   };
-  console.info("🔍 getVendorExpressOrders filter:", filter);
+  logger.debug({ filter }, "getVendorExpressOrders filter");
 
   return Order.find(filter).sort({ createdAt: -1 }).lean();
 }

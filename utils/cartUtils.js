@@ -6,6 +6,7 @@ const User = require("../models/account/User");
 const Vendor = require("../models/account/Vendor");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
+const logger = require("./pinoLogger");
 
 
 /**
@@ -112,12 +113,12 @@ async function _validateAndFetch(
 
    // For retail items, check quantity directly from the entry
    const invQty = entry.quantity || 0;
-   console.info(`Retail item quantity check:`, {
+   logger.debug({
      itemId,
      vendorId: vendorIdFromController,
      quantity: invQty,
      desiredQty
-   });
+   }, "Retail item quantity check");
 
    if (desiredQty > invQty) {
      throw new Error(`Only ${invQty} unit(s) available`);

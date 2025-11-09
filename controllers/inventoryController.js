@@ -5,6 +5,7 @@ const Raw = require("../models/item/Raw"); // Cluster_Item
 const InventoryReport = require("../models/inventory/InventoryReport"); // Cluster_Inventory
 const Recipe = require("../models/Recipe");
 const { clearRawMaterialInventory } = require("../utils/inventoryReportUtils");
+const logger = require("../utils/pinoLogger");
 
 const validateSameUniversity = (vendor, item) => {
   return vendor.uniID.toString() === item.uniId.toString();
@@ -138,7 +139,7 @@ exports.addInventory = async (req, res) => {
 
     return res.status(200).json({ message: "Inventory updated successfully" });
   } catch (error) {
-    console.error("Error adding inventory:", error);
+    logger.error("Error adding inventory:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -215,7 +216,7 @@ exports.reduceRetailInventory = async (req, res) => {
 
     return res.status(200).json({ message: "Inventory reduced successfully" });
   } catch (error) {
-    console.error("Error reducing inventory:", error);
+    logger.error("Error reducing inventory:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -239,7 +240,7 @@ exports.updateRetailAvailability = async (req, res) => {
     await vendor.save();
     return res.status(200).json({ message: "Retail item availability updated" });
   } catch (error) {
-    console.error("Error updating retail availability:", error);
+    logger.error("Error updating retail availability:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -331,7 +332,7 @@ exports.updateRawMaterialInventory = async (req, res) => {
 
     return res.status(200).json({ message: "Raw material inventory updated successfully" });
   } catch (error) {
-    console.error("Error updating raw material inventory:", error);
+    logger.error("Error updating raw material inventory:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -364,7 +365,7 @@ exports.deleteRawMaterialInventory = async (req, res) => {
     }
     return res.status(200).json({ message: "Raw material deleted from inventory" });
   } catch (error) {
-    console.error("Error deleting raw material inventory:", error);
+    logger.error("Error deleting raw material inventory:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -382,7 +383,7 @@ exports.clearAllRawMaterialInventory = async (req, res) => {
       clearedCount 
     });
   } catch (error) {
-    console.error("Error clearing all raw material inventory:", error);
+    logger.error("Error clearing all raw material inventory:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -490,7 +491,7 @@ exports.produceRetailSimple = async (req, res) => {
 
     return res.json({ success: true, message: "Retail produced and inventory updated", retail: retailEntry, raw: updatedRaw });
   } catch (e) {
-    console.error("produceRetailSimple error:", e);
+    logger.error("produceRetailSimple error:", e);
     return res.status(500).json({ success: false, message: "Failed to produce retail", error: e.message });
   }
 };
@@ -575,7 +576,7 @@ exports.produceProduceSimple = async (req, res) => {
     const updatedRaw = deductions.map(d => ({ itemId: d.itemId, closingAmount: (refreshed.rawMaterialInventory || []).find(e => e.itemId.toString() === String(d.itemId))?.closingAmount }));
     return res.json({ success: true, message: "Raw materials deducted", raw: updatedRaw });
   } catch (e) {
-    console.error("produceProduceSimple error:", e);
+    logger.error("produceProduceSimple error:", e);
     return res.status(500).json({ success: false, message: "Failed to process produce", error: e.message });
   }
 };
@@ -612,7 +613,7 @@ exports.getRecipeWorksRecipes = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error fetching recipe works recipes:", error);
+    logger.error("Error fetching recipe works recipes:", error);
     res.status(500).json({ message: "Failed to fetch recipes", error: error.message });
   }
 };
@@ -689,7 +690,7 @@ exports.validateRecipeIngredients = async (req, res) => {
       availableIngredients
     });
   } catch (error) {
-    console.error("Error validating recipe ingredients:", error);
+    logger.error("Error validating recipe ingredients:", error);
     res.status(500).json({ message: "Failed to validate ingredients", error: error.message });
   }
 };
@@ -700,7 +701,7 @@ exports.validateRecipeIngredients = async (req, res) => {
 exports.createItemsFromRecipe = async (req, res) => {
   try {
     const { vendorId, recipeId, quantity, mode } = req.body; // mode: 'quantity' or 'amount'
-    console.log("[RecipeWorks] createItemsFromRecipe called", { vendorId, recipeId, quantity, mode });
+    logger.debug("[RecipeWorks] createItemsFromRecipe called", { vendorId, recipeId, quantity, mode });
     
     if (!vendorId || !recipeId || !quantity || !mode) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -711,7 +712,7 @@ exports.createItemsFromRecipe = async (req, res) => {
 
     const recipe = await Recipe.findById(recipeId).populate('outputItemId').lean();
     if (!recipe) return res.status(404).json({ message: "Recipe not found" });
-    console.log("[RecipeWorks] Loaded recipe", { outputType: recipe.outputType, servings: recipe.servings, outputItemId: recipe.outputItemId?._id || recipe.outputItemId });
+    logger.debug("[RecipeWorks] Loaded recipe", { outputType: recipe.outputType, servings: recipe.servings, outputItemId: recipe.outputItemId?._id || recipe.outputItemId });
 
     // If output item is missing, try to auto-resolve by matching recipe title to Retail/Produce name within same uni
     let resolvedOutputItemId = recipe.outputItemId;
@@ -720,13 +721,13 @@ exports.createItemsFromRecipe = async (req, res) => {
       const fallbackRetail = await Retail.findOne({ uniId: recipe.uniId, name: recipe.title }).select('_id').lean();
       if (fallbackRetail) {
         resolvedOutputItemId = fallbackRetail._id;
-        console.log("[RecipeWorks] Auto-resolved retail outputItemId via title match", { itemId: String(resolvedOutputItemId) });
+        logger.debug("[RecipeWorks] Auto-resolved retail outputItemId via title match", { itemId: String(resolvedOutputItemId) });
       }
     } else if (!resolvedOutputItemId && resolvedOutputType === 'produce') {
       const fallbackProduce = await Produce.findOne({ uniId: recipe.uniId, name: recipe.title }).select('_id').lean();
       if (fallbackProduce) {
         resolvedOutputItemId = fallbackProduce._id;
-        console.log("[RecipeWorks] Auto-resolved produce outputItemId via title match", { itemId: String(resolvedOutputItemId) });
+        logger.debug("[RecipeWorks] Auto-resolved produce outputItemId via title match", { itemId: String(resolvedOutputItemId) });
       }
     }
 
@@ -749,7 +750,7 @@ exports.createItemsFromRecipe = async (req, res) => {
       quantity: ing.quantity * multiplier,
       unit: ing.unit
     }));
-    console.log("[RecipeWorks] Computed required ingredients", requiredIngredients);
+    logger.debug("[RecipeWorks] Computed required ingredients", requiredIngredients);
 
     // Helper: normalize and convert units to vendor inventory units (kg/l when applicable)
     const normalizeUnit = (unit) => String(unit || "").trim().toLowerCase();
@@ -810,7 +811,7 @@ exports.createItemsFromRecipe = async (req, res) => {
       if (!rawItem) {
         return res.status(400).json({ message: `Raw material '${required.name}' not found in database`, detail: { required } });
       }
-      console.log("[RecipeWorks] Matched raw item", { ingredient: required.name, rawItemId: rawItem._id });
+      logger.debug("[RecipeWorks] Matched raw item", { ingredient: required.name, rawItemId: rawItem._id });
 
       const inventoryEntry = vendor.rawMaterialInventory?.find(
         (inv) => inv.itemId.toString() === rawItem._id.toString()
@@ -819,11 +820,11 @@ exports.createItemsFromRecipe = async (req, res) => {
       if (!inventoryEntry) {
         return res.status(400).json({ message: `Raw material '${required.name}' not found in vendor inventory`, detail: { rawItemId: rawItem._id } });
       }
-      console.log("[RecipeWorks] Vendor raw inventory entry", { rawItemId: rawItem._id, unit: inventoryEntry.unit, closingAmount: inventoryEntry.closingAmount });
+      logger.debug("[RecipeWorks] Vendor raw inventory entry", { rawItemId: rawItem._id, unit: inventoryEntry.unit, closingAmount: inventoryEntry.closingAmount });
 
       // Convert required qty to the vendor inventory unit (kg/l)
       const requiredInVendorUnit = convertToVendorUnit(required.quantity, required.unit, inventoryEntry.unit);
-      console.log("[RecipeWorks] Required converted", { name: required.name, from: required.unit, to: inventoryEntry.unit, qty: required.quantity, converted: requiredInVendorUnit });
+      logger.debug("[RecipeWorks] Required converted", { name: required.name, from: required.unit, to: inventoryEntry.unit, qty: required.quantity, converted: requiredInVendorUnit });
 
       const availableQty = (inventoryEntry.closingAmount > 0 ? inventoryEntry.closingAmount : (inventoryEntry.openingAmount || 0));
       if (availableQty < requiredInVendorUnit) {
@@ -849,7 +850,7 @@ exports.createItemsFromRecipe = async (req, res) => {
           { _id: vendorId, "rawMaterialInventory.itemId": deduction.itemId },
           { $set: { "rawMaterialInventory.$.closingAmount": currentEntry.openingAmount } }
         );
-        console.log("[RecipeWorks] Raw initialized closing from opening", { itemId: deduction.itemId.toString(), opening: currentEntry.openingAmount, modifiedCount: setRes.modifiedCount });
+        logger.debug("[RecipeWorks] Raw initialized closing from opening", { itemId: deduction.itemId.toString(), opening: currentEntry.openingAmount, modifiedCount: setRes.modifiedCount });
       }
       let ures = await Vendor.updateOne(
         { _id: vendorId, "rawMaterialInventory.itemId": deduction.itemId },
@@ -862,9 +863,9 @@ exports.createItemsFromRecipe = async (req, res) => {
           { $inc: { "rawMaterialInventory.$[elem].closingAmount": -deduction.quantity } },
           { arrayFilters: [{ "elem.itemId": deduction.itemId }] }
         );
-        console.log("[RecipeWorks] Raw decrement via arrayFilters", { itemId: deduction.itemId.toString(), qty: deduction.quantity, modifiedCount: ures.modifiedCount });
+        logger.debug("[RecipeWorks] Raw decrement via arrayFilters", { itemId: deduction.itemId.toString(), qty: deduction.quantity, modifiedCount: ures.modifiedCount });
       } else {
-        console.log("[RecipeWorks] Raw material decremented", { itemId: deduction.itemId.toString(), qty: deduction.quantity, modifiedCount: ures.modifiedCount });
+        logger.debug("[RecipeWorks] Raw material decremented", { itemId: deduction.itemId.toString(), qty: deduction.quantity, modifiedCount: ures.modifiedCount });
       }
     }
 
@@ -900,7 +901,7 @@ exports.createItemsFromRecipe = async (req, res) => {
         { _id: vendorId, "retailInventory.itemId": outputRetail._id },
         { $inc: { "retailInventory.$.quantity": Number(quantity || 0) } }
       );
-      console.log("[RecipeWorks] Retail increment result", { itemId: outputRetail._id.toString(), incQty: Number(quantity || 0), modifiedCount: incResult.modifiedCount });
+      logger.debug("[RecipeWorks] Retail increment result", { itemId: outputRetail._id.toString(), incQty: Number(quantity || 0), modifiedCount: incResult.modifiedCount });
       if (!incResult || !incResult.modifiedCount) {
         // Fallback using arrayFilters in case positional match failed
         incResult = await Vendor.updateOne(
@@ -908,20 +909,20 @@ exports.createItemsFromRecipe = async (req, res) => {
           { $inc: { "retailInventory.$[elem].quantity": Number(quantity || 0) } },
           { arrayFilters: [{ "elem.itemId": outputRetail._id }] }
         );
-        console.log("[RecipeWorks] Retail increment via arrayFilters", { itemId: outputRetail._id.toString(), incQty: Number(quantity || 0), modifiedCount: incResult.modifiedCount });
+        logger.debug("[RecipeWorks] Retail increment via arrayFilters", { itemId: outputRetail._id.toString(), incQty: Number(quantity || 0), modifiedCount: incResult.modifiedCount });
       }
       if (!incResult || !incResult.modifiedCount) {
         const pushRes = await Vendor.updateOne(
           { _id: vendorId },
           { $push: { retailInventory: { itemId: outputRetail._id, quantity: Number(quantity || 0), isSpecial: "N", isAvailable: "Y" } } }
         );
-        console.log("[RecipeWorks] Retail pushed new entry", { modifiedCount: pushRes.modifiedCount, acknowledged: pushRes.acknowledged });
+        logger.debug("[RecipeWorks] Retail pushed new entry", { modifiedCount: pushRes.modifiedCount, acknowledged: pushRes.acknowledged });
       }
       // Reload quantity after update
       const refreshedRetailDoc = await Vendor.findById(vendorId).select("retailInventory").lean();
       const afterRetail = (refreshedRetailDoc.retailInventory || []).find(e => e.itemId.toString() === outputRetail._id.toString());
       outputItemsAdded = afterRetail ? afterRetail.quantity : Number(quantity || 0);
-      console.log("[RecipeWorks] Retail post-update quantity", { itemId: outputRetail._id.toString(), quantity: outputItemsAdded });
+      logger.debug("[RecipeWorks] Retail post-update quantity", { itemId: outputRetail._id.toString(), quantity: outputItemsAdded });
 
       // Update inventory report
       report.itemReceived.push({
@@ -990,7 +991,7 @@ exports.createItemsFromRecipe = async (req, res) => {
 
     // Fetch latest vendor inventory for report entries
     const vendorAfter = await Vendor.findById(vendorId).select("rawMaterialInventory retailInventory produceInventory").lean();
-    console.log("[RecipeWorks] Vendor inventory reloaded for report");
+    logger.debug("[RecipeWorks] Vendor inventory reloaded for report");
 
     // Update raw material entries in report
     for (const deduction of ingredientDeductions) {
@@ -1034,9 +1035,9 @@ exports.createItemsFromRecipe = async (req, res) => {
       retailInventory: resolvedOutputType === 'retail' ? (vendorAfter.retailInventory || []).find(e => e.itemId.toString() === String(resolvedOutputItemId)) : undefined,
       updatedRaw: ingredientDeductions.map(d => ({ itemId: d.itemId, newClosingAmount: (vendorAfter.rawMaterialInventory || []).find(e => e.itemId.toString() === d.itemId.toString())?.closingAmount }))
     });
-    console.log("[RecipeWorks] Response sent successfully");
+    logger.debug("[RecipeWorks] Response sent successfully");
   } catch (error) {
-    console.error("Error creating items from recipe:", error);
+    logger.error("Error creating items from recipe:", error);
     res.status(500).json({ message: "Failed to create items", error: error.message });
   }
 };

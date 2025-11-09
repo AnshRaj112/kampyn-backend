@@ -1,5 +1,6 @@
 const Vendor = require("../models/account/Vendor");
 const Uni = require("../models/account/Uni");
+const logger = require("../utils/pinoLogger");
 
 // Get all vendors for a specific university
 exports.getVendorsByUni = async (req, res) => {
@@ -83,7 +84,7 @@ exports.getVendorsWithAvailability = async (req, res) => {
 
     res.status(200).json(vendorsWithAvailability);
   } catch (err) {
-    console.error("Error in getVendorsWithAvailability:", err);
+    logger.error("Error in getVendorsWithAvailability:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
@@ -122,7 +123,7 @@ exports.updateVendorAvailability = async (req, res) => {
       message: `Vendor availability updated to ${isAvailable === 'Y' ? 'available' : 'unavailable'}` 
     });
   } catch (err) {
-    console.error("Error in updateVendorAvailability:", err);
+    logger.error("Error in updateVendorAvailability:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
@@ -152,7 +153,7 @@ exports.deleteVendor = async (req, res) => {
 
     res.status(200).json({ success: true, message: "Vendor deleted successfully." });
   } catch (err) {
-    console.error("Error in deleteVendor:", err);
+    logger.error("Error in deleteVendor:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
@@ -240,7 +241,7 @@ exports.getDeliverySettings = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Error getting delivery settings:", err);
+    logger.error("Error getting delivery settings:", err);
     res.status(500).json({ 
       success: false, 
       message: "Server error" 
@@ -299,7 +300,7 @@ exports.updateDeliverySettings = async (req, res) => {
       message: "Delivery settings updated successfully"
     });
   } catch (err) {
-    console.error("Error updating delivery settings:", err);
+    logger.error("Error updating delivery settings:", err);
     res.status(500).json({
       success: false,
       message: "Server error"
@@ -373,7 +374,7 @@ exports.toggleVendorAvailability = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Error in toggleVendorAvailability:", err);
+    logger.error("Error in toggleVendorAvailability:", err);
     res.status(500).json({
       success: false,
       message: "Server error"
@@ -439,7 +440,7 @@ exports.getVendorAvailability = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Error in getVendorAvailability:", err);
+    logger.error("Error in getVendorAvailability:", err);
     res.status(500).json({
       success: false,
       message: "Server error"

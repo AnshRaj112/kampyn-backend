@@ -1,4 +1,5 @@
 const BillingInfo = require('../models/account/BillingInfo');
+const logger = require('../utils/pinoLogger');
 
 // Save billing information
 const saveBillingInfo = async (req, res) => {
@@ -42,7 +43,7 @@ const saveBillingInfo = async (req, res) => {
       message: 'Billing information saved successfully'
     });
   } catch (error) {
-    console.error('Error saving billing info:', error);
+    logger.error('Error saving billing info:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -71,7 +72,7 @@ const getVendorBillingHistory = async (req, res) => {
       count: billingHistory.length
     });
   } catch (error) {
-    console.error('Error getting vendor billing history:', error);
+    logger.error('Error getting vendor billing history:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -100,7 +101,7 @@ const getCustomerBillingHistory = async (req, res) => {
       count: billingHistory.length
     });
   } catch (error) {
-    console.error('Error getting customer billing history:', error);
+    logger.error('Error getting customer billing history:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -134,7 +135,7 @@ const getBillingInfoByOrderNumber = async (req, res) => {
       data: billingInfo
     });
   } catch (error) {
-    console.error('Error getting billing info by order number:', error);
+    logger.error('Error getting billing info by order number:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -181,7 +182,7 @@ const updateBillingStatus = async (req, res) => {
       message: 'Billing status updated successfully'
     });
   } catch (error) {
-    console.error('Error updating billing status:', error);
+    logger.error('Error updating billing status:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

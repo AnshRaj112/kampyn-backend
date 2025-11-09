@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const Vendor = require("../models/account/Vendor");
 const { checkUserActivity, updateUserActivity } = require("../utils/authUtils");
+const logger = require("../utils/pinoLogger");
 
 /**
  * Vendor authentication middleware
@@ -55,7 +56,7 @@ const vendorAuthMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Vendor auth middleware error:", error);
+    logger.error({ error: error.message, errorName: error.name }, "Vendor auth middleware error");
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,

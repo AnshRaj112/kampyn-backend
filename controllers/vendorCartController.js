@@ -1,4 +1,5 @@
 const VendorCart = require('../models/account/VendorCart');
+const logger = require('../utils/pinoLogger');
 
 // Get vendor cart
 const getVendorCart = async (req, res) => {
@@ -33,7 +34,7 @@ const getVendorCart = async (req, res) => {
       data: vendorCart
     });
   } catch (error) {
-    console.error('Error getting vendor cart:', error);
+    logger.error('Error getting vendor cart:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -63,7 +64,7 @@ const calculateTotalWithPacking = async (items, vendorId) => {
       }
     }
   } catch (error) {
-    console.error('Error fetching university packing charge:', error);
+    logger.error('Error fetching university packing charge:', error);
     // Use default packing charge if fetch fails
   }
   
@@ -125,7 +126,7 @@ const addItemToCart = async (req, res) => {
       data: vendorCart
     });
   } catch (error) {
-    console.error('Error adding item to vendor cart:', error);
+    logger.error('Error adding item to vendor cart:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -183,7 +184,7 @@ const updateItemQuantity = async (req, res) => {
       data: vendorCart
     });
   } catch (error) {
-    console.error('Error updating item quantity in vendor cart:', error);
+    logger.error('Error updating item quantity in vendor cart:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -225,7 +226,7 @@ const removeItemFromCart = async (req, res) => {
       data: vendorCart
     });
   } catch (error) {
-    console.error('Error removing item from vendor cart:', error);
+    logger.error('Error removing item from vendor cart:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -263,7 +264,7 @@ const clearVendorCart = async (req, res) => {
       data: vendorCart
     });
   } catch (error) {
-    console.error('Error clearing vendor cart:', error);
+    logger.error('Error clearing vendor cart:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -305,7 +306,7 @@ const updateVendorCart = async (req, res) => {
       data: vendorCart
     });
   } catch (error) {
-    console.error('Error updating vendor cart:', error);
+    logger.error('Error updating vendor cart:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

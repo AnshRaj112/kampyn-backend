@@ -11,6 +11,7 @@ const sanitizeFilename = require('sanitize-filename');
 const archiver = require('archiver');
 const os = require('os'); // Added for os module
 const mongoose = require('mongoose');
+const logger = require('../utils/pinoLogger');
 
 // Add fetch for Node.js (if not available)
 let fetch;
@@ -105,7 +106,7 @@ exports.getVendorInvoices = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting vendor invoices:', error);
+    logger.error('Error getting vendor invoices:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch vendor invoices',
@@ -172,7 +173,7 @@ exports.getAdminInvoices = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting admin invoices:', error);
+    logger.error('Error getting admin invoices:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch admin invoices',
@@ -255,7 +256,7 @@ exports.getUniversityInvoices = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting university invoices:', error);
+    logger.error('Error getting university invoices:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch university invoices',
@@ -291,7 +292,7 @@ exports.getInvoiceById = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting invoice by ID:', error);
+    logger.error('Error getting invoice by ID:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch invoice',
@@ -330,7 +331,7 @@ exports.getInvoicesByOrder = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting invoices by order:', error);
+    logger.error('Error getting invoices by order:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch order invoices',
@@ -410,7 +411,7 @@ exports.getRazorpayInvoice = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error fetching Razorpay invoice:', error);
+    logger.error('Error fetching Razorpay invoice:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch Razorpay invoice',
@@ -505,7 +506,7 @@ exports.getOrderRazorpayInvoices = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting order Razorpay invoices:', error);
+    logger.error('Error getting order Razorpay invoices:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch order Razorpay invoices',
@@ -522,23 +523,23 @@ exports.downloadInvoice = async (req, res) => {
   try {
     const { invoiceId } = req.params;
     
-    console.info(`📥 Download request for invoice: ${invoiceId}`);
+    logger.info(`📥 Download request for invoice: ${invoiceId}`);
     
     // Find the invoice
     const invoice = await Invoice.findById(invoiceId);
     if (!invoice) {
-      console.info(`❌ Invoice not found: ${invoiceId}`);
+      logger.info(`❌ Invoice not found: ${invoiceId}`);
       return res.status(404).json({
         success: false,
         message: 'Invoice not found'
       });
     }
     
-    console.info(`📄 Found invoice: ${invoice.invoiceNumber} (${invoice.invoiceType})`);
+    logger.info(`📄 Found invoice: ${invoice.invoiceNumber} (${invoice.invoiceType})`);
     
     // Check if PDF URL exists
     if (!invoice.pdfUrl && !invoice.razorpayInvoiceUrl) {
-      console.info(`❌ No PDF or Razorpay URL found for invoice: ${invoiceId}`);
+      logger.info(`❌ No PDF or Razorpay URL found for invoice: ${invoiceId}`);
       return res.status(404).json({
         success: false,
         message: 'PDF not available for this invoice',
@@ -553,14 +554,14 @@ exports.downloadInvoice = async (req, res) => {
     
     // Priority 1: Try local file first
     if (invoice.pdfUrl && invoice.pdfUrl.startsWith('/uploads/')) {
-      console.info(`💾 Attempting local file download: ${invoice.pdfUrl}`);
+      logger.info(`💾 Attempting local file download: ${invoice.pdfUrl}`);
       
       const filePath = path.join(process.cwd(), invoice.pdfUrl);
-      console.info(`📁 Full file path: ${filePath}`);
+      logger.info(`📁 Full file path: ${filePath}`);
       
       if (fs.existsSync(filePath)) {
         const stats = fs.statSync(filePath);
-        console.info(`✅ Local file found: ${stats.size} bytes`);
+        logger.info(`✅ Local file found: ${stats.size} bytes`);
         
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="invoice_${invoice.invoiceNumber}.pdf"`);
@@ -568,25 +569,25 @@ exports.downloadInvoice = async (req, res) => {
         
         return res.sendFile(filePath);
       } 
-        console.info(`❌ Local file not found: ${filePath}`);
+        logger.info(`❌ Local file not found: ${filePath}`);
       
     }
     
     // Priority 2: Try Cloudinary URL
     if (invoice.pdfUrl && isValidCloudinaryUrl(invoice.pdfUrl)) {
-      console.info(`☁️ Redirecting to Cloudinary: ${invoice.pdfUrl}`);
+      logger.info(`☁️ Redirecting to Cloudinary: ${invoice.pdfUrl}`);
       return res.redirect(invoice.pdfUrl);
     }
     
     // Priority 3: Try Razorpay URL
     if (invoice.razorpayInvoiceUrl && isValidRazorpayUrl(invoice.razorpayInvoiceUrl)) {
-      console.info(`💳 Redirecting to Razorpay: ${invoice.razorpayInvoiceUrl}`);
+      logger.info(`💳 Redirecting to Razorpay: ${invoice.razorpayInvoiceUrl}`);
       return res.redirect(invoice.razorpayInvoiceUrl);
     }
     
     // Priority 4: Try Razorpay API to get download URL
     if (invoice.razorpayInvoiceId) {
-      console.info(`🔑 Attempting Razorpay API download for: ${invoice.razorpayInvoiceId}`);
+      logger.info(`🔑 Attempting Razorpay API download for: ${invoice.razorpayInvoiceId}`);
       
       try {
         const razorpayResponse = await fetch(`https://api.razorpay.com/v1/invoices/${invoice.razorpayInvoiceId}`, {
@@ -599,22 +600,22 @@ exports.downloadInvoice = async (req, res) => {
         
         if (razorpayResponse.ok) {
           const razorpayData = await razorpayResponse.json();
-          console.info(`✅ Razorpay data fetched: ${razorpayData.status}`);
+          logger.info(`✅ Razorpay data fetched: ${razorpayData.status}`);
           
           if (razorpayData.short_url) {
-            console.info(`🔗 Redirecting to Razorpay short URL: ${razorpayData.short_url}`);
+            logger.info(`🔗 Redirecting to Razorpay short URL: ${razorpayData.short_url}`);
             return res.redirect(razorpayData.short_url);
           }
         } else {
-          console.info(`❌ Razorpay API failed: ${razorpayResponse.status}`);
+          logger.info(`❌ Razorpay API failed: ${razorpayResponse.status}`);
         }
       } catch (apiError) {
-        console.info(`❌ Razorpay API error: ${apiError.message}`);
+        logger.info(`❌ Razorpay API error: ${apiError.message}`);
       }
     }
     
     // If we get here, no download method worked
-    console.info(`❌ All download methods failed for invoice: ${invoiceId}`);
+    logger.info(`❌ All download methods failed for invoice: ${invoiceId}`);
     res.status(404).json({
       success: false,
       message: 'No downloadable PDF available',
@@ -630,7 +631,7 @@ exports.downloadInvoice = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Error downloading invoice:', req.params.invoiceId, error);
+    logger.error('❌ Error downloading invoice:', req.params.invoiceId, error);
     res.status(500).json({
       success: false,
       message: 'Failed to download invoice',
@@ -647,7 +648,7 @@ exports.downloadOrderInvoices = async (req, res) => {
   try {
     const { orderId } = req.params;
     
-    console.info(`📦 ZIP download request for order: ${orderId}`);
+    logger.info(`📦 ZIP download request for order: ${orderId}`);
     
     // Validate and sanitize orderId to prevent path injection
     const sanitizedOrderId = validateObjectId(orderId);
@@ -675,7 +676,7 @@ exports.downloadOrderInvoices = async (req, res) => {
       });
     }
     
-    console.info(`📄 Found ${invoices.length} invoices for order ${order.orderNumber}`);
+    logger.info(`📄 Found ${invoices.length} invoices for order ${order.orderNumber}`);
     
     // Create secure temporary directory using sanitized orderId and timestamp
     const timestamp = Date.now();
@@ -686,7 +687,7 @@ exports.downloadOrderInvoices = async (req, res) => {
     const resolvedTempDir = path.resolve(tempDir);
     const tempRoot = path.resolve(os.tmpdir());
     if (!resolvedTempDir.startsWith(tempRoot + path.sep)) {
-      console.error('Security violation: tempDir path escapes temp root:', resolvedTempDir);
+      logger.error('Security violation: tempDir path escapes temp root:', resolvedTempDir);
       return res.status(400).json({
         success: false,
         message: 'Invalid path for invoice download.'
@@ -706,7 +707,7 @@ exports.downloadOrderInvoices = async (req, res) => {
     
     // Listen for archive events
     archive.on('error', (err) => {
-      console.error('❌ ZIP creation error:', err);
+      logger.error('❌ ZIP creation error:', err);
       res.status(500).json({
         success: false,
         message: 'Failed to create ZIP file',
@@ -715,7 +716,7 @@ exports.downloadOrderInvoices = async (req, res) => {
     });
     
     output.on('close', () => {
-      console.info(`✅ ZIP created successfully: ${archive.pointer()} bytes`);
+      logger.info(`✅ ZIP created successfully: ${archive.pointer()} bytes`);
       
       // Set response headers for ZIP download
       res.setHeader('Content-Type', 'application/zip');
@@ -725,15 +726,15 @@ exports.downloadOrderInvoices = async (req, res) => {
       // Send the ZIP file
       res.sendFile(zipPath, (err) => {
         if (err) {
-          console.error('❌ Error sending ZIP file:', err);
+          logger.error('❌ Error sending ZIP file:', err);
         }
         
         // Clean up temporary files
         try {
           fs.rmSync(tempDir, { recursive: true, force: true });
-          console.info('🧹 Temporary files cleaned up');
+          logger.info('🧹 Temporary files cleaned up');
         } catch (cleanupError) {
-          console.warn('⚠️ Failed to cleanup temp files:', cleanupError.message);
+          logger.warn('⚠️ Failed to cleanup temp files:', cleanupError.message);
         }
       });
     });
@@ -752,41 +753,41 @@ exports.downloadOrderInvoices = async (req, res) => {
         
         // Priority 1: Try Cloudinary URL
         if (invoice.pdfUrl && isValidCloudinaryUrl(invoice.pdfUrl)) {
-          console.info(`☁️ Downloading from Cloudinary: ${invoice.invoiceNumber}`);
+          logger.info(`☁️ Downloading from Cloudinary: ${invoice.invoiceNumber}`);
           
           try {
             const cloudinaryResponse = await fetch(invoice.pdfUrl);
             if (cloudinaryResponse.ok) {
               pdfBuffer = Buffer.from(await cloudinaryResponse.arrayBuffer());
-              console.info(`✅ Downloaded from Cloudinary: ${pdfBuffer.length} bytes`);
+              logger.info(`✅ Downloaded from Cloudinary: ${pdfBuffer.length} bytes`);
             } else {
-              console.info(`❌ Cloudinary download failed: ${cloudinaryResponse.status}`);
+              logger.info(`❌ Cloudinary download failed: ${cloudinaryResponse.status}`);
             }
           } catch (cloudinaryError) {
-            console.info(`❌ Cloudinary error: ${cloudinaryError.message}`);
+            logger.info(`❌ Cloudinary error: ${cloudinaryError.message}`);
           }
         }
         
         // Priority 2: Try Razorpay URL
         if (!pdfBuffer && invoice.razorpayInvoiceUrl && isValidRazorpayUrl(invoice.razorpayInvoiceUrl)) {
-          console.info(`💳 Downloading from Razorpay: ${invoice.invoiceNumber}`);
+          logger.info(`💳 Downloading from Razorpay: ${invoice.invoiceNumber}`);
           
           try {
             const razorpayResponse = await fetch(invoice.razorpayInvoiceUrl);
             if (razorpayResponse.ok) {
               pdfBuffer = Buffer.from(await razorpayResponse.arrayBuffer());
-              console.info(`✅ Downloaded from Razorpay: ${pdfBuffer.length} bytes`);
+              logger.info(`✅ Downloaded from Razorpay: ${pdfBuffer.length} bytes`);
             } else {
-              console.info(`❌ Razorpay download failed: ${razorpayResponse.status}`);
+              logger.info(`❌ Razorpay download failed: ${razorpayResponse.status}`);
             }
           } catch (razorpayError) {
-            console.info(`❌ Razorpay error: ${razorpayError.message}`);
+            logger.info(`❌ Razorpay error: ${razorpayError.message}`);
           }
         }
         
         // Priority 3: Try Razorpay API
         if (!pdfBuffer && invoice.razorpayInvoiceId) {
-          console.info(`🔑 Downloading from Razorpay API: ${invoice.invoiceNumber}`);
+          logger.info(`🔑 Downloading from Razorpay API: ${invoice.invoiceNumber}`);
           
           try {
             const razorpayResponse = await fetch(`https://api.razorpay.com/v1/invoices/${invoice.razorpayInvoiceId}`, {
@@ -803,23 +804,23 @@ exports.downloadOrderInvoices = async (req, res) => {
                 const pdfResponse = await fetch(razorpayData.short_url);
                 if (pdfResponse.ok) {
                   pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
-                  console.info(`✅ Downloaded from Razorpay API: ${pdfBuffer.length} bytes`);
+                  logger.info(`✅ Downloaded from Razorpay API: ${pdfBuffer.length} bytes`);
                 }
               }
             }
           } catch (apiError) {
-            console.info(`❌ Razorpay API error: ${apiError.message}`);
+            logger.info(`❌ Razorpay API error: ${apiError.message}`);
           }
         }
         
         // Priority 4: Try local file
         if (!pdfBuffer && invoice.pdfUrl && invoice.pdfUrl.startsWith('/uploads/')) {
-          console.info(`💾 Reading local file: ${invoice.invoiceNumber}`);
+          logger.info(`💾 Reading local file: ${invoice.invoiceNumber}`);
           
           const filePath = path.join(process.cwd(), invoice.pdfUrl);
           if (fs.existsSync(filePath)) {
             pdfBuffer = fs.readFileSync(filePath);
-            console.info(`✅ Read local file: ${pdfBuffer.length} bytes`);
+            logger.info(`✅ Read local file: ${pdfBuffer.length} bytes`);
           }
         }
         
@@ -827,10 +828,10 @@ exports.downloadOrderInvoices = async (req, res) => {
         if (pdfBuffer) {
           archive.append(pdfBuffer, { name: filename });
           addedCount++;
-          console.info(`✅ Added to ZIP: ${filename}`);
+          logger.info(`✅ Added to ZIP: ${filename}`);
         } else {
           skippedCount++;
-          console.info(`⏭️ Skipped (no PDF available): ${invoice.invoiceNumber}`);
+          logger.info(`⏭️ Skipped (no PDF available): ${invoice.invoiceNumber}`);
           
           // Add a placeholder text file explaining why this invoice was skipped
           const placeholderContent = `Invoice ${invoice.invoiceNumber} (${invoice.invoiceType})
@@ -850,7 +851,7 @@ Please contact support for assistance.`;
         }
         
       } catch (invoiceError) {
-        console.error('❌ Error processing invoice:', invoice.invoiceNumber, invoiceError.message);
+        logger.error('❌ Error processing invoice:', invoice.invoiceNumber, invoiceError.message);
         skippedCount++;
         
         // Add error placeholder
@@ -867,13 +868,13 @@ This invoice encountered an error during processing.`;
       }
     }
     
-    console.info(`📊 ZIP Summary: ${addedCount} invoices added, ${skippedCount} skipped`);
+    logger.info(`📊 ZIP Summary: ${addedCount} invoices added, ${skippedCount} skipped`);
     
     // Finalize the archive
     await archive.finalize();
     
   } catch (error) {
-    console.error('❌ Error creating ZIP for order:', req.params.orderId, error);
+    logger.error('❌ Error creating ZIP for order:', req.params.orderId, error);
     res.status(500).json({
       success: false,
       message: 'Failed to create ZIP file',
@@ -918,7 +919,7 @@ exports.getInvoicesForBulkDownload = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting invoices for bulk download:', error);
+    logger.error('Error getting invoices for bulk download:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch invoices for bulk download',
@@ -953,7 +954,7 @@ exports.bulkZipDownload = async (req, res) => {
       });
     }
     
-    console.info(`📦 Bulk ZIP download request: ${startDate} to ${endDate}`);
+    logger.info(`📦 Bulk ZIP download request: ${startDate} to ${endDate}`);
     
     // Build query
     const query = {
@@ -984,7 +985,7 @@ exports.bulkZipDownload = async (req, res) => {
       });
     }
     
-    console.info(`📄 Found ${invoices.length} invoices for bulk download`);
+    logger.info(`📄 Found ${invoices.length} invoices for bulk download`);
     
     // Create temporary directory for ZIP creation
     tempDir = path.join(os.tmpdir(), `bulk_invoices_${Date.now()}`);
@@ -1000,7 +1001,7 @@ exports.bulkZipDownload = async (req, res) => {
     
     // Listen for archive events
     archive.on('error', (err) => {
-      console.error('❌ ZIP creation error:', err);
+      logger.error('❌ ZIP creation error:', err);
       if (!res.headersSent) {
         res.status(500).json({
           success: false,
@@ -1011,7 +1012,7 @@ exports.bulkZipDownload = async (req, res) => {
     });
     
     output.on('close', () => {
-      console.info(`✅ Bulk ZIP created successfully: ${archive.pointer()} bytes`);
+      logger.info(`✅ Bulk ZIP created successfully: ${archive.pointer()} bytes`);
       
       // Set response headers for ZIP download
       res.setHeader('Content-Type', 'application/zip');
@@ -1021,15 +1022,15 @@ exports.bulkZipDownload = async (req, res) => {
       // Send the ZIP file
       res.sendFile(zipPath, (err) => {
         if (err) {
-          console.error('❌ Error sending bulk ZIP file:', err);
+          logger.error('❌ Error sending bulk ZIP file:', err);
         }
         
         // Clean up temporary files
         try {
           fs.rmSync(tempDir, { recursive: true, force: true });
-          console.info('🧹 Bulk ZIP temporary files cleaned up');
+          logger.info('🧹 Bulk ZIP temporary files cleaned up');
         } catch (cleanupError) {
-          console.warn('⚠️ Failed to cleanup bulk ZIP temp files:', cleanupError.message);
+          logger.warn('⚠️ Failed to cleanup bulk ZIP temp files:', cleanupError.message);
         }
       });
     });
@@ -1049,41 +1050,41 @@ exports.bulkZipDownload = async (req, res) => {
         
         // Priority 1: Try Cloudinary URL
         if (invoice.pdfUrl && isValidCloudinaryUrl(invoice.pdfUrl)) {
-          console.info(`☁️ Downloading from Cloudinary: ${invoice.invoiceNumber}`);
+          logger.info(`☁️ Downloading from Cloudinary: ${invoice.invoiceNumber}`);
           
           try {
             const cloudinaryResponse = await fetch(invoice.pdfUrl);
             if (cloudinaryResponse.ok) {
               pdfBuffer = Buffer.from(await cloudinaryResponse.arrayBuffer());
-              console.info(`✅ Downloaded from Cloudinary: ${pdfBuffer.length} bytes`);
+              logger.info(`✅ Downloaded from Cloudinary: ${pdfBuffer.length} bytes`);
             } else {
-              console.info(`❌ Cloudinary download failed: ${cloudinaryResponse.status}`);
+              logger.info(`❌ Cloudinary download failed: ${cloudinaryResponse.status}`);
             }
           } catch (cloudinaryError) {
-            console.info(`❌ Cloudinary error: ${cloudinaryError.message}`);
+            logger.info(`❌ Cloudinary error: ${cloudinaryError.message}`);
           }
         }
         
         // Priority 2: Try Razorpay URL
         if (!pdfBuffer && invoice.razorpayInvoiceUrl && isValidRazorpayUrl(invoice.razorpayInvoiceUrl)) {
-          console.info(`💳 Downloading from Razorpay: ${invoice.invoiceNumber}`);
+          logger.info(`💳 Downloading from Razorpay: ${invoice.invoiceNumber}`);
           
           try {
             const razorpayResponse = await fetch(invoice.razorpayInvoiceUrl);
             if (razorpayResponse.ok) {
               pdfBuffer = Buffer.from(await razorpayResponse.arrayBuffer());
-              console.info(`✅ Downloaded from Razorpay: ${pdfBuffer.length} bytes`);
+              logger.info(`✅ Downloaded from Razorpay: ${pdfBuffer.length} bytes`);
             } else {
-              console.info(`❌ Razorpay download failed: ${razorpayResponse.status}`);
+              logger.info(`❌ Razorpay download failed: ${razorpayResponse.status}`);
             }
           } catch (razorpayError) {
-            console.info(`❌ Razorpay error: ${razorpayError.message}`);
+            logger.info(`❌ Razorpay error: ${razorpayError.message}`);
           }
         }
         
         // Priority 3: Try Razorpay API
         if (!pdfBuffer && invoice.razorpayInvoiceId) {
-          console.info(`🔑 Downloading from Razorpay API: ${invoice.invoiceNumber}`);
+          logger.info(`🔑 Downloading from Razorpay API: ${invoice.invoiceNumber}`);
           
           try {
             const razorpayResponse = await fetch(`https://api.razorpay.com/v1/invoices/${invoice.razorpayInvoiceId}`, {
@@ -1100,23 +1101,23 @@ exports.bulkZipDownload = async (req, res) => {
                 const pdfResponse = await fetch(razorpayData.short_url);
                 if (pdfResponse.ok) {
                   pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
-                  console.info(`✅ Downloaded from Razorpay API: ${pdfBuffer.length} bytes`);
+                  logger.info(`✅ Downloaded from Razorpay API: ${pdfBuffer.length} bytes`);
                 }
               }
             }
           } catch (apiError) {
-            console.info(`❌ Razorpay API error: ${apiError.message}`);
+            logger.info(`❌ Razorpay API error: ${apiError.message}`);
           }
         }
         
         // Priority 4: Try local file
         if (!pdfBuffer && invoice.pdfUrl && invoice.pdfUrl.startsWith('/uploads/')) {
-          console.info(`💾 Reading local file: ${invoice.invoiceNumber}`);
+          logger.info(`💾 Reading local file: ${invoice.invoiceNumber}`);
           
           const filePath = path.join(process.cwd(), invoice.pdfUrl);
           if (fs.existsSync(filePath)) {
             pdfBuffer = fs.readFileSync(filePath);
-            console.info(`✅ Read local file: ${pdfBuffer.length} bytes`);
+            logger.info(`✅ Read local file: ${pdfBuffer.length} bytes`);
           }
         }
         
@@ -1124,10 +1125,10 @@ exports.bulkZipDownload = async (req, res) => {
         if (pdfBuffer) {
           archive.append(pdfBuffer, { name: filename });
           addedCount++;
-          console.info(`✅ Added to bulk ZIP: ${filename}`);
+          logger.info(`✅ Added to bulk ZIP: ${filename}`);
         } else {
           skippedCount++;
-          console.info(`⏭️ Skipped (no PDF available): ${invoice.invoiceNumber}`);
+          logger.info(`⏭️ Skipped (no PDF available): ${invoice.invoiceNumber}`);
           
           // Add a placeholder text file explaining why this invoice was skipped
           const placeholderContent = `Invoice ${invoice.invoiceNumber} (${invoice.invoiceType})
@@ -1147,7 +1148,7 @@ Please contact support for assistance.`;
         }
         
       } catch (invoiceError) {
-        console.error('❌ Error processing invoice:', invoice.invoiceNumber, invoiceError.message);
+        logger.error('❌ Error processing invoice:', invoice.invoiceNumber, invoiceError.message);
         skippedCount++;
         
         // Add error placeholder
@@ -1164,21 +1165,21 @@ This invoice encountered an error during processing.`;
       }
     }
     
-    console.info(`📊 Bulk ZIP Summary: ${addedCount} invoices added, ${skippedCount} skipped`);
+    logger.info(`📊 Bulk ZIP Summary: ${addedCount} invoices added, ${skippedCount} skipped`);
     
     // Finalize the archive
     await archive.finalize();
     
   } catch (error) {
-    console.error('❌ Error creating bulk ZIP:', error);
+    logger.error('❌ Error creating bulk ZIP:', error);
     
     // Clean up temporary directory if it exists
     if (tempDir && fs.existsSync(tempDir)) {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
-        console.info('🧹 Cleaned up temp directory after error');
+        logger.info('🧹 Cleaned up temp directory after error');
       } catch (cleanupError) {
-        console.warn('⚠️ Failed to cleanup temp directory:', cleanupError.message);
+        logger.warn('⚠️ Failed to cleanup temp directory:', cleanupError.message);
       }
     }
     
@@ -1256,7 +1257,7 @@ exports.generateOrderInvoices = async (req, res) => {
       deliveryCharge: 0 // Will be calculated based on university settings
     };
     
-    console.info('🔍 Admin controller - prepared order data:', {
+    logger.info('🔍 Admin controller - prepared order data:', {
       orderId: orderData.orderId,
       orderNumber: orderData.orderNumber,
       orderType: orderData.orderType,
@@ -1280,7 +1281,7 @@ exports.generateOrderInvoices = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error generating order invoices:', error);
+    logger.error('Error generating order invoices:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to generate invoices',
@@ -1355,7 +1356,7 @@ exports.getInvoiceStats = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting invoice stats:', error);
+    logger.error('Error getting invoice stats:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch invoice statistics',
@@ -1380,7 +1381,7 @@ exports.redirectToCloudinary = async (req, res) => {
 		}
 		return res.status(404).json({ success: false, message: 'Cloudinary PDF not available for this invoice' });
 	} catch (error) {
-		console.error('Error redirecting to Cloudinary:', error);
+		logger.error('Error redirecting to Cloudinary:', error);
 		return res.status(500).json({ success: false, message: 'Failed to redirect to Cloudinary', error: error.message });
 	}
 };
@@ -1408,7 +1409,7 @@ exports.getOrderCloudinaryLinks = async (req, res) => {
 			}));
 		return res.json({ success: true, data: { orderNumber: order.orderNumber, count: cloudinaryInvoices.length, invoices: cloudinaryInvoices } });
 	} catch (error) {
-		console.error('Error getting order Cloudinary links:', error);
+		logger.error('Error getting order Cloudinary links:', error);
 		return res.status(500).json({ success: false, message: 'Failed to get Cloudinary links', error: error.message });
 	}
 };

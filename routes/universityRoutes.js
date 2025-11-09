@@ -2,6 +2,7 @@ const express = require('express');
 const Uni = require('../models/account/Uni');
 const Feature = require('../models/account/Feature');
 const Service = require('../models/account/Service');
+const logger = require('../utils/pinoLogger');
 
 const router = express.Router();
 
@@ -22,7 +23,7 @@ router.get('/charges/:uniId', async (req, res) => {
       universityName: university.fullName
     });
   } catch (err) {
-    console.error('Error fetching university charges:', err);
+    logger.error('Error fetching university charges:', err);
     res.status(500).json({ message: "Failed to fetch university charges" });
   }
 });
@@ -63,7 +64,7 @@ router.put('/charges/:uniId', async (req, res) => {
       universityName: university.fullName
     });
   } catch (err) {
-    console.error('Error updating university charges:', err);
+    logger.error('Error updating university charges:', err);
     res.status(500).json({ message: "Failed to update university charges" });
   }
 });
@@ -103,7 +104,7 @@ router.get('/universities/:uniId/assignments', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Error fetching assignments:', err);
+    logger.error('Error fetching assignments:', err);
     res.status(500).json({ success: false, message: 'Failed to fetch assignments' });
   }
 });
@@ -134,7 +135,7 @@ router.patch('/universities/:uniId/features', async (req, res) => {
 
     res.json({ success: true, message: 'Features updated', data: uni.features });
   } catch (err) {
-    console.error('Error updating features:', err);
+    logger.error('Error updating features:', err);
     res.status(500).json({ success: false, message: 'Failed to update features' });
   }
 });
@@ -164,7 +165,7 @@ router.patch('/universities/:uniId/services', async (req, res) => {
 
     res.json({ success: true, message: 'Services updated', data: uni.services });
   } catch (err) {
-    console.error('Error updating services:', err);
+    logger.error('Error updating services:', err);
     res.status(500).json({ success: false, message: 'Failed to update services' });
   }
 });
@@ -214,7 +215,7 @@ router.get('/universities/:uniId/vendors/:vendorId/services', async (req, res) =
       }
     });
   } catch (err) {
-    console.error('Error fetching vendor services:', err);
+    logger.error('Error fetching vendor services:', err);
     res.status(500).json({ success: false, message: 'Failed to fetch vendor services' });
   }
 });
@@ -247,7 +248,7 @@ router.get('/universities/:uniId/allowed-services', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Error fetching allowed services:', err);
+    logger.error('Error fetching allowed services:', err);
     res.status(500).json({ success: false, message: 'Failed to fetch allowed services' });
   }
 });
@@ -296,7 +297,7 @@ router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res)
 
     res.json({ success: true, message: 'Vendor services updated', data: updatedVendor.services });
   } catch (err) {
-    console.error('Error updating vendor services:', err);
+    logger.error('Error updating vendor services:', err);
     res.status(500).json({ success: false, message: 'Failed to update vendor services' });
   }
 });

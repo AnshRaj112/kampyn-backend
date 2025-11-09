@@ -3,6 +3,7 @@ const Vendor = require("../models/account/Vendor");
 const Order = require("../models/order/Order");
 const InventoryReport = require("../models/inventory/InventoryReport");
 const Retail = require("../models/item/Retail");
+const logger = require("../utils/pinoLogger");
 
 /**
  * Bulk transfer retail items from one vendor to another
@@ -116,7 +117,7 @@ const Retail = require("../models/item/Retail");
       transferredItems,
     });
   } catch (error) {
-    console.error("Bulk transfer error:", error);
+    logger.error("Bulk transfer error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -170,7 +171,7 @@ exports.getTransferOrdersForReceiver = async (req, res) => {
                   unit: itemDetails ? itemDetails.unit : "pcs"
                 };
               } catch (err) {
-                console.error(`Error populating item ${item.itemId}:`, err);
+                logger.error(`Error populating item ${item.itemId}:`, err);
                 return {
                   ...item,
                   itemName: "Unknown Item",
@@ -193,7 +194,7 @@ exports.getTransferOrdersForReceiver = async (req, res) => {
       orders: populatedOrders,
     });
   } catch (error) {
-    console.error("Get transfer orders error:", error);
+    logger.error("Get transfer orders error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -309,7 +310,7 @@ exports.confirmTransfer = async (req, res) => {
     // 5. For each item, compute opening/closing from current vendor inventory (post-transfer)
     for (const item of order.items || []) {
       if (item.kind !== "Retail" || !item.itemId) {
-        console.warn("Skipping item without valid kind/itemId:", item);
+        logger.warn("Skipping item without valid kind/itemId:", item);
         continue;
       }
 
@@ -430,7 +431,7 @@ exports.confirmTransfer = async (req, res) => {
       message: "Transfer confirmed and inventory/reports updated successfully.",
     });
   } catch (err) {
-    console.error("Confirm transfer error:", err);
+    logger.error("Confirm transfer error:", err);
     return res.status(500).json({ error: "Server error." });
   }
 };

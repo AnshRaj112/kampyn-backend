@@ -5,6 +5,7 @@ const Retail = require('../models/item/Retail');
 const Produce = require('../models/item/Produce');
 const Raw = require('../models/item/Raw');
 const { getAllSpecialsByUniId } = require('../controllers/itemController');
+const logger = require('../utils/pinoLogger');
 
 router.get(
   "/getvendors/:vendorId/retail",
@@ -179,14 +180,14 @@ router.get('/common-hsn/:type', async (req, res) => {
     const allItems = [...retailItems, ...produceItems];
     
     // Debug: Log some items to see what we're getting
-    console.info(`Debug: Found ${allItems.length} items for type "${type}"`);
+    logger.debug({ itemCount: allItems.length, type }, `Debug: Found items for type`);
     if (allItems.length > 0) {
-      console.info('Sample items:', allItems.slice(0, 3).map(item => ({
+      logger.debug({ sampleItems: allItems.slice(0, 3).map(item => ({
         name: item.name,
         hsnCode: item.hsnCode,
         gstPercentage: item.gstPercentage,
         hasGst: item.gstPercentage != null
-      })));
+      })) }, 'Sample items');
     }
     
     // Extract unique HSN codes and count occurrences, also get GST percentage
@@ -211,12 +212,12 @@ router.get('/common-hsn/:type', async (req, res) => {
     });
     
     // Debug: Log the HSN counts
-    console.info('HSN Counts:', Object.entries(hsnCounts).map(([hsn, data]) => ({
+    logger.debug({ hsnCounts: Object.entries(hsnCounts).map(([hsn, data]) => ({
       hsnCode: hsn,
       count: data.count,
       gstPercentage: data.gstPercentage,
       hasGst: data.gstPercentage != null
-    })));
+    })) }, 'HSN Counts');
     
     // Sort by frequency (most used first) and return suggestions
     const suggestions = Object.entries(hsnCounts)

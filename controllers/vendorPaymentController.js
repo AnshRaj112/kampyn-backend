@@ -5,6 +5,7 @@ const Payment = require("../models/order/Payment");
 const User = require("../models/account/User");
 const Vendor = require("../models/account/Vendor");
 const orderUtils = require("../utils/orderUtils");
+const logger = require("../utils/pinoLogger");
 // const invoiceUtils = require("../utils/invoiceUtils");
 
 // Initialize Razorpay
@@ -79,7 +80,7 @@ exports.createVendorRazorpayOrder = async (req, res) => {
       });
     }
 
-    console.info("💳 Creating Razorpay order for vendor guest order:", {
+    logger.info("💳 Creating Razorpay order for vendor guest order:", {
       vendorId,
       total,
       amountInPaise,
@@ -99,7 +100,7 @@ exports.createVendorRazorpayOrder = async (req, res) => {
       payment_capture: 1,
     });
 
-    console.info("💳 Razorpay order created:", {
+    logger.info("💳 Razorpay order created:", {
       razorpayOrderId: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency
@@ -132,7 +133,7 @@ exports.createVendorRazorpayOrder = async (req, res) => {
       receipt: razorpayOrder.receipt
     });
   } catch (error) {
-    console.error("❌ Error creating vendor Razorpay order:", error);
+    logger.error("❌ Error creating vendor Razorpay order:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create Razorpay order"
@@ -152,7 +153,7 @@ exports.verifyVendorPayment = async (req, res) => {
       razorpay_signature,
     } = req.body;
 
-    console.info("🔍 Verifying vendor payment:", {
+    logger.info("🔍 Verifying vendor payment:", {
       razorpay_order_id,
       razorpay_payment_id
     });
@@ -164,7 +165,7 @@ exports.verifyVendorPayment = async (req, res) => {
       .digest("hex");
 
     if (generatedSignature !== razorpay_signature) {
-      console.error("❌ Invalid Razorpay signature");
+      logger.error("❌ Invalid Razorpay signature");
       return res.status(400).json({
         success: false,
         message: "Payment signature verification failed.",
@@ -174,7 +175,7 @@ exports.verifyVendorPayment = async (req, res) => {
     // 2. Get order details from temporary storage
     const orderDetails = pendingVendorOrderDetails.get(razorpay_order_id);
     if (!orderDetails) {
-      console.error("❌ Order details not found for razorpay_order_id:", razorpay_order_id);
+      logger.error("❌ Order details not found for razorpay_order_id:", razorpay_order_id);
       return res.status(400).json({
         success: false,
         message: "Order details not found. Payment may have expired or order was already processed.",
@@ -305,18 +306,18 @@ exports.verifyVendorPayment = async (req, res) => {
       const invoiceUtils = require('../utils/invoiceUtils');
       invoiceUtils.generateOrderInvoices(orderDataForInvoice)
         .then(invoiceResults => {
-          console.info('📄 Vendor order invoice generation completed:', invoiceResults);
+          logger.info('📄 Vendor order invoice generation completed:', invoiceResults);
         })
         .catch(error => {
-          console.error('❌ Vendor order invoice generation failed:', error);
+          logger.error('❌ Vendor order invoice generation failed:', error);
         });
 
     } catch (invoiceError) {
-      console.error('❌ Error preparing vendor order invoice data:', invoiceError);
+      logger.error('❌ Error preparing vendor order invoice data:', invoiceError);
       // Don't fail the payment if invoice generation fails
     }
 
-    console.info("✅ Vendor payment verified and order created:", {
+    logger.info("✅ Vendor payment verified and order created:", {
       orderId: newOrder._id,
       orderNumber: newOrder.orderNumber,
       isNewUser
@@ -331,7 +332,7 @@ exports.verifyVendorPayment = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Error in verifyVendorPayment:", error);
+    logger.error("❌ Error in verifyVendorPayment:", error);
     return res.status(500).json({
       success: false,
       message: error.message || "Internal server error"
@@ -350,7 +351,7 @@ exports.getRazorpayKey = async (req, res) => {
       key: razorpayKeyId
     });
   } catch (error) {
-    console.error("❌ Error getting Razorpay key:", error);
+    logger.error("❌ Error getting Razorpay key:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get Razorpay key"

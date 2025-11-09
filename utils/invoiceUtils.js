@@ -7,6 +7,7 @@ const os = require('os');
 const Invoice = require('../models/invoice/Invoice');
 const Vendor = require('../models/account/Vendor');
 const Uni = require('../models/account/Uni');
+const logger = require('./pinoLogger');
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
@@ -69,7 +70,7 @@ exports.generateOrderInvoices = async (orderData) => {
             }
             
             if (!itemDetails) {
-              console.warn(`⚠️ Item details not found for ${item.kind} item: ${item.itemId}`);
+              logger.warn({ itemId: item.itemId, kind: item.kind }, "Item details not found");
               return {
                 ...item,
                 name: item.name || "Unknown Item",
@@ -102,7 +103,7 @@ exports.generateOrderInvoices = async (orderData) => {
             };
           
         } catch (err) {
-          console.error(`❌ Error populating item ${item.itemId || item.name}:`, err);
+          logger.error({ error: err.message, itemId: item.itemId || item.name }, "Error populating item");
           return {
             ...item,
             name: item.name || "Unknown Item",
@@ -202,7 +203,7 @@ exports.generateOrderInvoices = async (orderData) => {
     };
     
   } catch (error) {
-    console.error('❌ Error generating invoices:', error);
+    logger.error('❌ Error generating invoices:', error);
     throw error;
   }
 };
@@ -361,7 +362,7 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
                              razorpayError.message?.includes('Invalid billing address');
          
          if (isTrustIssue) {
-           console.warn('🚫 Razorpay invoice creation failed due to trust/validation issues:', {
+           logger.warn('🚫 Razorpay invoice creation failed due to trust/validation issues:', {
              error: razorpayError.message,
              orderNumber: orderData.orderNumber,
              vendorId: vendor._id,
@@ -369,7 +370,7 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
              reason: 'Customer data flagged as untrusted by Razorpay'
            });
          } else {
-           console.warn('⚠️ Razorpay invoice creation failed for other reasons:', {
+           logger.warn('⚠️ Razorpay invoice creation failed for other reasons:', {
              error: razorpayError.message,
              orderNumber: orderData.orderNumber,
              vendorId: vendor._id,
@@ -430,7 +431,7 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
     return invoice;
     
   } catch (error) {
-    console.error('❌ Error generating vendor invoice:', error);
+    logger.error('❌ Error generating vendor invoice:', error);
     throw error;
   }
 }
@@ -478,7 +479,7 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
       }
     });
   } catch (razorpayError) {
-    console.warn('⚠️ Razorpay invoice creation failed, proceeding with local invoice only:', {
+    logger.warn('⚠️ Razorpay invoice creation failed, proceeding with local invoice only:', {
       error: razorpayError.message,
       orderNumber: orderData.orderNumber,
       vendorId: vendor._id,
@@ -549,7 +550,7 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
     return invoice;
     
   } catch (error) {
-    console.error('❌ Error generating platform invoice:', error);
+    logger.error('❌ Error generating platform invoice:', error);
     throw error;
   }
 }
@@ -617,7 +618,7 @@ async function createRazorpayInvoice(invoiceData) {
     const invoice = await razorpay.invoices.create(invoiceData);
     return invoice;
   } catch (error) {
-    console.error('❌ Error creating Razorpay invoice:', error);
+    logger.error('❌ Error creating Razorpay invoice:', error);
     throw error;
   }
 }
@@ -859,7 +860,7 @@ async function checkCloudinaryAccountStatus() {
       },
       (error, result) => {
         if (error) {
-          console.error('❌ Cloudinary account test failed:', error);
+          logger.error('❌ Cloudinary account test failed:', error);
           return false;
         }
         return true;
@@ -868,7 +869,7 @@ async function checkCloudinaryAccountStatus() {
     
     return true;
   } catch (error) {
-    console.error('❌ Error checking Cloudinary account status:', error);
+    logger.error('❌ Error checking Cloudinary account status:', error);
     return false;
   }
 }
@@ -922,8 +923,8 @@ async function uploadWithRetry(pdfBuffer, filename, maxRetries = 3) {
       return result.secure_url;
       
     } catch (error) {
-      console.error(`❌ Upload attempt ${attempt} failed:`, error.message);
-      console.error(`🔍 Full error details:`, error);
+      logger.error(`❌ Upload attempt ${attempt} failed:`, error.message);
+      logger.error(`🔍 Full error details:`, error);
       
       // Clean up temporary file if it exists
       try {
@@ -932,7 +933,7 @@ async function uploadWithRetry(pdfBuffer, filename, maxRetries = 3) {
           fs.unlinkSync(tempPath);
         }
       } catch (cleanupError) {
-        console.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
+        logger.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
       }
       
       if (attempt === maxRetries) {
@@ -979,7 +980,7 @@ async function fallbackUpload(pdfBuffer, filename) {
     return result.secure_url;
     
   } catch (error) {
-    console.error('❌ Fallback upload failed:', error.message);
+    logger.error('❌ Fallback upload failed:', error.message);
     throw error;
   }
 }
@@ -1037,7 +1038,7 @@ async function uploadPDFWithEnhancedHandling(pdfBuffer, filename) {
         return result.secure_url;
         
       } catch (strategyError) {
-        console.warn(`⚠️ Strategy "${strategy.name}" failed:`, strategyError.message);
+        logger.warn(`⚠️ Strategy "${strategy.name}" failed:`, strategyError.message);
         continue;
       }
     }
@@ -1047,7 +1048,7 @@ async function uploadPDFWithEnhancedHandling(pdfBuffer, filename) {
     throw new Error('All enhanced PDF upload strategies failed');
     
   } catch (error) {
-    console.error('❌ Enhanced PDF upload failed:', error.message);
+    logger.error('❌ Enhanced PDF upload failed:', error.message);
     throw error;
   }
 }
@@ -1061,7 +1062,7 @@ async function uploadPDFToCloudinary(pdfBuffer, filename) {
     if (CLOUDINARY_CONFIG.enableTrustCheck) {
       const accountStatus = await checkCloudinaryAccountStatus();
       if (!accountStatus) {
-        console.warn('⚠️ Cloudinary account verification failed, proceeding with upload...');
+        logger.warn('⚠️ Cloudinary account verification failed, proceeding with upload...');
       }
     }
     
@@ -1071,39 +1072,39 @@ async function uploadPDFToCloudinary(pdfBuffer, filename) {
     return pdfUrl;
     
   } catch (error) {
-    console.error('❌ Error uploading PDF to Cloudinary:', error);
+    logger.error('❌ Error uploading PDF to Cloudinary:', error);
     
     // Handle specific Cloudinary trust issues
     if (error.message && error.message.includes('untrusted')) {
-      console.error('🔒 Cloudinary trust issue detected. Please check your account settings.');
-      console.error('💡 Solutions:');
-      console.error('   1. Verify your Cloudinary account is verified');
-      console.error('   2. Check if your account has any restrictions');
-      console.error('   3. Contact Cloudinary support if the issue persists');
-      console.error('   4. Ensure your API keys are correct and have proper permissions');
+      logger.error('🔒 Cloudinary trust issue detected. Please check your account settings.');
+      logger.error('💡 Solutions:');
+      logger.error('   1. Verify your Cloudinary account is verified');
+      logger.error('   2. Check if your account has any restrictions');
+      logger.error('   3. Contact Cloudinary support if the issue persists');
+      logger.error('   4. Ensure your API keys are correct and have proper permissions');
     }
     
     // If fallback is enabled, try alternative approaches
     if (CLOUDINARY_CONFIG.enableFallback) {
-      console.info('🔄 Attempting fallback upload methods...');
+      logger.info('🔄 Attempting fallback upload methods...');
       
       // Try enhanced PDF upload first
       try {
-        console.info('🔄 Trying enhanced PDF upload method...');
+        logger.info('🔄 Trying enhanced PDF upload method...');
         const enhancedUrl = await uploadPDFWithEnhancedHandling(pdfBuffer, filename);
-        console.info('✅ Enhanced PDF upload successful:', enhancedUrl);
+        logger.info('✅ Enhanced PDF upload successful:', enhancedUrl);
         return enhancedUrl;
       } catch (enhancedError) {
-        console.warn('⚠️ Enhanced PDF upload failed, trying standard fallback...');
+        logger.warn('⚠️ Enhanced PDF upload failed, trying standard fallback...');
       }
       
       // Try standard fallback upload
       try {
         const fallbackUrl = await fallbackUpload(pdfBuffer, filename);
-        console.info('✅ Standard fallback upload successful:', fallbackUrl);
+        logger.info('✅ Standard fallback upload successful:', fallbackUrl);
         return fallbackUrl;
       } catch (fallbackError) {
-        console.error('❌ All fallback upload methods failed');
+        logger.error('❌ All fallback upload methods failed');
       }
     }
     
@@ -1142,7 +1143,7 @@ exports.getInvoicesByDateRange = async (filters) => {
     return invoices;
     
   } catch (error) {
-    console.error('❌ Error getting invoices by date range:', error);
+    logger.error('❌ Error getting invoices by date range:', error);
     throw error;
   }
 };
@@ -1166,7 +1167,7 @@ exports.generateInvoicesZip = async (invoices) => {
       razorpayInvoiceUrl: invoice.razorpayInvoiceUrl
     }));
   } catch (error) {
-    console.error('❌ Error generating invoices ZIP:', error);
+    logger.error('❌ Error generating invoices ZIP:', error);
     throw error;
   }
 };

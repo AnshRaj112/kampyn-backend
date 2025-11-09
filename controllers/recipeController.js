@@ -1,6 +1,7 @@
 const Recipe = require("../models/Recipe");
 const Vendor = require("../models/account/Vendor");
 const Uni = require("../models/account/Uni");
+const logger = require("../utils/pinoLogger");
 
 /**
  * Create a new recipe
@@ -9,7 +10,7 @@ exports.createRecipe = async (req, res) => {
   try {
     // Check if vendor info exists in request
     if (!req.vendor || (!req.vendor._id && !req.vendor.vendorId)) {
-      console.error("createRecipe - Missing vendor info:", {
+      logger.error("createRecipe - Missing vendor info:", {
         hasReqVendor: !!req.vendor,
         reqVendorKeys: req.vendor ? Object.keys(req.vendor) : []
       });
@@ -66,7 +67,7 @@ exports.createRecipe = async (req, res) => {
       data: recipe
     });
   } catch (error) {
-    console.error("createRecipe error:", error);
+    logger.error("createRecipe error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create recipe",
@@ -83,13 +84,13 @@ exports.getVendorRecipes = async (req, res) => {
     const vendorId = req.vendor._id || req.vendor.vendorId;
     const { status = 'all', page = 1, limit = 10, category, cuisine, search } = req.query;
 
-    console.log("getVendorRecipes - Request details:", {
+    logger.debug({
       vendorId,
       hasReqVendor: !!req.vendor,
       reqVendorKeys: req.vendor ? Object.keys(req.vendor) : [],
       status,
       queryParams: req.query
-    });
+    }, "getVendorRecipes - Request details");
 
     // Build query
     const query = { vendorId };
@@ -110,7 +111,7 @@ exports.getVendorRecipes = async (req, res) => {
       query.$text = { $search: search };
     }
 
-    console.log("getVendorRecipes - Query:", query);
+    logger.debug({ query }, "getVendorRecipes - Query");
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -124,7 +125,7 @@ exports.getVendorRecipes = async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
-    console.log("getVendorRecipes - Found recipes:", recipes.length);
+    logger.debug({ recipesCount: recipes.length }, "getVendorRecipes - Found recipes");
 
     // Get total count for pagination
     const totalRecipes = await Recipe.countDocuments(query);
@@ -141,7 +142,7 @@ exports.getVendorRecipes = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("getVendorRecipes error:", error);
+    logger.error("getVendorRecipes error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch recipes",
@@ -159,7 +160,7 @@ exports.getUniversityRecipes = async (req, res) => {
     const uniId = req.uni?._id || req.university?._id;
     
     if (!uniId) {
-      console.error("getUniversityRecipes - Missing university ID:", {
+      logger.error("getUniversityRecipes - Missing university ID:", {
         hasReqUni: !!req.uni,
         hasReqUniversity: !!req.university,
         reqUniKeys: req.uni ? Object.keys(req.uni) : [],
@@ -220,7 +221,7 @@ exports.getUniversityRecipes = async (req, res) => {
     // Validate populated data
     const validRecipes = recipes.filter(recipe => {
       if (!recipe.vendorId || !recipe.uniId) {
-        console.error("Recipe with missing vendorId or uniId:", recipe._id);
+        logger.error("Recipe with missing vendorId or uniId:", recipe._id);
         return false;
       }
       return true;
@@ -241,7 +242,7 @@ exports.getUniversityRecipes = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("getUniversityRecipes error:", error);
+    logger.error("getUniversityRecipes error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch recipes",
@@ -289,7 +290,7 @@ exports.getRecipeById = async (req, res) => {
       data: recipe
     });
   } catch (error) {
-    console.error("getRecipeById error:", error);
+    logger.error("getRecipeById error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch recipe",
@@ -334,7 +335,7 @@ exports.updateRecipe = async (req, res) => {
       data: updatedRecipe
     });
   } catch (error) {
-    console.error("updateRecipe error:", error);
+    logger.error("updateRecipe error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update recipe",
@@ -368,7 +369,7 @@ exports.deleteRecipe = async (req, res) => {
       message: "Recipe deleted successfully"
     });
   } catch (error) {
-    console.error("deleteRecipe error:", error);
+    logger.error("deleteRecipe error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to delete recipe",
@@ -416,7 +417,7 @@ exports.updateRecipeStatus = async (req, res) => {
       data: updatedRecipe
     });
   } catch (error) {
-    console.error("updateRecipeStatus error:", error);
+    logger.error("updateRecipeStatus error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update recipe status",
@@ -481,7 +482,7 @@ exports.updateRecipeStatusByUniversity = async (req, res) => {
       data: updatedRecipe
     });
   } catch (error) {
-    console.error("updateRecipeStatusByUniversity error:", error);
+    logger.error("updateRecipeStatusByUniversity error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update recipe status",
@@ -529,7 +530,7 @@ exports.toggleRecipeLike = async (req, res) => {
       message: `Recipe ${action}d successfully`
     });
   } catch (error) {
-    console.error("toggleRecipeLike error:", error);
+    logger.error("toggleRecipeLike error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update recipe like",
@@ -608,7 +609,7 @@ exports.getRecipeStats = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("getRecipeStats error:", error);
+    logger.error("getRecipeStats error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch recipe statistics",

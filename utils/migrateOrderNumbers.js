@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Order = require("../models/order/Order");
 const OrderCounter = require("../models/order/OrderCounter");
 const { Cluster_Order } = require("../config/db");
+const logger = require("../utils/pinoLogger");
 
 /**
  * Generates a unique order number for migration using Ultra-High Performance Format
@@ -36,7 +37,7 @@ async function generateOrderNumberForMigration(createdAt, userId, vendorId) {
 
 async function migrateOrderNumbers() {
   try {
-    console.info("Starting order number migration...");
+    logger.info("Starting order number migration...");
     
     // Find all orders without orderNumber
     const ordersWithoutNumber = await Order.find({ 
@@ -44,10 +45,10 @@ async function migrateOrderNumbers() {
       deleted: false
     }).sort({ createdAt: 1 }).lean();
     
-    console.info(`Found ${ordersWithoutNumber.length} orders without orderNumber`);
+    logger.info({ count: ordersWithoutNumber.length }, "Found orders without orderNumber");
     
     if (ordersWithoutNumber.length === 0) {
-      console.info("No orders need migration. All orders already have orderNumber.");
+      logger.info("No orders need migration. All orders already have orderNumber.");
       return;
     }
     
@@ -63,22 +64,22 @@ async function migrateOrderNumbers() {
           { $set: { orderNumber } }
         );
         
-        console.info(`Updated order ${order._id} with orderNumber: ${orderNumber}`);
+        logger.info({ orderId: order._id, orderNumber }, "Updated order with orderNumber");
         successCount++;
         
         // Small delay to prevent overwhelming the database
         await new Promise(resolve => setTimeout(resolve, 10));
         
       } catch (error) {
-        console.error(`Error updating order ${order._id}:`, error.message);
+        logger.error({ error: error.message, orderId: order._id }, "Error updating order");
         errorCount++;
       }
     }
     
-    console.info(`Migration completed. Success: ${successCount}, Errors: ${errorCount}`);
+    logger.info({ successCount, errorCount }, "Migration completed");
     
   } catch (error) {
-    console.error("Migration failed:", error);
+    logger.error({ error: error.message }, "Migration failed");
     throw error;
   }
 }
@@ -87,11 +88,11 @@ async function migrateOrderNumbers() {
 if (require.main === module) {
   migrateOrderNumbers()
     .then(() => {
-      console.info("Migration completed successfully");
+      logger.info("Migration completed successfully");
       process.exit(0);
     })
     .catch((error) => {
-      console.error("Migration failed:", error);
+      logger.error({ error: error.message }, "Migration failed");
       process.exit(1);
     });
 }

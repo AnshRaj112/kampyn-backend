@@ -11,6 +11,7 @@ const {
   getRawItemsForVendorId,
 } = require("../utils/itemUtils");
 const Uni = require("../models/account/Uni");
+const logger = require("../utils/pinoLogger");
 
 // Utility to get the correct model
 const getModel = (category) => {
@@ -342,7 +343,7 @@ exports.getItemsByVendor = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Error in getItemsByVendor:", err);
+    logger.error("Error in getItemsByVendor:", err);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch vendor items",
@@ -364,7 +365,7 @@ exports.getRetailItemsByVendor = async (req, res) => {
       data: { retailItems },
     });
   } catch (err) {
-    console.error("Error in getRetailItemsByVendor:", err);
+    logger.error("Error in getRetailItemsByVendor:", err);
     const status = err.message.includes("not found") ? 404 : 500;
     return res.status(status).json({
       success: false,
@@ -386,7 +387,7 @@ exports.getProduceItemsByVendor = async (req, res) => {
       data: { produceItems },
     });
   } catch (err) {
-    console.error("Error in getProduceItemsByVendor:", err);
+    logger.error("Error in getProduceItemsByVendor:", err);
     const status = err.message.includes("not found") ? 404 : 500;
     return res.status(status).json({
       success: false,
@@ -408,7 +409,7 @@ exports.getRawItemsByVendor = async (req, res) => {
       data: { rawItems },
     });
   } catch (err) {
-    console.error("Error in getRawItemsByVendor:", err);
+    logger.error("Error in getRawItemsByVendor:", err);
     const status = err.message.includes("not found") ? 404 : 500;
     return res.status(status).json({
       success: false,
@@ -438,7 +439,7 @@ exports.searchVendorsByName = async (req, res) => {
         .map((v) => v.vendorId.toString())
     );
 
-    console.info("Available vendor IDs:", Array.from(availableVendorIds));
+    logger.info("Available vendor IDs:", Array.from(availableVendorIds));
 
     // Search in the Vendor collection with a more flexible query
     const vendors = await Vendor.find({
@@ -451,14 +452,14 @@ exports.searchVendorsByName = async (req, res) => {
       .select("_id fullName")
       .lean();
 
-    console.info("Found vendors before availability check:", vendors.length);
+    logger.info("Found vendors before availability check:", vendors.length);
 
     // Filter vendors to only include available ones
     const availableVendors = vendors.filter((vendor) =>
       availableVendorIds.has(vendor._id.toString())
     );
 
-    console.info("Found available vendors:", availableVendors.length);
+    logger.info("Found available vendors:", availableVendors.length);
 
     // Format the response
     const formattedVendors = availableVendors.map((vendor) => ({
@@ -468,7 +469,7 @@ exports.searchVendorsByName = async (req, res) => {
 
     res.status(200).json(formattedVendors);
   } catch (error) {
-    console.error("Error in searchVendorsByName:", error);
+    logger.error("Error in searchVendorsByName:", error);
     res
       .status(500)
       .json({ error: "Failed to search vendors", details: error.message });
@@ -625,7 +626,7 @@ exports.searchItems = async (req, res) => {
 
     res.status(200).json(results);
   } catch (error) {
-    console.error("Error in searchItems:", error);
+    logger.error("Error in searchItems:", error);
     res
       .status(500)
       .json({ error: "Failed to search items", details: error.message });
@@ -684,7 +685,7 @@ exports.getVendorsForItem = async (req, res) => {
 
     res.status(200).json(formattedVendors);
   } catch (error) {
-    console.error("Error getting vendors for item:", error);
+    logger.error("Error getting vendors for item:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -753,7 +754,7 @@ exports.getVendorSpecificItems = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error getting vendor-specific items:", error);
+    logger.error("Error getting vendor-specific items:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -796,7 +797,7 @@ exports.bulkUpdateTaxByType = async (req, res) => {
       modifiedCount: result.modifiedCount || result.nModified || 0,
     });
   } catch (error) {
-    console.error('bulkUpdateTaxByType error:', error);
+    logger.error('bulkUpdateTaxByType error:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -845,7 +846,7 @@ exports.bulkUpdateTaxByIds = async (req, res) => {
       modifiedCount: result.modifiedCount || result.nModified || 0,
     });
   } catch (error) {
-    console.error('bulkUpdateTaxByIds error:', error);
+    logger.error('bulkUpdateTaxByIds error:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 };

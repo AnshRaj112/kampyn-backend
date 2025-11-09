@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const logger = require("./pinoLogger");
 
 const transporter = nodemailer.createTransport({
   service: "gmail", // You can use other providers like SendGrid, Mailgun, etc.
@@ -23,9 +24,9 @@ const sendOtpEmail = async (email, otp) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.info(`OTP sent to ${email}`);
+    logger.info({ email }, "OTP sent to email");
   } catch (error) {
-    console.error("Error sending OTP email:", error);
+    logger.error({ error: error.message, email }, "Error sending OTP email");
   }
 };
 

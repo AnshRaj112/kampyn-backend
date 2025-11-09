@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const Admin = require("../models/account/Admin");
 const { checkUserActivity, updateUserActivity } = require("../utils/authUtils");
+const logger = require("../utils/pinoLogger");
 
 /**
  * Admin authentication middleware
@@ -53,7 +54,7 @@ const adminAuthMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Admin auth middleware error:", error);
+    logger.error({ error: error.message, errorName: error.name }, "Admin auth middleware error");
     
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({

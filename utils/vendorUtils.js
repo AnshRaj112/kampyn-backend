@@ -2,6 +2,7 @@
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const Raw = require("../models/item/Raw");
+const logger = require("./pinoLogger");
 
 /**
  * Populates a new vendor with all existing items from their university
@@ -11,7 +12,7 @@ const Raw = require("../models/item/Raw");
  */
 async function populateVendorWithUniversityItems(vendor, uniId) {
   try {
-    console.info(`🔧 Populating vendor ${vendor._id} with items from university ${uniId}`);
+    logger.info({ vendorId: vendor._id, uniId }, "Populating vendor with items from university");
 
     // Fetch all existing items for the university
     const [retailItems, produceItems, rawItems] = await Promise.all([
@@ -20,7 +21,7 @@ async function populateVendorWithUniversityItems(vendor, uniId) {
       Raw.find({}).select('_id unit').lean() // Raw items are not university-specific
     ]);
 
-    console.info(`📦 Found ${retailItems.length} retail, ${produceItems.length} produce, ${rawItems.length} raw items`);
+    logger.info({ retailCount: retailItems.length, produceCount: produceItems.length, rawCount: rawItems.length }, "Found items for vendor");
 
     // Add retail items to vendor inventory (quantity: 0)
     const retailInventory = retailItems.map(item => ({
@@ -52,9 +53,9 @@ async function populateVendorWithUniversityItems(vendor, uniId) {
 
     await vendor.save();
 
-    console.info(`✅ Successfully populated vendor with ${retailInventory.length} retail, ${produceInventory.length} produce, ${rawMaterialInventory.length} raw items`);
+    logger.info({ retailCount: retailInventory.length, produceCount: produceInventory.length, rawCount: rawMaterialInventory.length }, "Successfully populated vendor");
   } catch (error) {
-    console.error(`❌ Error populating vendor with university items:`, error);
+    logger.error({ error: error.message, vendorId: vendor._id, uniId }, "Error populating vendor with university items");
     throw error;
   }
 }

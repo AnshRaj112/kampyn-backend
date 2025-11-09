@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 require("dotenv").config(); // Load .env
+const logger = require("../utils/pinoLogger");
 
 // Helper function to create connection with proper error handling
 function createConnection(uri, name) {
@@ -9,15 +10,15 @@ function createConnection(uri, name) {
   });
 
   connection.on('connected', () => {
-    console.info(`✅ ${name} database connected successfully`);
+    logger.info({ database: name }, "Database connected successfully");
   });
 
   connection.on('error', (err) => {
-    console.error(`❌ ${name} database connection error:`, err.message);
+    logger.error({ database: name, error: err.message }, "Database connection error");
   });
 
   connection.on('disconnected', () => {
-    console.info(`⚠️ ${name} database disconnected`);
+    logger.info({ database: name }, "Database disconnected");
   });
 
   return connection;
@@ -40,9 +41,9 @@ Promise.all([
   new Promise(resolve => Cluster_Accounts.once('connected', resolve)),
   new Promise(resolve => Cluster_Cache_Analytics.once('connected', resolve)),
 ]).then(() => {
-  console.info('🎉 All database connections established successfully!');
+  logger.info('All database connections established successfully');
 }).catch(err => {
-  console.error('❌ Failed to establish database connections:', err.message);
+  logger.error({ error: err.message }, 'Failed to establish database connections');
 });
 
 module.exports = {

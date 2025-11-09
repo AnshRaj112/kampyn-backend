@@ -4,6 +4,7 @@ const Vendor = require("../models/account/Vendor");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const mongoose = require("mongoose");
+const logger = require("../utils/pinoLogger");
 
 // Create or update a review for an order by the same user
 exports.upsertReview = async (req, res) => {
@@ -56,7 +57,7 @@ exports.upsertReview = async (req, res) => {
 
     return res.json({ success: true, data: review });
   } catch (err) {
-    console.error("upsertReview error", err);
+    logger.error("upsertReview error", err);
     return res.status(500).json({ success: false, message: "Failed to submit review" });
   }
 };
@@ -150,7 +151,7 @@ exports.listReviewsForUniversity = async (req, res) => {
 
     return res.json({ success: true, data: enriched });
   } catch (err) {
-    console.error("listReviewsForUniversity error", err);
+    logger.error("listReviewsForUniversity error", err);
     return res.status(500).json({ success: false, message: "Failed to fetch reviews" });
   }
 };
@@ -163,7 +164,7 @@ exports.getMyReviewForOrder = async (req, res) => {
     const review = await Review.findOne({ orderId, userId }).lean();
     return res.json({ success: true, data: review || null });
   } catch (err) {
-    console.error("getMyReviewForOrder error", err);
+    logger.error("getMyReviewForOrder error", err);
     return res.status(500).json({ success: false, message: "Failed to fetch review" });
   }
 };

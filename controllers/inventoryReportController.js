@@ -8,6 +8,7 @@ const {
 } = require("../utils/inventoryReportUtils");
 const InventoryReport = require("../models/inventory/InventoryReport");
 const mongoose = require("mongoose");
+const logger = require("../utils/pinoLogger");
 
 /** Format date as YYYY-MM-DD in IST */
 function formatDateIST(date) {
@@ -109,7 +110,7 @@ async function getVendorReportDates(req, res) {
     }))].sort((a, b) => b.localeCompare(a));
     res.json({ dates });
   } catch (err) {
-    console.error("Error in getVendorReportDates:", err);
+    logger.error("Error in getVendorReportDates:", err);
     res.status(500).json({ error: "Server error", details: err.message });
   }
 }

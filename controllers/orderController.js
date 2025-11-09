@@ -9,6 +9,7 @@ const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const mongoose = require("mongoose");
 const { atomicCache } = require("../utils/cacheUtils");
+const logger = require("../utils/pinoLogger");
 
 // Import the shared atomic cancellation function
 const { cancelOrderAtomically } = require("../utils/orderUtils");
@@ -59,7 +60,7 @@ exports.placeOrderHandler = async (req, res) => {
       finalTotal,
     });
   } catch (err) {
-    console.error("Error in placeOrderHandler:", err);
+    logger.error({ error: err.message }, "Error in placeOrderHandler");
     
     if (err.code === 11000) {
       // MongoDB duplicate key error
@@ -82,12 +83,12 @@ exports.storeOrderDetails = async (req, res) => {
   try {
     const { razorpayOrderId, userId, cart, vendorId, orderType, collectorName, collectorPhone, address, finalTotal } = req.body;
 
-    console.info("📦 Storing order details for mobile payment:", {
+    logger.info({
       razorpayOrderId,
       userId,
       cartLength: cart?.length || 0,
       finalTotal
-    });
+    }, "Storing order details for mobile payment");
 
     // Store order details in the pendingOrderDetails map
     const orderUtils = require("../utils/orderUtils");
@@ -103,19 +104,19 @@ exports.storeOrderDetails = async (req, res) => {
       timestamp: Date.now()
     };
     
-    console.info("📦 Storing order details with key:", razorpayOrderId);
+    logger.debug({ razorpayOrderId }, "Storing order details with key");
     orderUtils.storePendingOrderDetails(razorpayOrderId, orderDetailsToStore);
     
     // Verify storage
     const storedDetails = orderUtils.getPendingOrderDetails(razorpayOrderId);
-    console.info("📦 Verification - order details stored successfully:", storedDetails ? "YES" : "NO");
+    logger.debug({ stored: !!storedDetails }, "Verification - order details stored successfully");
 
     res.json({
       success: true,
       message: "Order details stored successfully"
     });
   } catch (err) {
-    console.error("Error in storeOrderDetails:", err);
+    logger.error({ error: err.message }, "Error in storeOrderDetails");
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -143,7 +144,7 @@ exports.getActiveOrders = async (req, res) => {
       orders, // array of { orderId, orderType, status, collectorName, collectorPhone, items }
     });
   } catch (err) {
-    console.error(err);
+    logger.error({ error: err.message }, "Error in getActiveOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -172,7 +173,7 @@ exports.completeOrder = async (req, res) => {
 
     return res.json({ message: "Order marked as completed." });
   } catch (err) {
-    console.error(err);
+    logger.error({ error: err.message }, "Error in getActiveOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -206,7 +207,7 @@ exports.deliverOrder = async (req, res) => {
 
     return res.json({ message: "Order delivered and user records updated." });
   } catch (err) {
-    console.error(err);
+    logger.error({ error: err.message }, "Error in getActiveOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -226,7 +227,7 @@ exports.startDelivery = async (req, res) => {
       return res.status(404).json({ success: false, message: "No completed or ready order found." });
     res.json({ success: true, data: order });
   } catch (err) {
-    console.error(err);
+    logger.error({ error: err.message }, "Error in getPastOrders");
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -240,21 +241,21 @@ exports.getPastOrders = async (req, res) => {
     const { userId } = req.params;
     const { collegeId } = req.query; // Optional college filter
 
-    console.info('Fetching past orders for user: ' + String(userId) + ', college filter: ' + String(collegeId || 'none'));
+    logger.debug({ userId, collegeId: collegeId || 'none' }, 'Fetching past orders for user');
 
     // 1) Fetch user to get past order IDs
     const user = await User.findById(userId).lean();
 
     if (!user) {
-      console.info('User not found: ' + String(userId));
+      logger.info({ userId }, 'User not found');
       return res.status(404).json({ message: "User not found." });
     }
 
-    console.info('User found: ' + String(user.fullName) + ', past orders count: ' + String(user.pastOrders?.length || 0));
+    logger.debug({ userId, userName: user.fullName, pastOrdersCount: user.pastOrders?.length || 0 }, 'User found');
 
     // 2) Clean up delivered orders - move them from activeOrders to pastOrders if they're not already there
     if (user.activeOrders && user.activeOrders.length > 0) {
-      console.info('Checking ' + String(user.activeOrders.length) + ' active orders for delivered status');
+      logger.debug({ activeOrdersCount: user.activeOrders.length }, 'Checking active orders for delivered status');
       
       const activeOrderIds = user.activeOrders.map(id => id.toString());
       const deliveredOrders = await Order.find(
@@ -262,7 +263,7 @@ exports.getPastOrders = async (req, res) => {
       ).lean();
       
       if (deliveredOrders.length > 0) {
-        console.info('Found ' + String(deliveredOrders.length) + ' delivered orders in active orders, moving to past orders');
+        logger.info({ deliveredOrdersCount: deliveredOrders.length }, 'Found delivered orders in active orders, moving to past orders');
         
         const deliveredOrderIds = deliveredOrders.map(order => order._id);
         await User.updateOne(
@@ -273,7 +274,7 @@ exports.getPastOrders = async (req, res) => {
           }
         );
         
-        console.info('Moved ' + String(deliveredOrders.length) + ' delivered orders to past orders');
+        logger.info({ movedCount: deliveredOrders.length }, 'Moved delivered orders to past orders');
       }
     }
 
@@ -283,7 +284,7 @@ exports.getPastOrders = async (req, res) => {
 
     // 4) If no past orders, return empty array
     if (pastOrderIds.length === 0) {
-      console.info('No past orders found');
+      logger.debug('No past orders found');
       return res.json({
         success: true,
         orders: []
@@ -292,22 +293,22 @@ exports.getPastOrders = async (req, res) => {
 
     // 5) Fetch orders from the Order database using the IDs
     const orderIds = pastOrderIds.map(id => id.toString());
-    console.info(`Fetching orders with IDs:`, orderIds);
+    logger.debug({ orderIds }, 'Fetching orders with IDs');
 
     const orders = await Order.find({ _id: { $in: orderIds }, deleted: false }).lean();
 
-    console.info('Found ' + String(orders.length) + ' orders in database');
+    logger.debug({ ordersCount: orders.length }, 'Found orders in database');
 
     // 6) Get vendor details for all orders
     const vendorIds = [...new Set(orders.map(order => order.vendorId).filter(Boolean))];
-    console.info(`Fetching vendors with IDs:`, vendorIds);
+    logger.debug({ vendorIds }, 'Fetching vendors with IDs');
     
     const vendors = await Vendor.find({ _id: { $in: vendorIds } }, 'fullName uniID').lean();
     const vendorMap = Object.fromEntries(vendors.map(v => [v._id.toString(), v]));
     
     // 7) Get college details for all vendors
     const collegeIds = [...new Set(vendors.map(v => v.uniID).filter(Boolean))];
-    console.info(`Fetching colleges with IDs:`, collegeIds);
+    logger.debug({ collegeIds }, 'Fetching colleges with IDs');
     
     const colleges = await Uni.find({ _id: { $in: collegeIds } }, 'fullName shortName').lean();
     const collegeMap = Object.fromEntries(colleges.map(c => [c._id.toString(), c]));
@@ -325,7 +326,7 @@ exports.getPastOrders = async (req, res) => {
         } : null
       };
       
-      console.info('Order ' + String(order._id) + ' vendor data:', result.vendorId);
+      logger.debug({ orderId: order._id, vendorId: result.vendorId }, 'Order vendor data');
       return result;
     });
 
@@ -337,15 +338,15 @@ exports.getPastOrders = async (req, res) => {
         order.vendorId.uniID && 
         order.vendorId.uniID.toString() === collegeId
       );
-      console.info('Orders after college filter: ' + String(filteredOrders.length));
+      logger.debug({ filteredOrdersCount: filteredOrders.length }, 'Orders after college filter');
     }
 
     // 10) Get detailed order information with items
-    console.info('Processing ' + String(filteredOrders.length) + ' orders for detailed information');
+    logger.debug({ filteredOrdersCount: filteredOrders.length }, 'Processing orders for detailed information');
     const detailedOrders = await Promise.all(
       filteredOrders.map(async (order, index) => {
         try {
-          console.info('Processing order ' + String(index + 1) + '/' + String(filteredOrders.length) + ': ' + String(order._id));
+          logger.debug({ orderIndex: index + 1, totalOrders: filteredOrders.length, orderId: order._id }, 'Processing order');
           const orderDetails = await orderUtils.getOrderWithDetails(order._id);
           if (orderDetails) {
             return {
@@ -354,7 +355,7 @@ exports.getPastOrders = async (req, res) => {
               vendorId: order.vendorId // Preserve the vendor info we built with college details
             };
           } 
-            console.info('No details found for order: ' + String(order._id));
+            logger.warn({ orderId: order._id }, 'No details found for order');
             // If order details not found, return basic order info
             return {
               _id: order._id,
@@ -372,7 +373,7 @@ exports.getPastOrders = async (req, res) => {
             };
           
         } catch (error) {
-          console.error('Error getting details for order:', order._id, error);
+          logger.error({ error: error.message, orderId: order._id }, 'Error getting details for order');
           // Return basic order info if details fetch fails
           return {
             _id: order._id,
@@ -392,11 +393,11 @@ exports.getPastOrders = async (req, res) => {
       })
     );
 
-    console.info('Successfully processed ' + String(detailedOrders.length) + ' orders');
+    logger.info({ processedOrdersCount: detailedOrders.length }, 'Successfully processed orders');
 
     // Debug: Log the first order to see the structure
     if (detailedOrders.length > 0) {
-      console.info('Sample order vendor data:', detailedOrders[0].vendorId);
+      logger.debug({ vendorId: detailedOrders[0].vendorId }, 'Sample order vendor data');
     }
 
     return res.json({
@@ -404,7 +405,7 @@ exports.getPastOrders = async (req, res) => {
       orders: detailedOrders
     });
   } catch (err) {
-    console.error("Error in getPastOrders:", err);
+    logger.error({ error: err.message }, "Error in getPastOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -421,7 +422,7 @@ exports.getOrderById = async (req, res) => {
       return res.status(400).json({ message: "Order ID is required." });
     }
 
-    console.info('Fetching order details for orderId: ' + String(orderId));
+    logger.debug({ orderId }, 'Fetching order details for orderId');
 
     // Get order details using the existing utility function
     const orderDetails = await orderUtils.getOrderWithDetails(orderId);
@@ -448,14 +449,14 @@ exports.getOrderById = async (req, res) => {
       } : null
     };
 
-    console.info('Successfully fetched order details for orderId: ' + String(orderId));
+    logger.info({ orderId }, 'Successfully fetched order details for orderId');
 
     return res.json({
       success: true,
       order: response
     });
   } catch (err) {
-    console.error("Error in getOrderById:", err);
+    logger.error({ error: err.message }, "Error in getOrderById");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -468,18 +469,18 @@ exports.cleanupDeliveredOrders = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    console.info('Cleaning up delivered orders for user: ' + String(userId));
+    logger.info({ userId }, 'Cleaning up delivered orders for user');
 
     // 1) Fetch user
     const user = await User.findById(userId).lean();
 
     if (!user) {
-      console.info('User not found: ' + String(userId));
+      logger.info({ userId }, 'User not found');
       return res.status(404).json({ message: "User not found." });
     }
 
     if (!user.activeOrders || user.activeOrders.length === 0) {
-      console.info('No active orders to check');
+      logger.debug('No active orders to check');
       return res.json({ message: "No active orders to check." });
     }
 
@@ -490,7 +491,7 @@ exports.cleanupDeliveredOrders = async (req, res) => {
     ).lean();
 
     if (deliveredOrders.length === 0) {
-      console.info('No delivered orders found in active orders');
+      logger.debug('No delivered orders found in active orders');
       return res.json({ message: "No delivered orders found in active orders." });
     }
 
@@ -504,14 +505,14 @@ exports.cleanupDeliveredOrders = async (req, res) => {
       }
     );
 
-    console.info('Moved ' + String(deliveredOrders.length) + ' delivered orders to past orders');
+    logger.info({ movedCount: deliveredOrders.length }, 'Moved delivered orders to past orders');
 
     return res.json({ 
       message: `Successfully moved ${deliveredOrders.length} delivered orders to past orders.`,
       movedOrders: deliveredOrderIds
     });
   } catch (err) {
-    console.error("Error in cleanupDeliveredOrders:", err);
+    logger.error({ error: err.message }, "Error in cleanupDeliveredOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -525,21 +526,21 @@ exports.getUserActiveOrders = async (req, res) => {
     const { userId } = req.params;
     const { collegeId } = req.query; // Optional college filter
 
-    console.info('Fetching active orders for user: ' + String(userId) + ', college filter: ' + String(collegeId || 'none'));
+    logger.debug({ userId, collegeId: collegeId || 'none' }, 'Fetching active orders for user');
 
     // 1) Fetch user to get active order IDs
     const user = await User.findById(userId).lean();
 
     if (!user) {
-      console.info('User not found: ' + String(userId));
+      logger.info({ userId }, 'User not found');
       return res.status(404).json({ message: "User not found." });
     }
 
-    console.info('User found: ' + String(user.fullName) + ', active orders count: ' + String(user.activeOrders?.length || 0));
+    logger.debug({ userId, userName: user.fullName, activeOrdersCount: user.activeOrders?.length || 0 }, 'User found');
 
     // 2) Clean up delivered orders - move them from activeOrders to pastOrders if they're not already there
     if (user.activeOrders && user.activeOrders.length > 0) {
-      console.info('Checking ' + String(user.activeOrders.length) + ' active orders for delivered status');
+      logger.debug({ activeOrdersCount: user.activeOrders.length }, 'Checking active orders for delivered status');
       
       const activeOrderIds = user.activeOrders.map(id => id.toString());
       const deliveredOrders = await Order.find(
@@ -547,7 +548,7 @@ exports.getUserActiveOrders = async (req, res) => {
       ).lean();
       
       if (deliveredOrders.length > 0) {
-        console.info('Found ' + String(deliveredOrders.length) + ' delivered orders in active orders, moving to past orders');
+        logger.info({ deliveredOrdersCount: deliveredOrders.length }, 'Found delivered orders in active orders, moving to past orders');
         
         const deliveredOrderIds = deliveredOrders.map(order => order._id);
         await User.updateOne(
@@ -558,7 +559,7 @@ exports.getUserActiveOrders = async (req, res) => {
           }
         );
         
-        console.info('Moved ' + String(deliveredOrders.length) + ' delivered orders to past orders');
+        logger.info({ movedCount: deliveredOrders.length }, 'Moved delivered orders to past orders');
       }
     }
 
@@ -567,7 +568,7 @@ exports.getUserActiveOrders = async (req, res) => {
 
     // 4) If no active orders, return empty array
     if (!updatedUser.activeOrders || updatedUser.activeOrders.length === 0) {
-      console.info('No active orders found');
+      logger.debug('No active orders found');
       return res.json({
         success: true,
         orders: []
@@ -576,22 +577,22 @@ exports.getUserActiveOrders = async (req, res) => {
 
     // 5) Fetch orders from the Order database using the IDs
     const orderIds = updatedUser.activeOrders.map(id => id.toString());
-    console.info(`Fetching orders with IDs:`, orderIds);
+    logger.debug({ orderIds }, 'Fetching orders with IDs');
 
     const orders = await Order.find({ _id: { $in: orderIds }, deleted: false }).lean();
 
-    console.info('Found ' + String(orders.length) + ' orders in database');
+    logger.debug({ ordersCount: orders.length }, 'Found orders in database');
 
     // 6) Get vendor details for all orders
     const vendorIds = [...new Set(orders.map(order => order.vendorId).filter(Boolean))];
-    console.info(`Fetching vendors with IDs:`, vendorIds);
+    logger.debug({ vendorIds }, 'Fetching vendors with IDs');
     
     const vendors = await Vendor.find({ _id: { $in: vendorIds } }, 'fullName uniID').lean();
     const vendorMap = Object.fromEntries(vendors.map(v => [v._id.toString(), v]));
     
     // 7) Get college details for all vendors
     const collegeIds = [...new Set(vendors.map(v => v.uniID).filter(Boolean))];
-    console.info(`Fetching colleges with IDs:`, collegeIds);
+    logger.debug({ collegeIds }, 'Fetching colleges with IDs');
     
     const colleges = await Uni.find({ _id: { $in: collegeIds } }, 'fullName shortName').lean();
     const collegeMap = Object.fromEntries(colleges.map(c => [c._id.toString(), c]));
@@ -609,7 +610,7 @@ exports.getUserActiveOrders = async (req, res) => {
         } : null
       };
       
-      console.info('Order ' + String(order._id) + ' vendor data:', result.vendorId);
+      logger.debug({ orderId: order._id, vendorId: result.vendorId }, 'Order vendor data');
       return result;
     });
 
@@ -621,15 +622,15 @@ exports.getUserActiveOrders = async (req, res) => {
         order.vendorId.uniID && 
         order.vendorId.uniID.toString() === collegeId
       );
-      console.info('Orders after college filter: ' + String(filteredOrders.length));
+      logger.debug({ filteredOrdersCount: filteredOrders.length }, 'Orders after college filter');
     }
 
     // 10) Get detailed order information with items
-    console.info('Processing ' + String(filteredOrders.length) + ' orders for detailed information');
+    logger.debug({ filteredOrdersCount: filteredOrders.length }, 'Processing orders for detailed information');
     const detailedOrders = await Promise.all(
       filteredOrders.map(async (order, index) => {
         try {
-          console.info('Processing order ' + String(index + 1) + '/' + String(filteredOrders.length) + ': ' + String(order._id));
+          logger.debug({ orderIndex: index + 1, totalOrders: filteredOrders.length, orderId: order._id }, 'Processing order');
           const orderDetails = await orderUtils.getOrderWithDetails(order._id);
           if (orderDetails) {
             return {
@@ -638,7 +639,7 @@ exports.getUserActiveOrders = async (req, res) => {
               vendorId: order.vendorId // Preserve the vendor info we built with college details
             };
           } 
-            console.info('No details found for order: ' + String(order._id));
+            logger.warn({ orderId: order._id }, 'No details found for order');
             // If order details not found, return basic order info
             return {
               _id: order._id,
@@ -656,7 +657,7 @@ exports.getUserActiveOrders = async (req, res) => {
             };
           
         } catch (error) {
-          console.error('Error getting details for order:', order._id, error);
+          logger.error({ error: error.message, orderId: order._id }, 'Error getting details for order');
           // Return basic order info if details fetch fails
           return {
             _id: order._id,
@@ -676,11 +677,11 @@ exports.getUserActiveOrders = async (req, res) => {
       })
     );
 
-    console.info('Successfully processed ' + String(detailedOrders.length) + ' orders');
+    logger.info({ processedOrdersCount: detailedOrders.length }, 'Successfully processed orders');
 
     // Debug: Log the first order to see the structure
     if (detailedOrders.length > 0) {
-      console.info('Sample order vendor data:', detailedOrders[0].vendorId);
+      logger.debug({ vendorId: detailedOrders[0].vendorId }, 'Sample order vendor data');
     }
 
     return res.json({
@@ -688,7 +689,7 @@ exports.getUserActiveOrders = async (req, res) => {
       orders: detailedOrders
     });
   } catch (err) {
-    console.error("Error in getUserActiveOrders:", err);
+    logger.error({ error: err.message }, "Error in getUserActiveOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -701,19 +702,19 @@ exports.getVendorPastOrders = async (req, res) => {
   try {
     const { vendorId } = req.params;
 
-    console.info('Fetching past orders for vendor: ' + String(vendorId));
+    logger.debug({ vendorId }, 'Fetching past orders for vendor');
 
     // 1) Fetch vendor name
     const vendor = await Vendor.findById(vendorId, "fullName").lean();
     if (!vendor) {
-      console.info('Vendor not found: ' + String(vendorId));
+      logger.info({ vendorId }, 'Vendor not found');
       return res.status(404).json({ message: "Vendor not found." });
     }
 
     // 2) Fetch all past orders (completed, delivered, failed) + item details
     const orders = await orderUtils.getVendorPastOrdersWithDetails(vendorId);
 
-    console.info('Found ' + String(orders.length) + ' past orders for vendor');
+    logger.info({ ordersCount: orders.length, vendorId }, 'Found past orders for vendor');
 
     // 3) Return combined payload
     return res.json({
@@ -722,7 +723,7 @@ exports.getVendorPastOrders = async (req, res) => {
       orders, // array of { orderId, orderType, status, collectorName, collectorPhone, items }
     });
   } catch (err) {
-    console.error("Error in getVendorPastOrders:", err);
+    logger.error({ error: err.message }, "Error in getVendorPastOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -735,19 +736,19 @@ exports.getDeliveryOrders = async (req, res) => {
   try {
     const { vendorId } = req.params;
 
-    console.info('Fetching delivery orders for vendor: ' + String(vendorId));
+    logger.debug({ vendorId }, 'Fetching delivery orders for vendor');
 
     // 1) Fetch vendor name
     const vendor = await Vendor.findById(vendorId, "fullName").lean();
     if (!vendor) {
-      console.info('Vendor not found: ' + String(vendorId));
+      logger.info({ vendorId }, 'Vendor not found');
       return res.status(404).json({ message: "Vendor not found." });
     }
 
     // 2) Fetch all delivery orders (onTheWay status) + item details
     const orders = await orderUtils.getDeliveryOrdersWithDetails(vendorId);
 
-    console.info('Found ' + String(orders.length) + ' delivery orders for vendor');
+    logger.info({ ordersCount: orders.length, vendorId }, 'Found delivery orders for vendor');
 
     // 3) Return combined payload
     return res.json({
@@ -756,7 +757,7 @@ exports.getDeliveryOrders = async (req, res) => {
       orders, // array of { orderId, orderType, status, collectorName, collectorPhone, items }
     });
   } catch (err) {
-    console.error("Error in getDeliveryOrders:", err);
+    logger.error({ error: err.message }, "Error in getDeliveryOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -874,7 +875,7 @@ exports.createGuestOrder = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error in createGuestOrder:", err);
+    logger.error({ error: err.message }, "Error in createGuestOrder");
     
     if (err.code === 11000) {
       return res.status(409).json({ 
@@ -900,18 +901,18 @@ exports.getActiveOrdersByVendor = async (req, res) => {
     // Use the utility function that properly populates item details
     const orders = await orderUtils.getOrdersWithDetails(vendorId);
     
-    console.info("getActiveOrdersByVendor - Orders found:", orders.length);
+    logger.info({ ordersCount: orders.length }, "getActiveOrdersByVendor - Orders found");
     if (orders.length > 0) {
-      console.info("First order sample:", {
+      logger.debug({
         orderNumber: orders[0].orderNumber,
         total: orders[0].total,
         totalType: typeof orders[0].total
-      });
+      }, "First order sample");
     }
 
     res.json({ orders });
   } catch (err) {
-    console.error("Error in getActiveOrdersByVendor:", err);
+    logger.error({ error: err.message }, "Error in getActiveOrdersByVendor");
     res.status(500).json({ error: "Server error", details: err.message });
   }
 };
@@ -924,24 +925,24 @@ exports.cancelOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
     
-    console.info('Cancelling order: ' + String(orderId));
+    logger.info({ orderId }, 'Cancelling order');
 
     // Validate orderId
     if (!orderId || orderId === 'undefined') {
-      console.info('Invalid orderId: ' + String(orderId));
+      logger.warn({ orderId }, 'Invalid orderId');
       return res.status(400).json({ message: "Invalid order ID." });
     }
 
     // 1) Find the order
     const order = await Order.findOne({ _id: orderId }).lean();
     if (!order) {
-      console.info('Order not found: ' + String(orderId));
+      logger.info({ orderId }, 'Order not found');
       return res.status(404).json({ message: "Order not found." });
     }
 
     // 2) Check if order can be cancelled (only pendingPayment orders)
     if (order.status !== "pendingPayment") {
-      console.info('Order ' + String(orderId) + ' cannot be cancelled - status is ' + String(order.status));
+      logger.warn({ orderId, status: order.status }, 'Order cannot be cancelled - invalid status');
       return res.status(400).json({ 
         message: `Order cannot be cancelled. Current status: ${order.status}` 
       });
@@ -974,7 +975,7 @@ exports.cancelOrder = async (req, res) => {
         };
       });
       
-      console.info('Order ' + String(orderId) + ' hard deleted successfully with transaction');
+      logger.info({ orderId }, 'Order hard deleted successfully with transaction');
       return res.json({
         success: true,
         message: "Order cancelled and deleted successfully",
@@ -982,7 +983,7 @@ exports.cancelOrder = async (req, res) => {
         failedLocks: failedLocks
       });
     } catch (error) {
-      console.error('Failed to hard delete order atomically:', orderId, error);
+      logger.error({ error: error.message, orderId }, 'Failed to hard delete order atomically');
       return res.status(500).json({ 
         message: "Failed to cancel and delete order. Please try again.",
         error: error.message 
@@ -992,7 +993,7 @@ exports.cancelOrder = async (req, res) => {
     }
 
   } catch (err) {
-    console.error("Error in cancelOrder:", err);
+    logger.error({ error: err.message }, "Error in cancelOrder");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -1006,29 +1007,29 @@ exports.cancelOrderManual = async (req, res) => {
     const { orderId } = req.params;
     const { userId } = req.body; // User ID for verification
     
-    console.info('Manual cancellation requested for order: ' + String(orderId) + ' by user: ' + String(userId));
+    logger.info({ orderId, userId }, 'Manual cancellation requested for order');
 
     // Validate orderId
     if (!orderId || orderId === 'undefined') {
-      console.info('Invalid orderId: ' + String(orderId));
+      logger.warn({ orderId }, 'Invalid orderId');
       return res.status(400).json({ message: "Invalid order ID." });
     }
 
     // 1) Find the order and verify ownership
     const order = await Order.findOne({ _id: orderId }).lean();
     if (!order) {
-      console.info('Order not found: ' + String(orderId));
+      logger.info({ orderId }, 'Order not found');
       return res.status(404).json({ message: "Order not found." });
     }
 
     if (order.userId.toString() !== userId) {
-      console.info('User ' + String(userId) + ' not authorized to cancel order ' + String(orderId));
+      logger.warn({ userId, orderId }, 'User not authorized to cancel order');
       return res.status(403).json({ message: "Not authorized to cancel this order." });
     }
 
     // 2) Check if order can be cancelled (only pendingPayment orders)
     if (order.status !== "pendingPayment") {
-      console.info('Order ' + String(orderId) + ' cannot be cancelled - status is ' + String(order.status));
+      logger.warn({ orderId, status: order.status }, 'Order cannot be cancelled - invalid status');
       return res.status(400).json({ 
         message: `Order cannot be cancelled. Current status: ${order.status}` 
       });
@@ -1061,7 +1062,7 @@ exports.cancelOrderManual = async (req, res) => {
         };
       });
       
-      console.info('Order ' + String(orderId) + ' manually hard deleted successfully with transaction');
+      logger.info({ orderId }, 'Order manually hard deleted successfully with transaction');
       return res.json({
         success: true,
         message: "Order cancelled and deleted successfully",
@@ -1069,7 +1070,7 @@ exports.cancelOrderManual = async (req, res) => {
         failedLocks: failedLocks
       });
     } catch (error) {
-      console.error('Failed to manually hard delete order atomically:', orderId, error);
+      logger.error({ error: error.message, orderId }, 'Failed to manually hard delete order atomically');
       return res.status(500).json({ 
         message: "Failed to cancel and delete order. Please try again.",
         error: error.message 
@@ -1079,7 +1080,7 @@ exports.cancelOrderManual = async (req, res) => {
     }
 
   } catch (err) {
-    console.error("Error in cancelOrderManual:", err);
+    logger.error({ error: err.message }, "Error in cancelOrderManual");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -1100,7 +1101,7 @@ exports.readyOrder = async (req, res) => {
     }
     return res.json({ message: "Order marked as ready." });
   } catch (err) {
-    console.error(err);
+    logger.error({ error: err.message }, "Error in getActiveOrders");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -1200,7 +1201,7 @@ exports.getVendorAnalytics = async (req, res) => {
       ordersDay, // for graphing
     });
   } catch (err) {
-    console.error(err);
+    logger.error({ error: err.message }, "Error in getPastOrders");
     res.status(500).json({ success: false, message: 'Analytics error', error: err.message });
   }
 };

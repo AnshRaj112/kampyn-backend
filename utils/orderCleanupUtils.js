@@ -3,6 +3,7 @@ const User = require("../models/account/User");
 const Vendor = require("../models/account/Vendor");
 const { atomicCache } = require("./cacheUtils");
 const mongoose = require("mongoose");
+const logger = require("./pinoLogger");
 
 // Import the shared atomic cancellation function
 const { cancelOrderAtomically } = require("./orderUtils");
@@ -16,11 +17,11 @@ async function cleanupOrderAtomically(order, session) {
     // Use the shared atomic cancellation function
     const result = await cancelOrderAtomically(order._id, order, session);
     
-    console.info(`Order ${order._id} cleaned up atomically. Released ${result.locksReleased} locks`);
+    logger.info({ orderId: order._id, locksReleased: result.locksReleased }, "Order cleaned up atomically");
     
     return result;
   } catch (error) {
-    console.error('Error in atomic order cleanup for order:', order._id, error);
+    logger.error({ error: error.message, orderId: order._id }, 'Error in atomic order cleanup');
     throw error;
   }
 }
@@ -45,7 +46,7 @@ async function cleanupExpiredOrders() {
   try {
     const now = new Date();
     
-    console.info(`🔍 Checking for expired orders at ${now.toISOString()}`);
+    logger.info({ timestamp: now.toISOString() }, "Checking for expired orders");
     
     // Find all expired pending orders
     const expiredOrders = await Order.find({
@@ -74,14 +75,14 @@ async function cleanupExpiredOrders() {
             }
             // Extra logging: fetch and log the current status before delete
             const currentOrder = await Order.findById(order._id).lean();
-            console.info(`[CLEANUP] Attempting to delete order ${order._id} with status '${currentOrder ? currentOrder.status : 'unknown'}' at ${new Date().toISOString()}`);
+            logger.debug({ orderId: order._id, status: currentOrder ? currentOrder.status : 'unknown', timestamp: new Date().toISOString() }, "[CLEANUP] Attempting to delete order");
             // Atomic delete: only delete if status is still 'pendingPayment'
             const deleteResult = await Order.deleteOne({ _id: order._id, status: "pendingPayment" }, { session });
             if (deleteResult.deletedCount === 0) {
-              console.warn('[CLEANUP] SKIP: Order was not deleted because status changed (current status):', order._id, currentOrder ? currentOrder.status : 'unknown');
+              logger.warn({ orderId: order._id, status: currentOrder ? currentOrder.status : 'unknown' }, '[CLEANUP] SKIP: Order was not deleted because status changed');
               return { locksReleased: 0 };
             }
-            console.info(`[CLEANUP] SUCCESS: Order ${order._id} deleted from DB (status was '${currentOrder ? currentOrder.status : 'unknown'}').`);
+            logger.info({ orderId: order._id, status: currentOrder ? currentOrder.status : 'unknown' }, "[CLEANUP] SUCCESS: Order deleted from DB");
             // Remove from user and vendor
             await User.updateOne(
               { _id: order.userId },
@@ -99,10 +100,10 @@ async function cleanupExpiredOrders() {
           });
           totalLocksReleased += result.locksReleased;
           if (result.locksReleased > 0) {
-            console.info(`Cleaned up expired order ${order._id} atomically. Released ${result.locksReleased} locks`);
+            logger.info({ orderId: order._id, locksReleased: result.locksReleased }, "Cleaned up expired order atomically");
           }
         } catch (error) {
-          console.error('Failed to cleanup order atomically:', order._id, error);
+          logger.error({ error: error.message, orderId: order._id }, 'Failed to cleanup order atomically');
           failedCleanups.push({
             orderId: order._id,
             error: error.message
@@ -111,7 +112,7 @@ async function cleanupExpiredOrders() {
           await session.endSession();
         }
       } catch (error) {
-        console.error('Failed to cleanup order:', order._id, error);
+        logger.error({ error: error.message, orderId: order._id }, 'Failed to cleanup order');
         failedCleanups.push({
           orderId: order._id,
           error: error.message
@@ -126,7 +127,7 @@ async function cleanupExpiredOrders() {
       message: `Cleaned up ${expiredOrders.length} expired orders and released ${totalLocksReleased} locks`
     };
   } catch (error) {
-    console.error("Error in cleanupExpiredOrders:", error);
+    logger.error({ error: error.message }, "Error in cleanupExpiredOrders");
     throw error;
   }
 }
@@ -150,7 +151,7 @@ async function forceReleaseOrderLocks(orderId) {
       message: `Released ${lockReleaseResult.released.length} locks for order ${orderId}`
     };
   } catch (error) {
-    console.error('Error force releasing locks for order:', orderId, error);
+    logger.error({ error: error.message, orderId }, 'Error force releasing locks for order');
     throw error;
   }
 }
@@ -176,7 +177,7 @@ async function getLockStatistics() {
       timestamp: new Date()
     };
   } catch (error) {
-    console.error("Error getting lock statistics:", error);
+    logger.error({ error: error.message }, "Error getting lock statistics");
     throw error;
   }
 }
@@ -188,13 +189,13 @@ function startPeriodicCleanup(intervalMs = 10 * 60 * 1000) { // 10 minutes defau
   const cleanupInterval = setInterval(async () => {
     try {
       const result = await cleanupExpiredOrders();
-      console.info(`Periodic cleanup: ${result.message}`);
+      logger.info({ message: result.message }, "Periodic cleanup");
     } catch (error) {
-      console.error("Periodic cleanup failed:", error);
+      logger.error({ error: error.message }, "Periodic cleanup failed");
     }
   }, intervalMs);
   
-  console.info(`Started periodic cleanup every ${intervalMs / 1000} seconds`);
+  logger.info({ intervalSeconds: intervalMs / 1000 }, "Started periodic cleanup");
   return cleanupInterval;
 }
 

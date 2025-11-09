@@ -8,7 +8,7 @@ exports.listServices = async (req, res) => {
     const services = await Service.find(filter).populate("feature").sort({ createdAt: -1 });
     res.json({ success: true, data: services });
   } catch (error) {
-    console.error("listServices error", error);
+    logger.error("listServices error", error);
     res.status(500).json({ success: false, message: "Failed to fetch services" });
   }
 };
@@ -22,7 +22,7 @@ exports.createService = async (req, res) => {
     const service = await Service.create({ name, description, feature, isActive, basePrice });
     res.status(201).json({ success: true, data: service });
   } catch (error) {
-    console.error("createService error", error);
+    logger.error("createService error", error);
     if (error.code === 11000) {
       return res.status(409).json({ success: false, message: "Service already exists for feature" });
     }

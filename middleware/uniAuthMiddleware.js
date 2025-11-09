@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const Uni = require("../models/account/Uni");
 const { checkUserActivity, updateUserActivity } = require("../utils/authUtils");
+const logger = require("../utils/pinoLogger");
 
 /**
  * University authentication middleware
@@ -62,15 +63,15 @@ const uniAuthMiddleware = async (req, res, next) => {
       deliveryCharge: university.deliveryCharge
     };
 
-    console.log("uniAuthMiddleware - Setting req.uni:", {
+    logger.debug({
       hasUniId: !!req.uni._id,
       uniId: req.uni._id,
       fullName: req.uni.fullName
-    });
+    }, "uniAuthMiddleware - Setting req.uni");
 
     next();
   } catch (error) {
-    console.error("University auth middleware error:", error);
+    logger.error({ error: error.message, errorName: error.name }, "University auth middleware error");
     
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({

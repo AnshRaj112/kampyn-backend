@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { checkUserActivity, updateUserActivity } = require("../utils/authUtils");
 const User = require("../models/account/User");
+const logger = require("../utils/pinoLogger");
 
 exports.authMiddleware = async (req, res, next) => {
   try {
@@ -41,7 +42,7 @@ exports.authMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("JWT verification error:", error);
+    logger.error({ error: error.message, errorName: error.name }, "JWT verification error");
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: "Token expired. Please log in again." });
     }

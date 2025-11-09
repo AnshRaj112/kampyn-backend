@@ -1,3 +1,5 @@
+const logger = require('./pinoLogger');
+
 /**
  * In-Memory Cache with Atomic Operations
  * Implements Lua-like atomic operations to prevent race conditions
@@ -197,7 +199,7 @@ class AtomicCache {
     }
     
     if (expiredKeys.length > 0) {
-      console.info(`Cleaned up ${expiredKeys.length} expired locks`);
+      logger.info({ count: expiredKeys.length }, "Cleaned up expired locks");
     }
   }
 
@@ -218,7 +220,7 @@ class AtomicCache {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
-      console.info("Cache cleanup stopped");
+      logger.info("Cache cleanup stopped");
     }
   }
 

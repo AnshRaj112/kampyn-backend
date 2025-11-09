@@ -1,4 +1,5 @@
 const Service = require("../models/account/Service");
+const logger = require("../utils/pinoLogger");
 const Feature = require("../models/account/Feature");
 
 /**
@@ -51,7 +52,7 @@ exports.getVendorFeatures = async (req, res) => {
       features: featureMap
     });
   } catch (error) {
-    console.error("getVendorFeatures error:", error);
+    logger.error("getVendorFeatures error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch vendor services"

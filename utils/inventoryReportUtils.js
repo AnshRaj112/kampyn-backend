@@ -6,6 +6,7 @@ const Uni = require("../models/account/Uni");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const Raw = require("../models/item/Raw");
+const logger = require("./pinoLogger");
 
 /** normalize to midnight IST (Indian Standard Time) */
 function startOfDay(date) {
@@ -37,16 +38,16 @@ function formatDateIST(date) {
  */
 async function clearRawMaterialInventory() {
   try {
-    console.info(`🧹 Starting raw material inventory clearing process at ${new Date().toISOString()}`);
+    logger.info({ timestamp: new Date().toISOString() }, "Starting raw material inventory clearing process");
     
     // First, generate reports for all vendors to capture current raw material data
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1); // Use yesterday's date for the report
     
-    console.info(`📊 Generating final reports for ${yesterday.toISOString().split('T')[0]} before clearing`);
+    logger.info({ date: yesterday.toISOString().split('T')[0] }, "Generating final reports before clearing");
     await generateReportsForAllVendors(yesterday);
     
-    console.info(`🧹 Clearing raw material inventory for all vendors`);
+    logger.info("Clearing raw material inventory for all vendors");
     
     // Clear rawMaterialInventory array for all vendors
     const result = await Vendor.updateMany(
@@ -54,10 +55,10 @@ async function clearRawMaterialInventory() {
       { $set: { rawMaterialInventory: [] } }
     );
     
-    console.info(`✅ Cleared raw material inventory for ${result.modifiedCount} vendors`);
+    logger.info({ modifiedCount: result.modifiedCount }, "Cleared raw material inventory for vendors");
     return result.modifiedCount;
   } catch (error) {
-    console.error("❌ Error clearing raw material inventory:", error);
+    logger.error({ error: error.message }, "Error clearing raw material inventory");
     throw error;
   }
 }
@@ -74,16 +75,15 @@ function scheduleRawMaterialClearing() {
   
   const timeUntilMidnight = tomorrow.getTime() - now.getTime();
   
-  console.info(`⏰ Next raw material clearing scheduled for ${tomorrow.toISOString()}`);
-  console.info(`⏰ Time until clearing: ${Math.floor(timeUntilMidnight / (1000 * 60 * 60))} hours, ${Math.floor((timeUntilMidnight % (1000 * 60 * 60)) / (1000 * 60))} minutes`);
+  logger.info({ nextClearing: tomorrow.toISOString(), hoursUntil: Math.floor(timeUntilMidnight / (1000 * 60 * 60)), minutesUntil: Math.floor((timeUntilMidnight % (1000 * 60 * 60)) / (1000 * 60)) }, "Next raw material clearing scheduled");
   
   // Schedule the first clearing
   setTimeout(async () => {
     try {
       await clearRawMaterialInventory();
-      console.info("✅ Daily raw material clearing completed successfully");
+      logger.info("Daily raw material clearing completed successfully");
     } catch (error) {
-      console.error("❌ Error during scheduled raw material clearing:", error);
+      logger.error({ error: error.message }, "Error during scheduled raw material clearing");
     }
   }, timeUntilMidnight);
   
@@ -91,9 +91,9 @@ function scheduleRawMaterialClearing() {
   setInterval(async () => {
     try {
       await clearRawMaterialInventory();
-      console.info("✅ Daily raw material clearing completed successfully");
+      logger.info("Daily raw material clearing completed successfully");
     } catch (error) {
-      console.error("❌ Error during scheduled raw material clearing:", error);
+      logger.error({ error: error.message }, "Error during scheduled raw material clearing");
     }
   }, 24 * 60 * 60 * 1000);
 }
@@ -509,10 +509,10 @@ async function getInventoryReport(vendorId, forDate) {
  */
 async function generateReportsForAllVendors(targetDate = new Date()) {
   try {
-    console.info(`📊 Generating inventory reports for all vendors at ${new Date().toISOString()}`);
+    logger.info({ timestamp: new Date().toISOString() }, "Generating inventory reports for all vendors");
     
     const vendors = await Vendor.find({}).select('_id fullName').lean();
-    console.info(`📊 Found ${vendors.length} vendors to process`);
+    logger.info({ vendorCount: vendors.length }, "Found vendors to process");
     
     let successCount = 0;
     let errorCount = 0;
@@ -524,15 +524,15 @@ async function generateReportsForAllVendors(targetDate = new Date()) {
           successCount++;
         }
       } catch (error) {
-        console.error(`❌ Error generating report for vendor ${vendor._id} (${vendor.fullName}):`, error.message);
+        logger.error({ error: error.message, vendorId: vendor._id, vendorName: vendor.fullName }, "Error generating report for vendor");
         errorCount++;
       }
     }
     
-    console.info(`✅ Report generation completed: ${successCount} successful, ${errorCount} errors`);
+    logger.info({ successCount, errorCount }, "Report generation completed");
     return { successCount, errorCount, total: vendors.length };
   } catch (error) {
-    console.error("❌ Error in generateReportsForAllVendors:", error);
+    logger.error({ error: error.message }, "Error in generateReportsForAllVendors");
     throw error;
   }
 }

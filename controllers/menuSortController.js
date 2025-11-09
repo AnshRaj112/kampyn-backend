@@ -3,6 +3,7 @@ const MenuSortOrder = require("../models/menu/MenuSortOrder");
 const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const Vendor = require("../models/account/Vendor");
+const logger = require("../utils/pinoLogger");
 
 // Get menu sort order for a university or vendor
 exports.getMenuSortOrder = async (req, res) => {
@@ -39,7 +40,7 @@ exports.getMenuSortOrder = async (req, res) => {
       data: sortOrder,
     });
   } catch (error) {
-    console.error("Error getting menu sort order:", error);
+    logger.error("Error getting menu sort order:", error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -162,7 +163,7 @@ exports.updateMenuSortOrder = async (req, res) => {
       data: sortOrder,
     });
   } catch (error) {
-    console.error("Error updating menu sort order:", error);
+    logger.error("Error updating menu sort order:", error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -246,7 +247,7 @@ exports.getSortedItems = async (req, res) => {
       sorted: true,
     });
   } catch (error) {
-    console.error("Error getting sorted items:", error);
+    logger.error("Error getting sorted items:", error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -277,7 +278,7 @@ exports.resetMenuSortOrder = async (req, res) => {
       message: "Menu sort order reset successfully",
     });
   } catch (error) {
-    console.error("Error resetting menu sort order:", error);
+    logger.error("Error resetting menu sort order:", error);
     res.status(500).json({
       success: false,
       error: error.message,

@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
-console.info('🚀 Starting KAMPYN Backend Server...');
-console.info('Node.js version:', process.version);
-console.info('NODE_ENV:', process.env.NODE_ENV || 'development');
+const logger = require('../utils/pinoLogger');
+
+logger.info({ nodeVersion: process.version, nodeEnv: process.env.NODE_ENV || 'development' }, 'Starting KAMPYN Backend Server');
 
 // Check for debug module issues before starting
 try {
   require('debug');
-  console.info('✅ Debug module is available');
+  logger.info('Debug module is available');
 } catch (error) {
-  console.error('❌ Debug module issue detected:', error.message);
-  console.info('🔄 Attempting to fix debug module...');
+  logger.error({ error: error.message }, 'Debug module issue detected');
+  logger.info('Attempting to fix debug module...');
   
   // Try to completely remove and reinstall debug module
   const { execSync } = require('child_process');
@@ -21,12 +21,12 @@ try {
     // Remove debug module completely
     const debugPath = path.join(process.cwd(), 'node_modules', 'debug');
     if (fs.existsSync(debugPath)) {
-      console.info('🗑️  Removing existing debug module...');
+      logger.info('Removing existing debug module...');
       execSync(`rm -rf "${debugPath}"`, { stdio: 'inherit' });
     }
     
     // Reinstall debug module
-    console.info('📦 Reinstalling debug module...');
+    logger.info('Reinstalling debug module...');
     execSync('npm install debug@4.3.4 --no-save', { stdio: 'inherit' });
     
     // Verify the installation
@@ -34,25 +34,23 @@ try {
       const packageJsonPath = path.join(debugPath, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-        console.info('✅ Debug module reinstalled successfully');
-        console.info('Debug package version:', packageJson.version);
-        console.info('Debug package main entry:', packageJson.main);
+        logger.info({ version: packageJson.version, main: packageJson.main }, 'Debug module reinstalled successfully');
         
         // Check if main entry file exists
         const mainEntryPath = path.join(debugPath, packageJson.main);
         if (fs.existsSync(mainEntryPath)) {
-          console.info('✅ Debug main entry file exists');
+          logger.info('Debug main entry file exists');
         } else {
-          console.error('❌ Debug main entry file still missing:', mainEntryPath);
+          logger.error({ mainEntryPath }, 'Debug main entry file still missing');
           // Create a fallback debug module
-          console.info('🔧 Creating fallback debug module...');
+          logger.info('Creating fallback debug module...');
           createFallbackDebugModule(debugPath);
         }
       }
     }
   } catch (installError) {
-    console.error('❌ Failed to reinstall debug module:', installError.message);
-    console.info('🔧 Creating fallback debug module...');
+    logger.error({ error: installError.message }, 'Failed to reinstall debug module');
+    logger.info('Creating fallback debug module...');
     createFallbackDebugModule(path.join(process.cwd(), 'node_modules', 'debug'));
   }
 }
@@ -84,7 +82,7 @@ function createFallbackDebugModule(debugPath) {
     
     if (fs.existsSync(fallbackPath)) {
       fs.copyFileSync(fallbackPath, indexPath);
-      console.info('✅ Fallback debug module copied successfully');
+      logger.info('Fallback debug module copied successfully');
     } else {
       // Create a simple index.js that provides basic debug functionality
       const indexJs = `
@@ -92,7 +90,8 @@ module.exports = function(namespace) {
   return function() {
     // Simple fallback debug function that does nothing in production
     if (process.env.NODE_ENV !== 'production') {
-      console.info.apply(console, [namespace, ...arguments]);
+      const logger = require('${path.join(process.cwd(), 'utils', 'pinoLogger')}');
+      logger.debug.apply(logger, [namespace, ...arguments]);
     }
   };
 };
@@ -103,19 +102,18 @@ module.exports.enabled = function() { return false; };
 `;
       
       fs.writeFileSync(indexPath, indexJs);
-      console.info('✅ Fallback debug module created successfully');
+      logger.info('Fallback debug module created successfully');
     }
   } catch (error) {
-    console.error('❌ Failed to create fallback debug module:', error.message);
+    logger.error({ error: error.message }, 'Failed to create fallback debug module');
   }
 }
 
 // Start the server
 try {
   require('../index.js');
-  console.info('✅ Server started successfully');
+  logger.info('Server started successfully');
 } catch (error) {
-  console.error('❌ Server startup failed:', error.message);
-  console.error('Error stack:', error.stack);
+  logger.error({ error: error.message, stack: error.stack }, 'Server startup failed');
   process.exit(1);
 } 

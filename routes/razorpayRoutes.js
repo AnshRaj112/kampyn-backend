@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Razorpay = require("razorpay");
 const razorpayConfig = require("../config/razorpay");
+const logger = require("../utils/pinoLogger");
 
 // Initialize Razorpay with configuration
 const razorpay = new Razorpay({
@@ -23,18 +24,18 @@ router.get("/invoices/:invoiceId", async (req, res) => {
   try {
     const { invoiceId } = req.params;
     
-    console.info("📄 Fetching Razorpay invoice:", invoiceId);
+    logger.info("📄 Fetching Razorpay invoice:", invoiceId);
     
     const invoice = await razorpay.invoices.fetch(invoiceId);
     
-    console.info("✅ Razorpay invoice fetched:", invoice.id);
+    logger.info("✅ Razorpay invoice fetched:", invoice.id);
     
     res.json({
       success: true,
       data: invoice
     });
   } catch (error) {
-    console.error("❌ Error fetching Razorpay invoice:", error);
+    logger.error("❌ Error fetching Razorpay invoice:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch invoice from Razorpay",
@@ -48,7 +49,7 @@ router.get("/invoices/:invoiceId/pdf", async (req, res) => {
   try {
     const { invoiceId } = req.params;
     
-    console.info("📄 Getting PDF for Razorpay invoice:", invoiceId);
+    logger.info("📄 Getting PDF for Razorpay invoice:", invoiceId);
     
     // Get invoice details first
     const invoice = await razorpay.invoices.fetch(invoiceId);
@@ -56,14 +57,14 @@ router.get("/invoices/:invoiceId/pdf", async (req, res) => {
     // Generate PDF download URL
     const pdfUrl = `${razorpayConfig.apiBase}/invoices/${invoiceId}/pdf`;
     
-    console.info("✅ PDF URL generated for invoice:", invoiceId);
+    logger.info("✅ PDF URL generated for invoice:", invoiceId);
     
     res.json({
       success: true,
       pdfUrl: pdfUrl
     });
   } catch (error) {
-    console.error("❌ Error getting invoice PDF:", error);
+    logger.error("❌ Error getting invoice PDF:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get invoice PDF from Razorpay",
@@ -77,18 +78,18 @@ router.post("/invoices", async (req, res) => {
   try {
     const invoiceData = req.body;
     
-    console.info("📄 Creating Razorpay invoice:", invoiceData);
+    logger.info("📄 Creating Razorpay invoice:", invoiceData);
     
     const invoice = await razorpay.invoices.create(invoiceData);
     
-    console.info("✅ Razorpay invoice created:", invoice.id);
+    logger.info("✅ Razorpay invoice created:", invoice.id);
     
     res.json({
       success: true,
       data: invoice
     });
   } catch (error) {
-    console.error("❌ Error creating Razorpay invoice:", error);
+    logger.error("❌ Error creating Razorpay invoice:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create invoice on Razorpay",
@@ -109,7 +110,7 @@ router.post("/create-order", async (req, res) => {
       });
     }
 
-    console.info("💳 Creating Razorpay order:", {
+    logger.info("💳 Creating Razorpay order:", {
       amount,
       currency,
       receipt
@@ -122,7 +123,7 @@ router.post("/create-order", async (req, res) => {
       payment_capture: 1,
     });
 
-    console.info("💳 Razorpay order created:", {
+    logger.info("💳 Razorpay order created:", {
       id: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency
@@ -136,7 +137,7 @@ router.post("/create-order", async (req, res) => {
       receipt: razorpayOrder.receipt
     });
   } catch (error) {
-    console.error("❌ Error creating Razorpay order:", error);
+    logger.error("❌ Error creating Razorpay order:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create Razorpay order"

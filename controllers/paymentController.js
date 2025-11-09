@@ -6,6 +6,7 @@ const orderUtils = require("../utils/orderUtils");
 const paymentUtils = require("../utils/paymentUtils");
 const { atomicCache } = require("../utils/cacheUtils");
 const invoiceUtils = require("../utils/invoiceUtils");
+const logger = require("../utils/pinoLogger");
 
 /**
  * POST /payments/verify
@@ -42,12 +43,12 @@ async function verifyPaymentHandler(req, res, next) {
 
     // 2. Signature is valid → create the Order in DB
     // Retrieve order details from temporary storage using razorpay_order_id
-    console.info("🔍 Looking for order details with razorpay_order_id:", razorpay_order_id);
+    logger.info("🔍 Looking for order details with razorpay_order_id:", razorpay_order_id);
     const orderDetails = orderUtils.getPendingOrderDetails(razorpay_order_id);
-    console.info("🔍 Order details found:", orderDetails ? "YES" : "NO");
+    logger.info("🔍 Order details found:", orderDetails ? "YES" : "NO");
     
     if (!orderDetails) {
-      console.error("❌ Order details not found for razorpay_order_id:", razorpay_order_id);
+      logger.error("❌ Order details not found for razorpay_order_id:", razorpay_order_id);
       return res.status(400).json({ 
         success: false, 
         message: "Order details not found. Payment may have expired or order was already processed." 
@@ -124,14 +125,14 @@ async function verifyPaymentHandler(req, res, next) {
       // Generate invoices asynchronously (don't wait for completion)
       invoiceUtils.generateOrderInvoices(orderDataForInvoice)
         .then(invoiceResults => {
-          console.info('📄 Invoice generation completed:', invoiceResults);
+          logger.info('📄 Invoice generation completed:', invoiceResults);
         })
         .catch(error => {
-          console.error('❌ Invoice generation failed:', error);
+          logger.error('❌ Invoice generation failed:', error);
         });
 
     } catch (invoiceError) {
-      console.error('❌ Error preparing invoice data:', invoiceError);
+      logger.error('❌ Error preparing invoice data:', invoiceError);
       // Don't fail the payment if invoice generation fails
     }
 
@@ -142,7 +143,7 @@ async function verifyPaymentHandler(req, res, next) {
       orderNumber: order.orderNumber,
     });
   } catch (err) {
-    console.error("Error in verifyPaymentHandler:", err);
+    logger.error("Error in verifyPaymentHandler:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 }

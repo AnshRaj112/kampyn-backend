@@ -5,6 +5,7 @@ const {
   getVendorExpressOrders,
   confirmExpressOrder,
 } = require("../utils/expressOrderUtils");
+const logger = require("../utils/pinoLogger");
 
 /**
  * POST /express-order/initiate
@@ -36,13 +37,13 @@ async function handleViewVendor(req, res) {
  * POST /express-order/confirm/:orderId
  */
 async function handleConfirm(req, res) {
-  console.info("🔔 handleConfirm:", { params: req.params, body: req.body });
+  logger.info("🔔 handleConfirm:", { params: req.params, body: req.body });
   try {
     const { orderId } = req.params;
     const order = await confirmExpressOrder(orderId);
     return res.json({ order });
   } catch (err) {
-    console.error("❌ handleConfirm error:", err);
+    logger.error("❌ handleConfirm error:", err);
     return res.status(400).json({ error: err.message });
   }
 }

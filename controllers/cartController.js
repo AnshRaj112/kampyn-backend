@@ -2,6 +2,7 @@
 const User = require("../models/account/User");
 const Vendor = require("../models/account/Vendor");
 const cartUtils = require("../utils/cartUtils");
+const logger = require("../utils/pinoLogger");
 
 
 exports.addToCart = async (req, res) => {
@@ -42,7 +43,7 @@ exports.addToCart = async (req, res) => {
      .status(200)
      .json({ message: "Item added to cart successfully." });
  } catch (err) {
-   console.error("Add to cart error:", err.message);
+   logger.error({ error: err.message }, "Add to cart error");
    return res.status(400).json({ message: err.message });
  }
 };
@@ -58,7 +59,7 @@ exports.getCart = async (req, res) => {
      vendorName: data.vendorName,
    });
  } catch (err) {
-   console.error("Get cart error:", err.message);
+   logger.error("Get cart error:", err.message);
    return res.status(400).json({ message: err.message });
  }
 };
@@ -74,7 +75,7 @@ exports.increaseOne = async (req, res) => {
    await cartUtils.changeQuantity(userId, itemId, kind, +1, vendorId);
    return res.status(200).json({ message: "Quantity increased." });
  } catch (err) {
-   console.error("Increase one error:", err.message);
+   logger.error("Increase one error:", err.message);
    return res.status(400).json({ message: err.message });
  }
 };
@@ -90,7 +91,7 @@ exports.decreaseOne = async (req, res) => {
    await cartUtils.changeQuantity(userId, itemId, kind, -1);
    return res.status(200).json({ message: "Quantity decreased." });
  } catch (err) {
-   console.error("Decrease one error:", err.message);
+   logger.error("Decrease one error:", err.message);
    return res.status(400).json({ message: err.message });
  }
 };
@@ -106,7 +107,7 @@ exports.removeItem = async (req, res) => {
    await cartUtils.removeItem(userId, itemId, kind);
    return res.status(200).json({ message: "Item removed from cart." });
  } catch (err) {
-   console.error("Remove item error:", err.message);
+   logger.error("Remove item error:", err.message);
    return res.status(400).json({ message: err.message });
  }
 };
@@ -123,7 +124,7 @@ exports.getExtras = async (req, res) => {
      extras,
    });
  } catch (err) {
-   console.error("Get extras error:", err.message);
+   logger.error("Get extras error:", err.message);
    return res.status(400).json({ message: err.message });
  }
 };
