@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+const argon2 = require("argon2");
 const { Cluster_Accounts } = require("../config/db");
 //const { Cluster_Item } = require("../config/db");
 const Account = Cluster_Accounts.model("User");
@@ -29,7 +29,12 @@ exports.createFoodcourt = async (req, res) => {
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 24576, // KiB
+      timeCost: Number(process.env.ARGON2_TIME) || 2,
+      parallelism: Number(process.env.ARGON2_PAR) || 1
+    });
 
     // Create food provider account
     const foodProvider = new Account({

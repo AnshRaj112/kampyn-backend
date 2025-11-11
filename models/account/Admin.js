@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+const argon2 = require("argon2");
 const { Cluster_Accounts } = require("../../config/db");
 
 const adminSchema = new mongoose.Schema({
@@ -85,8 +85,12 @@ adminSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
   try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
+    this.password = await argon2.hash(this.password, {
+      type: argon2.argon2id,
+      memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 24576, // KiB
+      timeCost: Number(process.env.ARGON2_TIME) || 2,
+      parallelism: Number(process.env.ARGON2_PAR) || 1
+    });
     this.updatedAt = new Date();
     next();
   } catch (error) {
@@ -99,8 +103,12 @@ adminSchema.pre('findOneAndUpdate', async function(next) {
   const update = this.getUpdate();
   if (update.password) {
     try {
-      const salt = await bcrypt.genSalt(12);
-      update.password = await bcrypt.hash(update.password, salt);
+      update.password = await argon2.hash(update.password, {
+        type: argon2.argon2id,
+        memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 24576, // KiB
+        timeCost: Number(process.env.ARGON2_TIME) || 2,
+        parallelism: Number(process.env.ARGON2_PAR) || 1
+      });
       update.updatedAt = new Date();
     } catch (error) {
       return next(error);
@@ -111,7 +119,7 @@ adminSchema.pre('findOneAndUpdate', async function(next) {
 
 // Instance method to compare password
 adminSchema.methods.comparePassword = async function(candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+  return argon2.verify(this.password, candidatePassword);
 };
 
 // Instance method to check if account is locked

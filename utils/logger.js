@@ -1,5 +1,5 @@
 const User = require('../models/account/User');
-const bcrypt = require('bcryptjs');
+const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/pinoLogger');
 
@@ -29,7 +29,7 @@ exports.loginUser = async (req, res) => {
       return res.status(429).json({ msg: `Too many attempts. Try again in ${waitTime}s.` });
     }
 
-    const valid = await bcrypt.compare(password, user.password);
+    const valid = await argon2.verify(user.password, password);
     if (!valid) {
       user.loginAttempts += 1;
       user.lastLoginAttempt = new Date();

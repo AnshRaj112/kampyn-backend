@@ -1,6 +1,6 @@
 const Account = require("../../models/account/Uni");
 const Otp = require("../../models/users/Otp");
-const bcrypt = require("bcryptjs");
+const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
@@ -12,8 +12,12 @@ const generateOtp = () => crypto.randomInt(100000, 999999).toString();
 
 // Utility: Hash Password
 const hashPassword = async (password) => {
-  const salt = await bcrypt.genSalt(10);
-  return await bcrypt.hash(password, salt);
+  return await argon2.hash(password, {
+    type: argon2.argon2id,
+    memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 24576, // KiB
+    timeCost: Number(process.env.ARGON2_TIME) || 2,
+    parallelism: Number(process.env.ARGON2_PAR) || 1
+  });
 };
 
 // Cookie Token Set
@@ -185,7 +189,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await argon2.verify(user.password, password);
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
