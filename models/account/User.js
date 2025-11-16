@@ -68,6 +68,12 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+// Indexes for authentication queries (email and phone lookups)
+userSchema.index({ email: 1 });
+userSchema.index({ phone: 1 });
+userSchema.index({ uniID: 1 });
+
+// Indexes for cart and favorites
 userSchema.index({ "cart.itemId": 1, "cart.kind": 1 });
 userSchema.index({ vendorId: 1 });
 userSchema.index({ "favourites.itemId": 1, "favourites.kind": 1 });

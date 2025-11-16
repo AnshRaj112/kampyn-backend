@@ -7,6 +7,11 @@ function createConnection(uri, name) {
   const connection = mongoose.createConnection(uri, {
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
+    maxPoolSize: 500, // Increased connection pool for better performance
+    minPoolSize: 5, // Maintain minimum connections
+    maxIdleTimeMS: 30000, // Close idle connections after 30s
+    bufferMaxEntries: 0, // Disable mongoose buffering
+    bufferCommands: false, // Fail fast on connection issues
   });
 
   connection.on('connected', () => {
