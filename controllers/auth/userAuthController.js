@@ -1,5 +1,6 @@
 const Account = require("../../models/account/User");
 const Otp = require("../../models/users/Otp");
+const Uni = require("../../models/account/Uni");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
@@ -58,44 +59,41 @@ exports.signup = async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    // Generate OTP early
+    // Check if there's already a pending OTP for this email (prevent multiple signup attempts)
+    const existingOtp = await Otp.findOne({ email: emailLower });
+    if (existingOtp) {
+      // Delete old OTP if exists
+      await Otp.deleteOne({ email: emailLower });
+    }
+
+    // Generate OTP
     const otp = generateOtp();
 
-    const accountData = {
-      fullName,
+    // Store user data temporarily in OTP record (NOT in user account yet)
+    // This prevents DDoS attacks by not creating accounts until OTP is verified
+    const otpData = {
       email: emailLower,
-      phone,
-      password: hashedPassword,
-      gender,
-      uniID,
-      isVerified: false,
+      otp,
+      userData: {
+        fullName,
+        phone,
+        password: hashedPassword,
+        gender,
+        uniID
+      },
+      createdAt: new Date()
     };
 
-    // Use save() - Mongoose handles optimization internally
-    const newAccount = new Account(accountData);
-    await newAccount.save();
-    
-    // Generate token immediately using the saved account (synchronous, very fast)
-    const token = jwt.sign(
-      { id: newAccount._id, role: newAccount.type },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // Make OTP save and email sending fully async (fire and forget)
-    Promise.all([
-      Otp.collection.insertOne({ email: emailLower, otp, createdAt: new Date() }),
+    // Save OTP with user data and send email
+    await Promise.all([
+      new Otp(otpData).save(),
       sendOtpEmail(emailLower, otp)
-    ]).catch((error) => {
-      logger.error({ error: error.message, email: emailLower }, "Failed to save OTP or send email");
-    });
+    ]);
 
-    // Return response immediately
+    // Return response without creating user account
+    // User account will be created only after OTP verification
     return res.status(201).json({
-      message: "Account created successfully. OTP sent for verification.",
-      token,
-      role: newAccount.type,
-      id: newAccount._id,
+      message: "OTP sent for verification. Please verify your email to complete signup.",
     });
   } catch (error) {
     logger.error({ error: error.message }, "Signup Error");
@@ -111,26 +109,65 @@ exports.verifyOtp = async (req, res) => {
     logger.info({ body: req.body }, "OTP Verification Request");
 
     const { email, otp } = req.body;
-    const otpRecord = await Otp.findOne({ email: { $eq: email }, otp: { $eq: otp } });
+    const emailLower = email.toLowerCase();
+    const otpRecord = await Otp.findOne({ email: { $eq: emailLower }, otp: { $eq: otp } });
 
     if (!otpRecord) {
       logger.info({ otp }, "Invalid or expired OTP");
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
-    // Update user verification status
-    const user = await Account.findOneAndUpdate(
-      { email: { $eq: email } },
-      { isVerified: true },
-      { new: true }
-    );
-    logger.info({ email }, "User verified");
+    let user;
+
+    // Check if this is a signup OTP (has userData) or a login/forgot password OTP
+    if (otpRecord.userData && otpRecord.userData.fullName) {
+      // This is a signup OTP - create user account now
+      // Double-check user doesn't already exist (race condition protection)
+      const existingUser = await Account.findOne({ 
+        $or: [{ email: emailLower }, { phone: otpRecord.userData.phone }] 
+      }).lean().select('_id');
+
+      if (existingUser) {
+        // User already exists, delete OTP and return error
+        await Otp.deleteOne({ email: { $eq: emailLower } });
+        return res.status(400).json({ message: "User already exists. Please log in." });
+      }
+
+      // Create user account with verified status
+      const accountData = {
+        fullName: otpRecord.userData.fullName,
+        email: emailLower,
+        phone: otpRecord.userData.phone,
+        password: otpRecord.userData.password,
+        gender: otpRecord.userData.gender,
+        uniID: otpRecord.userData.uniID,
+        isVerified: true, // Set as verified since OTP is verified
+      };
+
+      user = new Account(accountData);
+      await user.save();
+      logger.info({ email: emailLower }, "User account created and verified");
+    } else {
+      // This is a login/forgot password OTP - update existing user
+      user = await Account.findOneAndUpdate(
+        { email: { $eq: emailLower } },
+        { isVerified: true },
+        { new: true }
+      );
+
+      if (!user) {
+        await Otp.deleteOne({ email: { $eq: emailLower } });
+        return res.status(400).json({ message: "User not found" });
+      }
+
+      logger.info({ email: emailLower }, "User verified");
+    }
 
     // Delete the used OTP
-    await Otp.deleteOne({ email: { $eq: email } });
-    logger.info({ email }, "OTP deleted from database");
+    await Otp.deleteOne({ email: { $eq: emailLower } });
+    logger.info({ email: emailLower }, "OTP deleted from database");
 
-    // Generate new token for the verified user
+    // Generate token for the verified user
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
@@ -149,7 +186,10 @@ exports.verifyOtp = async (req, res) => {
 // **3. Login**
 exports.login = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Login Request");
+    // Reduce logging overhead - only log in development
+    if (process.env.NODE_ENV === 'development') {
+      logger.info({ body: req.body }, "Login Request");
+    }
 
     const { identifier, password } = req.body;
     
@@ -158,9 +198,13 @@ exports.login = async (req, res) => {
       ? identifier.toLowerCase() // Convert email to lowercase
       : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
     
+    // Use .lean() for faster queries (returns plain JS object instead of Mongoose document)
+    // Only select needed fields to reduce data transfer
     const user = await Account.findOne({
       $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
-    });
+    })
+    .lean()
+    .select('_id password isVerified uniID email');
 
     if (!user) {
       return res.status(400).json({ message: "User not found" });
@@ -169,10 +213,13 @@ exports.login = async (req, res) => {
     if (!user.isVerified) {
       // Generate new OTP
       const otp = generateOtp();
-      await new Otp({ email: user.email, otp, createdAt: Date.now() }).save();
-
-      // Send OTP email
-      await sendOtpEmail(user.email, otp);
+      // Fire and forget - don't wait for OTP save and email send
+      Promise.all([
+        Otp.collection.insertOne({ email: user.email, otp, createdAt: new Date() }),
+        sendOtpEmail(user.email, otp)
+      ]).catch((error) => {
+        logger.error({ error: error.message, email: user.email }, "Failed to save OTP or send email");
+      });
 
       // Redirect user to OTP verification
       return res.status(400).json({
@@ -181,24 +228,21 @@ exports.login = async (req, res) => {
       });
     }
 
-    const isMatch = await argon2.verify(user.password, password);
+    // Parallelize password verification and university check (if needed)
+    const [isMatch, university] = await Promise.all([
+      argon2.verify(user.password, password),
+      user.uniID ? Uni.findById(user.uniID).lean().select('isAvailable fullName') : null
+    ]);
+
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
     // Check if the university is available
-    if (user.uniID) {
-      const Uni = require("../../models/account/Uni");
-      const university = await Uni.findById(user.uniID).select('isAvailable fullName');
-      if (!university) {
-        return res.status(400).json({ 
-          message: "University not found. Please contact support." 
-        });
-      }
-      
-      if (university.isAvailable !== 'Y') {
+    if (university) {
+      if (!university.isAvailable || university.isAvailable !== 'Y') {
         return res.status(403).json({ 
-          message: `Access denied. ${university.fullName} is currently unavailable. Please contact support for assistance.` 
+          message: `Access denied. ${university.fullName || 'University'} is currently unavailable. Please contact support for assistance.` 
         });
       }
     }
@@ -207,8 +251,10 @@ exports.login = async (req, res) => {
       expiresIn: "7d",
     });
 
-    // Update last activity on login
-    await updateUserActivity(user._id, 'user');
+    // Update last activity on login (fire and forget - don't block response)
+    updateUserActivity(user._id, 'user').catch((error) => {
+      logger.error({ error: error.message, userId: user._id }, "Failed to update user activity");
+    });
 
     setTokenCookie(res, token);
 
@@ -477,8 +523,6 @@ exports.getUser = async (req, res) => {
 
 exports.getColleges = async (req, res) => {
   try {
-    const Uni = require("../../models/account/Uni");
-
     // Fetch only _id and fullName of available colleges
     const colleges = await Uni.find({ isAvailable: 'Y' }, '_id fullName');
 

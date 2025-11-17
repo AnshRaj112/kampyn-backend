@@ -14,7 +14,15 @@ const lusca = require('lusca');
 const { csrfProtection, csrfTokenEndpoint, refreshCSRFToken } = require('./middleware/csrfMiddleware');
 
 // Import database connections
-const { Cluster_User, Cluster_Order, Cluster_Item, Cluster_Inventory, Cluster_Accounts, Cluster_Cache_Analytics } = require("./config/db");
+const {
+  connectDB,
+  Cluster_User,
+  Cluster_Order,
+  Cluster_Item,
+  Cluster_Inventory,
+  Cluster_Accounts,
+  Cluster_Cache_Analytics,
+} = require("./config/db");
 
 // Import routes
 const userAuthRoutes = require("./routes/auth/userAuthRoutes");
@@ -229,27 +237,35 @@ if (process.env.NODE_ENV === "production") {
 // Export app for testing
 module.exports = app;
 
-// ✅ Start Server
-app.listen(PORT, () => {
-  logger.info({ port: PORT }, "Server running");
+// ✅ Start Server after DB connection
+async function startServer() {
+  try {
+    await connectDB();
 
-  // ✅ Log database connection status
-  const dbStatus = {
-    Users: Cluster_User.readyState === 1 ? 'Connected' : 'Disconnected',
-    Orders: Cluster_Order.readyState === 1 ? 'Connected' : 'Disconnected',
-    Items: Cluster_Item.readyState === 1 ? 'Connected' : 'Disconnected',
-    Inventory: Cluster_Inventory.readyState === 1 ? 'Connected' : 'Disconnected',
-    Accounts: Cluster_Accounts.readyState === 1 ? 'Connected' : 'Disconnected',
-    Cache: Cluster_Cache_Analytics.readyState === 1 ? 'Connected' : 'Disconnected'
-  };
-  logger.info({ dbStatus }, "Database Connection Status");
+    app.listen(PORT, () => {
+      logger.info({ port: PORT }, "Server running");
 
-  // 🔒 Start periodic cleanup of expired orders and locks
-  startPeriodicCleanup(10 * 60 * 1000); // 10 minutes
-  logger.info("Cache locking system initialized with periodic cleanup");
-  logger.info("Admin authentication system ready");
+      const dbStatus = {
+        Users: Cluster_User.readyState === 1 ? "Connected" : "Disconnected",
+        Orders: Cluster_Order.readyState === 1 ? "Connected" : "Disconnected",
+        Items: Cluster_Item.readyState === 1 ? "Connected" : "Disconnected",
+        Inventory: Cluster_Inventory.readyState === 1 ? "Connected" : "Disconnected",
+        Accounts: Cluster_Accounts.readyState === 1 ? "Connected" : "Disconnected",
+        Cache: Cluster_Cache_Analytics.readyState === 1 ? "Connected" : "Disconnected",
+      };
+      logger.info({ dbStatus }, "Database Connection Status");
 
-  // 🧹 Initialize daily raw material inventory clearing
-  initializeDailyClearing();
-  logger.info("Daily raw material clearing schedule initialized");
-});
+      startPeriodicCleanup(10 * 60 * 1000);
+      logger.info("Cache locking system initialized with periodic cleanup");
+      logger.info("Admin authentication system ready");
+
+      initializeDailyClearing();
+      logger.info("Daily raw material clearing schedule initialized");
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "Unable to start server - MongoDB connection failed");
+    process.exit(1);
+  }
+}
+
+startServer();

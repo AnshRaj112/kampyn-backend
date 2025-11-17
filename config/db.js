@@ -1,61 +1,102 @@
 const mongoose = require("mongoose");
-require("dotenv").config(); // Load .env
+require("dotenv").config();
 const logger = require("../utils/pinoLogger");
 
-// Helper function to create connection with proper error handling
-function createConnection(uri, name) {
-  const connection = mongoose.createConnection(uri, {
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
-    maxPoolSize: 500, // Increased connection pool for better performance
-    minPoolSize: 5, // Maintain minimum connections
-    maxIdleTimeMS: 30000, // Close idle connections after 30s
-    bufferMaxEntries: 0, // Disable mongoose buffering
-    bufferCommands: false, // Fail fast on connection issues
+const DEFAULT_MAX_POOL = Number(process.env.MONGO_MAX_POOL_SIZE || 10);
+const DEFAULT_MIN_POOL = Number(process.env.MONGO_MIN_POOL_SIZE || 2);
+
+const baseConnectionOptions = {
+  maxPoolSize: DEFAULT_MAX_POOL,
+  minPoolSize: DEFAULT_MIN_POOL,
+  maxIdleTimeMS: Number(process.env.MONGO_MAX_IDLE_TIME_MS || 30000),
+  serverSelectionTimeoutMS: Number(process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS || 5000),
+  socketTimeoutMS: Number(process.env.MONGO_SOCKET_TIMEOUT_MS || 45000),
+  autoIndex: false,
+  bufferCommands: false,
+};
+
+const clusterDefinitions = {
+  Cluster_User: { uri: process.env.MONGO_URI_USER, name: "Users" },
+  Cluster_Order: { uri: process.env.MONGO_URI_ORDER, name: "Orders" },
+  Cluster_Item: { uri: process.env.MONGO_URI_ITEM, name: "Items" },
+  Cluster_Inventory: { uri: process.env.MONGO_URI_INVENTORY, name: "Inventory" },
+  Cluster_Accounts: { uri: process.env.MONGO_URI_ACCOUNT, name: "Accounts" },
+  Cluster_Cache_Analytics: { uri: process.env.MONGO_URI_CACHE, name: "Cache" },
+};
+
+const connections = {};
+let connectPromise = null;
+
+function attachListeners(connection, name) {
+  connection.on("connected", () => {
+    logger.info({ database: name }, "Mongo connection established (pooled)");
   });
 
-  connection.on('connected', () => {
-    logger.info({ database: name }, "Database connected successfully");
+  connection.on("error", (err) => {
+    logger.error({ database: name, error: err.message }, "Mongo connection error");
   });
 
-  connection.on('error', (err) => {
-    logger.error({ database: name, error: err.message }, "Database connection error");
+  connection.on("disconnected", () => {
+    logger.warn({ database: name }, "Mongo connection closed");
   });
+}
 
-  connection.on('disconnected', () => {
-    logger.info({ database: name }, "Database disconnected");
-  });
+function ensureConnection(key) {
+  if (connections[key]) {
+    return connections[key];
+  }
+
+  const definition = clusterDefinitions[key];
+
+  if (!definition || !definition.uri) {
+    throw new Error(`Missing Mongo URI for cluster ${key}`);
+  }
+
+  const connection = mongoose.createConnection(definition.uri, baseConnectionOptions);
+  attachListeners(connection, definition.name);
+  connections[key] = connection;
 
   return connection;
 }
 
-// Create connections with proper error handling
-const Cluster_User = createConnection(process.env.MONGO_URI_USER, 'Users');
-const Cluster_Order = createConnection(process.env.MONGO_URI_ORDER, 'Orders');
-const Cluster_Item = createConnection(process.env.MONGO_URI_ITEM, 'Items');
-const Cluster_Inventory = createConnection(process.env.MONGO_URI_INVENTORY, 'Inventory');
-const Cluster_Accounts = createConnection(process.env.MONGO_URI_ACCOUNT, 'Accounts');
-const Cluster_Cache_Analytics = createConnection(process.env.MONGO_URI_CACHE, 'Cache');
+async function connectDB() {
+  if (connectPromise) {
+    return connectPromise;
+  }
 
-// Wait for all connections to be ready
-Promise.all([
-  new Promise(resolve => Cluster_User.once('connected', resolve)),
-  new Promise(resolve => Cluster_Order.once('connected', resolve)),
-  new Promise(resolve => Cluster_Item.once('connected', resolve)),
-  new Promise(resolve => Cluster_Inventory.once('connected', resolve)),
-  new Promise(resolve => Cluster_Accounts.once('connected', resolve)),
-  new Promise(resolve => Cluster_Cache_Analytics.once('connected', resolve)),
-]).then(() => {
-  logger.info('All database connections established successfully');
-}).catch(err => {
-  logger.error({ error: err.message }, 'Failed to establish database connections');
+  const allConnections = Object.keys(clusterDefinitions).map(ensureConnection);
+
+  connectPromise = Promise.all(
+    allConnections.map((conn) => conn.asPromise())
+  )
+    .then(() => {
+      logger.info(
+        {
+          maxPoolSize: baseConnectionOptions.maxPoolSize,
+          minPoolSize: baseConnectionOptions.minPoolSize,
+        },
+        "All MongoDB pools are ready"
+      );
+      return connections;
+    })
+    .catch((error) => {
+      connectPromise = null;
+      logger.error({ error: error.message }, "Failed to initialize MongoDB pools");
+      throw error;
+    });
+
+  return connectPromise;
+}
+
+const exportsWithPools = { connectDB };
+
+Object.keys(clusterDefinitions).forEach((key) => {
+  Object.defineProperty(exportsWithPools, key, {
+    enumerable: true,
+    get() {
+      return ensureConnection(key);
+    },
+  });
 });
 
-module.exports = {
-  Cluster_User,
-  Cluster_Order,
-  Cluster_Item,
-  Cluster_Inventory,
-  Cluster_Accounts,
-  Cluster_Cache_Analytics,
-};
+module.exports = exportsWithPools;
