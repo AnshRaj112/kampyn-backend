@@ -118,6 +118,7 @@ exports.verifyOtp = async (req, res) => {
     }
 
     let user;
+    let shouldIssueToken = true;
 
     // Check if this is a signup OTP (has userData) or a login/forgot password OTP
     if (otpRecord.userData && otpRecord.userData.fullName) {
@@ -148,29 +149,44 @@ exports.verifyOtp = async (req, res) => {
       await user.save();
       logger.info({ email: emailLower }, "User account created and verified");
     } else {
-      // This is a login/forgot password OTP - update existing user
-      user = await Account.findOneAndUpdate(
-        { email: { $eq: emailLower } },
-        { isVerified: true },
-        { new: true }
-      );
+      // This is a login/forgot password OTP - determine user status
+      user = await Account.findOne({ email: { $eq: emailLower } });
 
       if (!user) {
         await Otp.deleteOne({ email: { $eq: emailLower } });
         return res.status(400).json({ message: "User not found" });
       }
 
-      logger.info({ email: emailLower }, "User verified");
+      if (!user.isVerified) {
+        user.isVerified = true;
+        await user.save();
+        logger.info({ email: emailLower }, "User verified via OTP (login flow)");
+      } else {
+        // Already verified → treat as password reset verification, do not issue session token
+        shouldIssueToken = false;
+        logger.info({ email: emailLower }, "OTP verified for password reset");
+      }
     }
 
     // Delete the used OTP
     await Otp.deleteOne({ email: { $eq: emailLower } });
     logger.info({ email: emailLower }, "OTP deleted from database");
 
+    if (!shouldIssueToken) {
+      return res.status(200).json({
+        message: "OTP verified. You can now reset your password.",
+        requiresLogin: true,
+      });
+    }
+
     // Generate token for the verified user
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+
+    // Reset inactivity timer so immediate user fetches don't fail
+    await updateUserActivity(user._id, 'user');
+
     setTokenCookie(res, token);
 
     res.status(200).json({
@@ -179,6 +195,38 @@ exports.verifyOtp = async (req, res) => {
     });
   } catch (error) {
     logger.error({ error: error.message }, "OTP Verification Error");
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// **2a. Resend OTP**
+exports.resendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ message: "Valid email is required" });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const otpRecord = await Otp.findOne({ email: { $eq: emailLower } });
+
+    if (!otpRecord) {
+      return res
+        .status(404)
+        .json({ message: "No OTP request found. Please restart the process." });
+    }
+
+    const otp = generateOtp();
+    otpRecord.otp = otp;
+    otpRecord.createdAt = new Date();
+    await otpRecord.save();
+
+    await sendOtpEmail(emailLower, otp);
+
+    return res.json({ message: "OTP resent successfully" });
+  } catch (error) {
+    logger.error({ error: error.message }, "Resend OTP Error");
     res.status(500).json({ message: "Internal Server Error" });
   }
 };

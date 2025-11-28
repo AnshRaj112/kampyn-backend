@@ -9,8 +9,11 @@ const logger = require("../utils/pinoLogger");
  */
 const vendorAuthMiddleware = async (req, res, next) => {
   try {
-    // Get token from cookie or Authorization header
-    let token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
+    // Get token from cookie, Authorization header, or query param (for SSE streams)
+    let token =
+      req.cookies?.token ||
+      req.headers.authorization?.replace('Bearer ', '') ||
+      req.query?.token;
 
     if (!token) {
       return res.status(401).json({

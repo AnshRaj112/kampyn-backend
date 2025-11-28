@@ -14,6 +14,7 @@ const Retail = require("../models/item/Retail");
 const Produce = require("../models/item/Produce");
 const { atomicCache } = require("./cacheUtils");
 const logger = require("./pinoLogger");
+const { sendVendorNotification } = require("../services/vendorNotificationHub");
 
 // Temporary storage for order details during payment flow
 const pendingOrderDetails = new Map();
@@ -476,6 +477,22 @@ async function createOrderForApproval({
     status: "pendingVendorApproval", // New status for approval workflow
     vendorId: user.vendorId,
   });
+
+  try {
+    sendVendorNotification(user.vendorId, "pending-order", {
+      orderId: newOrder._id,
+      orderNumber: newOrder.orderNumber,
+      collectorName,
+      orderType,
+      total: finalTotal,
+      createdAt: newOrder.createdAt,
+    });
+  } catch (notifyError) {
+    logger.warn(
+      { vendorId: user.vendorId, error: notifyError.message },
+      "Failed to push pending-order notification"
+    );
+  }
 
   // Note: We don't add to user's activeOrders yet - that happens when vendor accepts
   // We also don't clear the cart yet - that happens after acceptance

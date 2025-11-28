@@ -1,4 +1,3 @@
-const Razorpay = require('razorpay');
 const cloudinary = require('cloudinary').v2;
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
@@ -8,22 +7,6 @@ const Invoice = require('../models/invoice/Invoice');
 const Vendor = require('../models/account/Vendor');
 const Uni = require('../models/account/Uni');
 const logger = require('./pinoLogger');
-
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
-
-// Configuration for invoice generation
-const INVOICE_CONFIG = {
-  // Set to false to completely disable Razorpay invoice creation
-  enableRazorpayInvoices: process.env.ENABLE_RAZORPAY_INVOICES !== 'false',
-  // Set to true to skip Razorpay for orders with insufficient customer data
-  skipRazorpayForIncompleteData: process.env.SKIP_RAZORPAY_FOR_INCOMPLETE_DATA === 'true',
-  // Minimum customer data quality score (0-100) to proceed with Razorpay
-  minCustomerDataQuality: parseInt(process.env.MIN_CUSTOMER_DATA_QUALITY) || 70
-};
 
 // Configure Cloudinary
 cloudinary.config({
@@ -263,126 +246,6 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
     
      
     
-    // Create Razorpay invoice (with fallback)
-     let razorpayInvoice = null;
-     
-     // Check if Razorpay invoices are enabled
-     if (!INVOICE_CONFIG.enableRazorpayInvoices) {
-     } else {
-       try {
-       // Validate and sanitize customer data for Razorpay
-       const customerName = orderData.collectorName?.trim();
-       const customerPhone = orderData.collectorPhone?.trim();
-       
-       
-       // Check if we have valid customer data
-       let finalCustomerName, finalCustomerPhone, shouldCreateRazorpayInvoice;
-       
-       if (customerName && customerPhone && 
-           customerName.length > 0 && customerPhone.length > 0 &&
-           customerPhone !== '0000000000' && customerPhone !== '9999999999' &&
-           customerName !== 'Customer' && customerName !== 'Test Customer') {
-         
-         // We have real customer data, proceed with Razorpay
-         shouldCreateRazorpayInvoice = true;
-         
-         // Ensure customer name is valid (remove special characters, limit length)
-         const sanitizedName = customerName
-           .replace(/[^\w\s\-_]/g, '') // Remove special characters except spaces, hyphens, and underscores
-           .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-           .trim()
-           .substring(0, 50); // Limit to 50 characters
-         
-         finalCustomerName = sanitizedName || customerName.substring(0, 50);
-         finalCustomerPhone = customerPhone;
-         
-       } else {
-         // No valid customer data, skip Razorpay invoice creation
-         shouldCreateRazorpayInvoice = false;
-         finalCustomerName = customerName || 'Customer';
-         finalCustomerPhone = customerPhone || '0000000000';
-         
-       }
-       
-       
-       if (shouldCreateRazorpayInvoice) {
-         // Only create Razorpay invoice if we have valid customer data
-         razorpayInvoice = await createRazorpayInvoice({
-           type: 'invoice',
-           description: `Invoice for order ${orderData.orderNumber} - ${vendor.fullName || 'Vendor'}`,
-           customer: {
-             name: finalCustomerName,
-             contact: finalCustomerPhone,
-             billing_address: {
-               line1: orderData.address || 'Customer Address',
-               city: 'Mumbai',
-               state: 'Maharashtra',
-               country: 'in'
-             }
-           },
-           line_items: [
-             ...orderData.items.map(item => ({
-               name: item.name,
-               description: `${item.kind} item`,
-               amount: Math.round((item.price * item.quantity) * 100), // Convert to paise
-               currency: 'INR',
-               quantity: item.quantity
-             })),
-             ...(packingTotal > 0 ? [{
-               name: 'Packaging Charge',
-               description: `Packaging charge for packable items`,
-               amount: Math.round(packingTotal * 100), // Convert to paise
-               currency: 'INR',
-               quantity: 1
-             }] : []),
-             ...(deliveryTotal > 0 ? [{
-               name: 'Delivery Charge',
-               description: 'Delivery service charge',
-               amount: Math.round(deliveryTotal * 100), // Convert to paise
-               currency: 'INR',
-               quantity: 1
-             }] : [])
-           ],
-           currency: 'INR',
-           expire_by: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days
-           notes: {
-             order_number: orderData.orderNumber,
-             vendor_id: vendor._id.toString(),
-             university: university.fullName
-           }
-         });
-       } else {
-       }
-       } catch (razorpayError) {
-         // Check if it's a trust issue
-         const isTrustIssue = razorpayError.message?.includes('untrusted') || 
-                             razorpayError.message?.includes('trust') ||
-                             razorpayError.message?.includes('suspicious') ||
-                             razorpayError.message?.includes('Invalid phone number') ||
-                             razorpayError.message?.includes('Invalid billing address');
-         
-         if (isTrustIssue) {
-           logger.warn('🚫 Razorpay invoice creation failed due to trust/validation issues:', {
-             error: razorpayError.message,
-             orderNumber: orderData.orderNumber,
-             vendorId: vendor._id,
-             customerName: orderData.collectorName,
-             reason: 'Customer data flagged as untrusted by Razorpay'
-           });
-         } else {
-           logger.warn('⚠️ Razorpay invoice creation failed for other reasons:', {
-             error: razorpayError.message,
-             orderNumber: orderData.orderNumber,
-             vendorId: vendor._id,
-             customerName: orderData.collectorName
-           });
-         }
-         
-         // Continue without Razorpay invoice
-         razorpayInvoice = null;
-       }
-     }
-    
          // Create invoice document
      const invoice = new Invoice({
        invoiceNumber,
@@ -412,8 +275,8 @@ async function generateVendorInvoice({ orderData, vendor, university, amount, pl
        items: itemsWithGst,
        packagingCharge: packingTotal, // Reference value for display - already included in totalAmount
        deliveryCharge: deliveryTotal, // Reference value for display - already included in totalAmount
-       razorpayInvoiceId: razorpayInvoice?.id || null,
-       razorpayInvoiceUrl: razorpayInvoice?.short_url || null,
+      razorpayInvoiceId: null,
+      razorpayInvoiceUrl: null,
        status: 'sent'
      });
     
@@ -443,50 +306,6 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
   try {
     // Generate invoice number
     const invoiceNumber = await Invoice.generateInvoiceNumber('platform', university._id);
-    
-    // Create Razorpay invoice (with fallback)
-    let razorpayInvoice = null;
-    try {
-      razorpayInvoice = await createRazorpayInvoice({
-      type: 'invoice',
-      description: `Platform fee invoice for order ${orderData.orderNumber}`,
-             customer: {
-         name: 'KAMPYN Platform',
-         contact: '9999999999',
-         email: 'platform@kampyn.com',
-         billing_address: {
-           line1: 'KAMPYN Platform',
-           city: 'Mumbai',
-           state: 'Maharashtra',
-           country: 'in'
-         }
-       },
-             line_items: [{
-         name: 'Platform Service Fee',
-         description: 'Platform service charge for order processing',
-         amount: Math.round(amount * 100), // Convert to paise (₹2.00 * 100 = 200 paise)
-         currency: 'INR',
-         quantity: 1
-       }],
-      currency: 'INR',
-      expire_by: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days
-      notes: {
-        order_number: orderData.orderNumber,
-        vendor_id: vendor._id.toString(),
-        university: university.fullName,
-        platform_fee: platformFee,
-        gst_amount: gstAmount
-      }
-    });
-  } catch (razorpayError) {
-    logger.warn('⚠️ Razorpay invoice creation failed, proceeding with local invoice only:', {
-      error: razorpayError.message,
-      orderNumber: orderData.orderNumber,
-      vendorId: vendor._id,
-      invoiceType: 'platform'
-    });
-    // Continue without Razorpay invoice
-  }
     
     // Create invoice document
     const invoice = new Invoice({
@@ -532,8 +351,8 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
        }],
       packagingCharge: 0,
       deliveryCharge: 0,
-      razorpayInvoiceId: razorpayInvoice?.id || null,
-      razorpayInvoiceUrl: razorpayInvoice?.short_url || null,
+      razorpayInvoiceId: null,
+      razorpayInvoiceUrl: null,
       status: 'sent'
     });
     
@@ -551,74 +370,6 @@ async function generatePlatformInvoice({ orderData, vendor, university, amount, 
     
   } catch (error) {
     logger.error('❌ Error generating platform invoice:', error);
-    throw error;
-  }
-}
-
-/**
- * Sanitize customer name for Razorpay
- * @param {string} customerName - The original customer name
- * @returns {string} - The sanitized customer name
- */
-function sanitizeCustomerName(customerName) {
-  if (!customerName) return 'Customer';
-  
-  const trimmed = customerName.toString().trim();
-  if (trimmed.length === 0) return 'Customer';
-  
-  // Remove special characters except spaces, hyphens, and underscores
-  const sanitized = trimmed
-    .replace(/[^\w\s\-_]/g, '') // Remove special characters except spaces, hyphens, and underscores
-    .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-    .trim()
-    .substring(0, 50); // Limit to 50 characters
-  
-  return sanitized || 'Customer';
-}
-
-/**
- * Create Razorpay invoice
- */
-async function createRazorpayInvoice(invoiceData) {
-  try {
-    // Validate required fields before sending to Razorpay
-    if (!invoiceData.customer?.name || invoiceData.customer.name.trim().length === 0) {
-      throw new Error('Customer name is required and cannot be empty');
-    }
-    
-    if (!invoiceData.customer?.contact || invoiceData.customer.contact.trim().length === 0) {
-      throw new Error('Customer contact is required and cannot be empty');
-    }
-    
-    // Ensure customer name doesn't exceed Razorpay limits
-    if (invoiceData.customer.name.length > 50) {
-      throw new Error('Customer name cannot exceed 50 characters');
-    }
-    
-    // Additional validation to prevent untrusted customer issues
-    if (invoiceData.customer.name.toLowerCase().includes('test') || 
-        invoiceData.customer.name.toLowerCase().includes('customer') ||
-        invoiceData.customer.name.toLowerCase().includes('demo') ||
-        invoiceData.customer.name.toLowerCase().includes('sample')) {
-      throw new Error('Customer name contains suspicious patterns that may trigger trust issues');
-    }
-    
-    // Validate phone number format (basic Indian mobile validation)
-    const phoneRegex = /^[6-9]\d{9}$/;
-    if (!phoneRegex.test(invoiceData.customer.contact)) {
-      throw new Error('Invalid phone number format. Must be a valid 10-digit Indian mobile number');
-    }
-    
-    // Validate billing address
-    if (!invoiceData.customer.billing_address?.line1 || 
-        invoiceData.customer.billing_address.line1.toLowerCase().includes('test')) {
-      throw new Error('Invalid billing address. Must be a real address without test patterns');
-    }
-    
-    const invoice = await razorpay.invoices.create(invoiceData);
-    return invoice;
-  } catch (error) {
-    logger.error('❌ Error creating Razorpay invoice:', error);
     throw error;
   }
 }
