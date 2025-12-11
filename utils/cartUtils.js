@@ -13,6 +13,7 @@ const logger = require("./pinoLogger");
 * Maximum allowed quantity per single item in cart:
 *  - Retail:  15
 *  - Produce: 10
+* NOTE: Limits are no longer enforced - users can add as many items as available stock allows
 */
 const MAX_QTY = {
  Retail: 15,
@@ -59,8 +60,8 @@ async function getItem(itemId, kind) {
 *  3) the vendor must exist (we queried it in the controller already, but we'll fetch it fresh here)
 *  4) check that vendor.uniID === item.uniId. If not, we throw "Vendor does not carry item for that uni."
 *  5) look inside vendor.retailInventory or vendor.produceInventory for that itemId
-*     – if Retail: check `quantity ≥ desiredQty` AND `(quantity - desiredQty) ≥ MAX_QTY["Retail"]`
-*     – if Produce: check `isAvailable === "Y"` and `desiredQty ≤ MAX_QTY["Produce"]`
+*     – if Retail: check `quantity ≥ desiredQty` (stock availability only, no cart limit)
+*     – if Produce: check `isAvailable === "Y"` (no quantity limit, only availability check)
 *  6) enforce "if user.vendorId exists, it must === vendorId."  (One-vendor-per-cart.)
 *
 * Returns: { vendorId, availableStock } or throws a descriptive Error.
@@ -136,7 +137,8 @@ async function _validateAndFetch(
    if (entry.isAvailable !== "Y") {
      throw new Error("Produce item is not available");
    }
-   availableStock = MAX_QTY["Produce"];
+   // No quantity limit for produce items - only availability check
+   availableStock = Number.MAX_SAFE_INTEGER;
  }
 
 
@@ -160,7 +162,7 @@ async function _validateAndFetch(
 *
 * 1) Load the User (not lean).
 * 2) _validateAndFetch(user, itemId, kind, qty, vendorIdFromController) → { vendorId, available }.
-* 3) Compute newQty = (existingQtyInCart) + qty. Ensure newQty ≤ MAX_QTY[kind] and newQty ≤ available.
+* 3) Compute newQty = (existingQtyInCart) + qty. Ensure newQty ≤ available (stock check only, no cart quantity limit).
 * 4) Either increment existing entry or push a new { itemId, kind, quantity }.
 * 5) If user.vendorId was empty, set it to the vendorIdFromController.
 * 6) Save the user document exactly once.
@@ -185,8 +187,7 @@ async function addToCart(userId, itemId, kind, qty, vendorIdFromController) {
  );
 
 
- // 3) enforce per‐item max and available stock
- const MAX_ALLOWED = MAX_QTY[kind];
+ // 3) enforce available stock (no per-item quantity limit)
  const oItemId = toObjectId(itemId);
  const existingEntry = user.cart.find(
    (e) => e.itemId.toString() === itemId.toString() && e.kind === kind
@@ -195,11 +196,7 @@ async function addToCart(userId, itemId, kind, qty, vendorIdFromController) {
  const newQty = existingQty + qty;
 
 
- if (newQty > MAX_ALLOWED) {
-   throw new Error(
-     `Cannot exceed max quantity of ${MAX_ALLOWED} for a single ${kind} item`
-   );
- }
+ // Only check available stock, no cart quantity limit
  if (newQty > available) {
    throw new Error(`Only ${available} unit(s) available`);
  }
@@ -262,7 +259,7 @@ async function changeQuantity(userId, itemId, kind, delta, vendorId = null) {
    return;
  }
 
- // If increasing, re-validate (stock, max, one-vendor-per-cart)
+ // If increasing, re-validate (stock, one-vendor-per-cart)
  if (delta > 0) {
    await _validateAndFetch(
      user,
@@ -271,13 +268,7 @@ async function changeQuantity(userId, itemId, kind, delta, vendorId = null) {
      newQty,
      user.vendorId.toString()
    );
-
-   const MAX_ALLOWED = MAX_QTY[kind];
-   if (newQty > MAX_ALLOWED) {
-     throw new Error(
-       `Cannot exceed max quantity of ${MAX_ALLOWED} for a single ${kind} item`
-     );
-   }
+   // No cart quantity limit - only stock availability is checked in _validateAndFetch
  }
 
  // Apply the change
