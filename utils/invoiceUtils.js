@@ -118,8 +118,8 @@ exports.generateOrderInvoices = async (orderData) => {
     const gstNumberType = vendor.useUniGstNumber ? 'university' : 'vendor';
     
     
-    // Calculate amounts first
-    const platformFee = university.platformFee || 2; // University-specific platform fee, default ₹2
+    // Calculate amounts first; respect zero values, default to 0 if unset
+    const platformFee = typeof university.platformFee === 'number' ? university.platformFee : 0;
     // For platform fee total including GST: base amount = platformFee/1.18, GST = platformFee - base
     const platformFeeBase = Math.round((platformFee / 1.18) * 100) / 100;
     const platformFeeGST = Math.round((platformFee - platformFeeBase) * 100) / 100;
