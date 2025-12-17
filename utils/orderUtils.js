@@ -244,9 +244,10 @@ async function generateRazorpayOrderForUser({
   }
   
   // Get university charges
-  const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge').lean();
+  const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge platformFee').lean();
   const packingCharge = university?.packingCharge ?? DEFAULT_PRODUCE_SURCHARGE;
   const deliveryCharge = university?.deliveryCharge ?? DEFAULT_DELIVERY_CHARGE;
+  const platformFee = typeof university?.platformFee === 'number' ? university.platformFee : 2; // Use university platform fee or default to 2
   
   // Calculate total - use the same logic as frontend
   let itemTotal = 0;
@@ -283,13 +284,13 @@ async function generateRazorpayOrderForUser({
     itemTotal,
     packableItemsTotal,
     packingCharge,
-    deliveryCharge
+    deliveryCharge,
+    platformFee
   }, "Calculation summary");
   
   // Calculate packaging and delivery charges
   const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
   const delivery = (orderType === "delivery") ? deliveryCharge : 0;
-  const platformFee = 2; // Flat platform fee (including GST)
   
   const finalTotal = itemTotal + packaging + delivery + platformFee;
   
@@ -427,9 +428,10 @@ async function createOrderForApproval({
   }
   
   // Get university charges
-  const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge').lean();
+  const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge platformFee').lean();
   const packingCharge = university?.packingCharge ?? DEFAULT_PRODUCE_SURCHARGE;
   const deliveryCharge = university?.deliveryCharge ?? DEFAULT_DELIVERY_CHARGE;
+  const platformFee = typeof university?.platformFee === 'number' ? university.platformFee : 2; // Use university platform fee or default to 2
   
   // Calculate total - use the same logic as frontend
   let itemTotal = 0;
@@ -450,7 +452,6 @@ async function createOrderForApproval({
   // Calculate packaging and delivery charges
   const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
   const delivery = (orderType === "delivery") ? deliveryCharge : 0;
-  const platformFee = 2; // Flat platform fee (including GST)
   
   const finalTotal = itemTotal + packaging + delivery + platformFee;
 
