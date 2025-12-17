@@ -134,10 +134,10 @@ async function _validateAndFetch(
    }
 
    if (entry.isAvailable !== "Y") {
-    throw new Error("Produce item is not available");
-  }
-  availableStock = MAX_QTY["Produce"];
-}
+     throw new Error("Produce item is not available");
+   }
+   availableStock = MAX_QTY["Produce"];
+ }
 
 
  // 6) one-vendor-per-cart rule:
@@ -196,10 +196,10 @@ async function addToCart(userId, itemId, kind, qty, vendorIdFromController) {
 
 
  if (newQty > MAX_ALLOWED) {
-  throw new Error(
-    `Cannot exceed max quantity of ${MAX_ALLOWED} for a single ${kind} item`
-  );
-}
+   throw new Error(
+     `Cannot exceed max quantity of ${MAX_ALLOWED} for a single ${kind} item`
+   );
+ }
  if (newQty > available) {
    throw new Error(`Only ${available} unit(s) available`);
  }
@@ -271,7 +271,7 @@ async function changeQuantity(userId, itemId, kind, delta, vendorId = null) {
      newQty,
      user.vendorId.toString()
    );
-   
+
    const MAX_ALLOWED = MAX_QTY[kind];
    if (newQty > MAX_ALLOWED) {
      throw new Error(
