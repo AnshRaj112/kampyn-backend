@@ -17,7 +17,7 @@ const hashPassword = async (password) => {
   return await argon2.hash(password, {
     type: argon2.argon2id,
     memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 12288, // Reduced to 12MB for faster hashing (still secure)
-    timeCost: Number(process.env.ARGON2_TIME) || 1, // Reduced from 2 to 1 for ~50% faster hashing
+    timeCost: Number(process.env.ARGON2_TIME) || 2, // Minimum value is 2 (argon2 requirement)
     parallelism: Number(process.env.ARGON2_PAR) || 2 // Increased parallelism for better performance
   });
 };
