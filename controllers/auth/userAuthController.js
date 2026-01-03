@@ -89,6 +89,7 @@ exports.signup = async (req, res) => {
       new Otp(otpData).save(),
       sendOtpEmail(emailLower, otp)
     ]);
+    logger.info({ email: emailLower }, "OTP sent successfully during signup");
 
     // Return response without creating user account
     // User account will be created only after OTP verification
@@ -344,7 +345,7 @@ exports.forgotPassword = async (req, res) => {
     logger.info({ email: emailToSend }, "OTP saved to database");
 
     await sendOtpEmail(emailToSend, otp);
-    logger.info({ email: emailToSend }, "OTP sent to email");
+    logger.info({ email: emailToSend }, "OTP sent successfully for password reset");
 
     res.json({ message: "OTP sent for password reset", email: emailToSend });
   } catch (error) {
