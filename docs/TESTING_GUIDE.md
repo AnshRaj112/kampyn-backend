@@ -313,7 +313,7 @@ describe('JWT Utils', () => {
 ```javascript
 // tests/models/User.test.js
 const User = require('../../models/account/User');
-const bcrypt = require('bcryptjs');
+const argon2 = require('argon2js');
 
 describe('User Model', () => {
   describe('Validation', () => {

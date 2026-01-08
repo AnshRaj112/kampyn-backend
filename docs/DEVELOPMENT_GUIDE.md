@@ -146,7 +146,7 @@ npm run test:coverage
 ### Authentication Security
 - Use strong JWT secrets
 - Implement token expiration
-- Secure password hashing with bcrypt
+- Secure password hashing with argon2
 
 ### API Security
 - Input validation and sanitization

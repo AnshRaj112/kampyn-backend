@@ -106,7 +106,7 @@ graph TD
 ## Security Implementation
 
 ### 1. Password Security
-- **Hashing:** bcrypt.js with salt rounds of 10
+- **Hashing:** argon2.js with salt rounds of 10
 - **Validation:** Minimum 6 characters, alphanumeric
 - **Storage:** Only hashed passwords stored in database
 

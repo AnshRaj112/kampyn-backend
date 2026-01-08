@@ -396,7 +396,7 @@ router.get('/api/orders', authenticate, authorize('user', 'vendor', 'admin'), ge
 ```javascript
 // models/User.js
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const argon2 = require('argon2js');
 
 const userSchema = new mongoose.Schema({
   fullName: {
@@ -441,13 +441,13 @@ const userSchema = new mongoose.Schema({
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
-  this.password = await bcrypt.hash(this.password, 12);
+  this.password = await argon2.hash(this.password, 12);
   next();
 });
 
 // Instance methods
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+  return await argon2.compare(candidatePassword, this.password);
 };
 
 // Static methods
@@ -839,7 +839,7 @@ const signup = async (req, res) => {
 - **Helmet** - Security headers
 - **Rate-limiter-flexible** - Rate limiting
 - **Joi** - Input validation
-- **bcryptjs** - Password hashing
+- **argon2js** - Password hashing
 
 ---
 

@@ -16,7 +16,7 @@ This document outlines the security measures, best practices, and vulnerability 
 
 ### Security Stack
 ```
-Authentication: JWT + bcrypt + OTP + Multi-factor authentication
+Authentication: JWT + argon2 + OTP + Multi-factor authentication
 Authorization: Role-based access control (RBAC) + Resource-level permissions
 Data Protection: HTTPS + Input validation + NoSQL injection prevention + Encryption at rest
 Monitoring: Rate limiting + Audit logging + Error tracking + Security event monitoring
@@ -41,7 +41,7 @@ const jwtConfig = {
 ```
 
 ### Password Security
-- **Hashing Algorithm:** bcrypt with salt rounds of 12
+- **Hashing Algorithm:** argon2 with salt rounds of 12
 - **Minimum Requirements:** 8 characters, uppercase, lowercase, number, special character
 - **Password History:** Prevent reuse of last 5 passwords
 - **Account Lockout:** 5 failed attempts = 15-minute lockout

@@ -260,7 +260,7 @@ const permissions = {
 ### Data Encryption
 - **At Rest:** MongoDB encryption for sensitive data
 - **In Transit:** HTTPS/TLS for all communications
-- **Application Level:** bcrypt for password hashing
+- **Application Level:** argon2 for password hashing
 - **API Keys:** Environment variable encryption
 
 ## Performance Optimization
