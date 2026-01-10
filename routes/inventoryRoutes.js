@@ -11,14 +11,14 @@ const {
   createItemsFromRecipe,
   produceRetailSimple,
   produceProduceSimple,
-} = require("../controllers/inventoryController");
-const vendorAuthMiddleware = require("../middleware/vendorAuthMiddleware");
+} = require("../controllers/inventory/inventoryController");
+const vendorAuthMiddleware = require("../middleware/auth/vendorAuthMiddleware");
 
 router.post("/add", addInventory);
 router.post("/reduce", reduceRetailInventory);
 router.post("/retail/availability", updateRetailAvailability);
 router.post("/raw-materials", updateRawMaterialInventory);
-router.delete("/raw-materials", require("../controllers/inventoryController").deleteRawMaterialInventory);
+router.delete("/raw-materials", require("../controllers/inventory/inventoryController").deleteRawMaterialInventory);
 router.post("/clear-raw-materials", clearAllRawMaterialInventory);
 
 // Recipe Works routes

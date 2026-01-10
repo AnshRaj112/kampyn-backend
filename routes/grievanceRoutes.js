@@ -7,7 +7,7 @@ const {
   getGrievanceById,
   updateGrievanceStatus,
   getGrievanceStats
-} = require("../controllers/grievanceController");
+} = require("../controllers/account/grievanceController");
 
 // Vendor routes
 router.post("/vendor/:vendorId/grievances", createGrievance);

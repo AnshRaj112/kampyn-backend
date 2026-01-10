@@ -7,7 +7,7 @@ const {
   getVendorReport,
   getVendorReportDates,
   generateAllVendorReports,
-} = require("../controllers/inventoryReportController");
+} = require("../controllers/inventory/inventoryReportController");
 
 // Create report for a specific vendor
 router.post("/vendor/:vendorId", postVendorReport);

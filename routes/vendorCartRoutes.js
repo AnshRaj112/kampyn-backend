@@ -7,7 +7,7 @@ const {
   removeItemFromCart,
   clearVendorCart,
   updateVendorCart
-} = require('../controllers/vendorCartController');
+} = require('../controllers/cart/vendorCartController');
 
 // Get vendor cart
 router.get('/:vendorId', getVendorCart);

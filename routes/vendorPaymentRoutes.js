@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const vendorPaymentController = require("../controllers/vendorPaymentController");
+const vendorPaymentController = require("../controllers/payment/vendorPaymentController");
 
 // POST /vendor-payment/create-order
 // Create Razorpay order for vendor guest orders

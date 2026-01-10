@@ -4,7 +4,7 @@ const {
   handleInitiate,
   handleViewVendor,
   handleConfirm,
-} = require("../controllers/expressOrderController");
+} = require("../controllers/order/expressOrderController");
 
 const router = express.Router();
 

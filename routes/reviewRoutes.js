@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const { authMiddleware } = require("../middleware/authMiddleware");
-const reviewController = require("../controllers/reviewController");
+const { authMiddleware } = require("../middleware/auth/authMiddleware");
+const reviewController = require("../controllers/review/reviewController");
 
 // User submits or updates a review for an order
 router.post("/order/:orderId", authMiddleware, reviewController.upsertReview);

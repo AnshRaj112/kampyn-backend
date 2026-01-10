@@ -4,7 +4,7 @@ const {
   bulkTransferRetailItems,
   getTransferOrdersForReceiver,
   confirmTransfer,
-} = require("../controllers/venodorTransferController");
+} = require("../controllers/vendor/venodorTransferController");
 
 router.post("/transfer", bulkTransferRetailItems);
 router.get("/transfer-orders/:receiverId", getTransferOrdersForReceiver);

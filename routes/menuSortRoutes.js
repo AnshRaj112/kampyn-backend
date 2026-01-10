@@ -1,7 +1,7 @@
 // routes/menuSortRoutes.js
 const express = require("express");
 const router = express.Router();
-const menuSortController = require("../controllers/menuSortController");
+const menuSortController = require("../controllers/menu/menuSortController");
 
 // Get menu sort order
 router.get("/order", menuSortController.getMenuSortOrder);

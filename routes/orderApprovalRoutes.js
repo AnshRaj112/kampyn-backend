@@ -3,7 +3,7 @@
 
 const express = require("express");
 const router = express.Router();
-const orderApprovalController = require("../controllers/orderApprovalController");
+const orderApprovalController = require("../controllers/order/orderApprovalController");
 
 // Submit order for vendor approval (instead of direct payment)
 router.post("/submit/:userId", orderApprovalController.submitOrderForApproval);

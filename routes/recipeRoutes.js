@@ -1,11 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const recipeController = require("../controllers/recipeController");
+const recipeController = require("../controllers/item/recipeController");
 
 // Import authentication middleware
-const vendorAuthMiddleware = require("../middleware/vendorAuthMiddleware");
-const { uniAuthMiddleware } = require("../middleware/uniAuthMiddleware");
-const { authMiddleware } = require("../middleware/authMiddleware");
+const vendorAuthMiddleware = require("../middleware/auth/vendorAuthMiddleware");
+const { uniAuthMiddleware } = require("../middleware/auth/uniAuthMiddleware");
+const { authMiddleware } = require("../middleware/auth/authMiddleware");
 
 // Vendor Routes (Protected)
 router.post("/vendor", vendorAuthMiddleware, recipeController.createRecipe);

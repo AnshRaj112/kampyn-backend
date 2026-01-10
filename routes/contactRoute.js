@@ -1,5 +1,5 @@
 const express = require("express");
-const { sendContactEmail } = require("../controllers/contactController");
+const { sendContactEmail } = require("../controllers/contact/contactController");
 
 const router = express.Router();
 

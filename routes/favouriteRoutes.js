@@ -4,7 +4,7 @@ const {
   getFavourites,
   getFavouritesByUni,
   toggleFavourite,
-} = require("../controllers/favouritesController");
+} = require("../controllers/favourites/favouritesController");
 
 router.get("/:userId", getFavourites);
 router.get("/:userId/:uniId", getFavouritesByUni);

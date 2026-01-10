@@ -6,7 +6,7 @@ const {
   getCustomerBillingHistory,
   getBillingInfoByOrderNumber,
   updateBillingStatus
-} = require('../controllers/billingInfoController');
+} = require('../controllers/account/billingInfoController');
 
 // Save billing information
 router.post('/', saveBillingInfo);

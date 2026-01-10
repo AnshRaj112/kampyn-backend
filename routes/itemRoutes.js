@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const itemController = require("../controllers/itemController");
+const itemController = require("../controllers/item/itemController");
 const Retail = require('../models/item/Retail');
 const Produce = require('../models/item/Produce');
 const Raw = require('../models/item/Raw');
-const { getAllSpecialsByUniId } = require('../controllers/itemController');
+const { getAllSpecialsByUniId } = require('../controllers/item/itemController');
 const logger = require('../utils/pinoLogger');
 
 router.get(

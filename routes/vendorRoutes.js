@@ -11,7 +11,7 @@ const {
   updateDeliverySettings,
   toggleVendorAvailability,
   getVendorAvailability
-} = require("../controllers/vendorController");
+} = require("../controllers/vendor/vendorController");
 const Vendor = require("../models/account/Vendor");
 const Uni = require("../models/account/Uni");
 
