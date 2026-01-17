@@ -19,7 +19,7 @@
   "license": "ISC",
   "dependencies": {
     "archiver": "7.0.1",
-    "argon2": "0.31.2",
+    "argon2": "0.44.0",
     "cloudinary": "^2.6.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
