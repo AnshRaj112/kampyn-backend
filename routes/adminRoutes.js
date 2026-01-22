@@ -938,4 +938,460 @@ router.delete("/help-messages/:messageId", strictLimiter, async (req, res) => {
   }
 });
 
+/**
+ * GET /admin/monitoring/stats
+ * Get server monitoring statistics
+ * No authentication required
+ */
+router.get("/monitoring/stats", adminLimiter, async (req, res) => {
+  try {
+    const { ServerEvent, ApiHit, DailyApiStats } = require("../models/ServerMonitoring");
+    
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentMonth = today.substring(0, 7);
+    const currentYear = today.substring(0, 4);
+    
+    // Get current server status
+    const lastEvent = await ServerEvent.findOne().sort({ timestamp: -1 }).lean();
+    const isRunning = lastEvent?.eventType === 'start' || lastEvent?.eventType === 'active';
+    
+    // Get today's API hits
+    const todayStats = await DailyApiStats.findOne({ date: today }).lean();
+    const todayHits = todayStats?.totalHits || 0;
+    
+    // Get this month's API hits
+    const monthHits = await ApiHit.countDocuments({ month: currentMonth });
+    
+    // Get this year's API hits
+    const yearHits = await ApiHit.countDocuments({ year: currentYear });
+    
+    // Get server events (last 50)
+    const recentEvents = await ServerEvent.find()
+      .sort({ timestamp: -1 })
+      .limit(50)
+      .lean();
+    
+    // Get crashes
+    const crashes = await ServerEvent.find({ eventType: 'crash' })
+      .sort({ timestamp: -1 })
+      .limit(20)
+      .lean();
+    
+    // Calculate uptime
+    const lastStart = await ServerEvent.findOne({ eventType: 'start' })
+      .sort({ timestamp: -1 })
+      .lean();
+    
+    let uptime = null;
+    if (lastStart && isRunning) {
+      uptime = Math.floor((now - new Date(lastStart.timestamp)) / 1000); // seconds
+    }
+    
+    // Get idle periods (gaps between requests)
+    const idlePeriods = await getIdlePeriods();
+    
+    // Safely convert todayStats
+    let todayStatsData = null;
+    if (todayStats) {
+      try {
+        todayStatsData = {
+          averageResponseTime: todayStats.averageResponseTime || 0,
+          hitsByHour: convertMapToObject(todayStats.hitsByHour),
+          hitsByEndpoint: convertMapToObject(todayStats.hitsByEndpoint),
+          hitsByMethod: convertMapToObject(todayStats.hitsByMethod)
+        };
+      } catch (err) {
+        logger.error({ error: err.message, todayStats }, 'Error converting todayStats');
+        todayStatsData = {
+          averageResponseTime: todayStats.averageResponseTime || 0,
+          hitsByHour: {},
+          hitsByEndpoint: {},
+          hitsByMethod: {}
+        };
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        serverStatus: {
+          isRunning,
+          lastEvent: lastEvent ? {
+            type: lastEvent.eventType,
+            timestamp: lastEvent.timestamp,
+            details: lastEvent.details
+          } : null,
+          uptime: uptime ? {
+            seconds: uptime,
+            formatted: formatUptime(uptime)
+          } : null
+        },
+        apiHits: {
+          today: todayHits,
+          month: monthHits,
+          year: yearHits,
+          todayStats: todayStatsData
+        },
+        crashes: Array.isArray(crashes) ? crashes.map(c => ({
+          timestamp: c.timestamp,
+          error: c.error,
+          details: c.details
+        })) : [],
+        recentEvents: Array.isArray(recentEvents) ? recentEvents.map(e => ({
+          type: e.eventType,
+          timestamp: e.timestamp,
+          details: e.details,
+          error: e.error
+        })) : [],
+        idlePeriods
+      },
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error getting monitoring stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get monitoring stats",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/monitoring/api-hits
+ * Get API hits with filtering
+ * No authentication required
+ */
+router.get("/monitoring/api-hits", adminLimiter, async (req, res) => {
+  try {
+    const { ApiHit, DailyApiStats } = require("../models/ServerMonitoring");
+    const { date, month, year, endpoint, limit = 100 } = req.query;
+    
+    let query = {};
+    if (date) query.date = date;
+    if (month) query.month = month;
+    if (year) query.year = year;
+    if (endpoint) query.endpoint = { $regex: endpoint, $options: 'i' };
+    
+    const hits = await ApiHit.find(query)
+      .sort({ timestamp: -1 })
+      .limit(parseInt(limit))
+      .lean();
+    
+    res.json({
+      success: true,
+      data: hits,
+      count: hits.length,
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error getting API hits:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get API hits",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/monitoring/detailed-analytics
+ * Get detailed analytics with graphs data
+ * No authentication required
+ */
+router.get("/monitoring/detailed-analytics", adminLimiter, async (req, res) => {
+  try {
+    const { ApiHit } = require("../models/ServerMonitoring");
+    const { startDate, endDate, endpoint, category } = req.query;
+    
+    const now = new Date();
+    const defaultEndDate = endDate || now.toISOString().split('T')[0];
+    const defaultStartDate = startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    let query = {
+      date: { $gte: defaultStartDate, $lte: defaultEndDate }
+    };
+    
+    if (endpoint) {
+      query.endpoint = { $regex: endpoint, $options: 'i' };
+    }
+    
+    if (category) {
+      query.endpointCategory = category;
+    }
+    
+    const hits = await ApiHit.find(query)
+      .sort({ timestamp: 1 })
+      .lean();
+    
+    // Process data for graphs
+    const hourlyData = {};
+    const endpointData = {};
+    const statusCodeData = {};
+    const categoryData = {};
+    const authEndpoints = { login: 0, signup: 0, logout: 0, other: 0 };
+    const responseTimeData = [];
+    
+    hits.forEach(hit => {
+      // Hourly distribution
+      const hourKey = `${hit.date} ${hit.hour}:00`;
+      hourlyData[hourKey] = (hourlyData[hourKey] || 0) + 1;
+      
+      // Endpoint distribution
+      endpointData[hit.endpoint] = (endpointData[hit.endpoint] || 0) + 1;
+      
+      // Status code distribution
+      statusCodeData[hit.statusCode] = (statusCodeData[hit.statusCode] || 0) + 1;
+      
+      // Category distribution
+      categoryData[hit.endpointCategory] = (categoryData[hit.endpointCategory] || 0) + 1;
+      
+      // Auth endpoints
+      if (hit.isAuthEndpoint) {
+        if (hit.endpoint.includes('login')) authEndpoints.login++;
+        else if (hit.endpoint.includes('signup') || hit.endpoint.includes('register')) authEndpoints.signup++;
+        else if (hit.endpoint.includes('logout')) authEndpoints.logout++;
+        else authEndpoints.other++;
+      }
+      
+      // Response time data
+      responseTimeData.push({
+        timestamp: hit.timestamp,
+        responseTime: hit.responseTime,
+        endpoint: hit.endpoint
+      });
+    });
+    
+    // Format hourly data for line chart
+    const hourlyChartData = Object.entries(hourlyData)
+      .map(([time, count]) => ({ time, count }))
+      .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    
+    // Format endpoint data for bar chart (top 20)
+    const topEndpoints = Object.entries(endpointData)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 20)
+      .map(([endpoint, count]) => ({ endpoint, count }));
+    
+    // Format status code data
+    const statusCodeChartData = Object.entries(statusCodeData)
+      .map(([code, count]) => ({ code: String(code), count }))
+      .sort((a, b) => parseInt(a.code) - parseInt(b.code));
+    
+    // Format category data
+    const categoryChartData = Object.entries(categoryData)
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => b.count - a.count);
+    
+    // Calculate average response time by hour
+    const avgResponseTimeByHour = {};
+    hits.forEach(hit => {
+      const hourKey = `${hit.date} ${hit.hour}:00`;
+      if (!avgResponseTimeByHour[hourKey]) {
+        avgResponseTimeByHour[hourKey] = { total: 0, count: 0 };
+      }
+      avgResponseTimeByHour[hourKey].total += hit.responseTime;
+      avgResponseTimeByHour[hourKey].count += 1;
+    });
+    
+    const responseTimeChartData = Object.entries(avgResponseTimeByHour)
+      .map(([time, data]) => ({
+        time,
+        avgResponseTime: Math.round(data.total / data.count)
+      }))
+      .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          totalHits: hits.length,
+          dateRange: { start: defaultStartDate, end: defaultEndDate },
+          uniqueEndpoints: Object.keys(endpointData).length,
+          averageResponseTime: hits.length > 0 
+            ? Math.round(hits.reduce((sum, h) => sum + h.responseTime, 0) / hits.length)
+            : 0
+        },
+        charts: {
+          hourlyHits: hourlyChartData,
+          topEndpoints: topEndpoints,
+          statusCodes: statusCodeChartData,
+          categories: categoryChartData,
+          authEndpoints: authEndpoints,
+          responseTime: responseTimeChartData
+        },
+        authDetails: {
+          login: hits.filter(h => h.endpoint.includes('login')).length,
+          signup: hits.filter(h => h.endpoint.includes('signup') || h.endpoint.includes('register')).length,
+          logout: hits.filter(h => h.endpoint.includes('logout')).length,
+          total: hits.filter(h => h.isAuthEndpoint).length
+        }
+      },
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error getting detailed analytics:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get detailed analytics",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/monitoring/daily-stats
+ * Get daily statistics for a date range
+ * No authentication required
+ */
+router.get("/monitoring/daily-stats", adminLimiter, async (req, res) => {
+  try {
+    const { DailyApiStats } = require("../models/ServerMonitoring");
+    const { startDate, endDate, limit = 30 } = req.query;
+    
+    let query = {};
+    if (startDate && endDate) {
+      query.date = { $gte: startDate, $lte: endDate };
+    } else if (startDate) {
+      query.date = { $gte: startDate };
+    } else if (endDate) {
+      query.date = { $lte: endDate };
+    }
+    
+    const stats = await DailyApiStats.find(query)
+      .sort({ date: -1 })
+      .limit(parseInt(limit))
+      .lean();
+    
+    res.json({
+      success: true,
+      data: Array.isArray(stats) ? stats.map(s => ({
+        date: s.date,
+        totalHits: s.totalHits,
+        averageResponseTime: s.averageResponseTime,
+        hitsByHour: convertMapToObject(s.hitsByHour),
+        hitsByEndpoint: convertMapToObject(s.hitsByEndpoint),
+        hitsByMethod: convertMapToObject(s.hitsByMethod),
+        hitsByStatusCode: convertMapToObject(s.hitsByStatusCode)
+      })) : [],
+      count: Array.isArray(stats) ? stats.length : 0,
+      requestedBy: 'anonymous'
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error getting daily stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get daily stats",
+      error: error.message
+    });
+  }
+});
+
+// Helper function to convert Map fields to plain objects
+function convertMapToObject(mapField) {
+  // Handle null/undefined
+  if (mapField == null) {
+    return {};
+  }
+  
+  // If it's already a plain object (most common case with .lean()), return it directly
+  if (typeof mapField === 'object' && mapField.constructor === Object) {
+    return mapField;
+  }
+  
+  // If it's a Map, convert it to object
+  if (mapField instanceof Map) {
+    try {
+      return Object.fromEntries(mapField);
+    } catch (err) {
+      logger.error({ error: err.message }, 'Error converting Map to object');
+      return {};
+    }
+  }
+  
+  // If it's an array of [key, value] pairs, convert it
+  if (Array.isArray(mapField)) {
+    try {
+      return Object.fromEntries(mapField);
+    } catch (err) {
+      logger.error({ error: err.message }, 'Error converting array to object');
+      return {};
+    }
+  }
+  
+  // Fallback to empty object for any other type
+  logger.warn({ type: typeof mapField, value: mapField }, 'Unexpected type in convertMapToObject');
+  return {};
+}
+
+// Helper function to get idle periods
+async function getIdlePeriods() {
+  try {
+    const { ApiHit } = require("../models/ServerMonitoring");
+    
+    // Get last 24 hours of API hits, sorted by timestamp
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const hits = await ApiHit.find({ timestamp: { $gte: oneDayAgo } })
+      .sort({ timestamp: 1 })
+      .select('timestamp')
+      .lean();
+    
+    if (hits.length < 2) return [];
+    
+    const idlePeriods = [];
+    const IDLE_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
+    
+    for (let i = 1; i < hits.length; i++) {
+      const gap = new Date(hits[i].timestamp) - new Date(hits[i - 1].timestamp);
+      if (gap > IDLE_THRESHOLD) {
+        idlePeriods.push({
+          start: hits[i - 1].timestamp,
+          end: hits[i].timestamp,
+          duration: Math.floor(gap / 1000), // seconds
+          formatted: formatDuration(Math.floor(gap / 1000))
+        });
+      }
+    }
+    
+    return idlePeriods.slice(-10); // Return last 10 idle periods
+  } catch (error) {
+    logger.error({ error: error.message }, 'Error getting idle periods');
+    return [];
+  }
+}
+
+// Helper function to format uptime
+function formatUptime(seconds) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m ${secs}s`;
+  } else if (hours > 0) {
+    return `${hours}h ${minutes}m ${secs}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  } else {
+    return `${secs}s`;
+  }
+}
+
+// Helper function to format duration
+function formatDuration(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  } else {
+    return `${secs}s`;
+  }
+}
+
 module.exports = router; 

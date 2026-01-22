@@ -64,6 +64,7 @@ const orderApprovalRoutes = require("./routes/orderApprovalRoutes");
 const menuSortRoutes = require("./routes/menuSortRoutes");
 const vendorNotificationRoutes = require("./routes/vendorNotificationRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
+const { trackApiHit } = require("./middleware/apiTrackingMiddleware");
 const app = express();
 
 app.use(express.json()); // ✅ Parses incoming JSON data
@@ -159,6 +160,9 @@ app.use(
 
 // ✅ Ensure MONGO_URL exists
 
+// ✅ API Tracking Middleware - Track all API hits
+app.use(trackApiHit);
+
 // ✅ Health check endpoint for Render
 app.get("/api/health", (req, res) => {
   res.status(200).json({
@@ -244,7 +248,7 @@ async function startServer() {
   try {
     await connectDB();
 
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
       logger.info({ port: PORT }, "Server running");
 
       const dbStatus = {
@@ -257,6 +261,24 @@ async function startServer() {
       };
       logger.info({ dbStatus }, "Database Connection Status");
 
+      // Track server start
+      try {
+        const { ServerEvent } = require("./models/ServerMonitoring");
+        await ServerEvent.create({
+          eventType: 'start',
+          timestamp: new Date(),
+          details: {
+            port: PORT,
+            nodeVersion: process.version,
+            platform: process.platform,
+            dbStatus
+          }
+        });
+        logger.info("Server start event recorded");
+      } catch (err) {
+        logger.error({ error: err.message }, "Failed to record server start event");
+      }
+
       startPeriodicCleanup(10 * 60 * 1000);
       logger.info("Cache locking system initialized with periodic cleanup");
       logger.info("Admin authentication system ready");
@@ -266,8 +288,118 @@ async function startServer() {
     });
   } catch (error) {
     logger.error({ error: error.message }, "Unable to start server - MongoDB connection failed");
+    
+    // Only track server crash if database is connected (check Cache cluster)
+    // If DB connection failed, we can't write to it anyway
+    if (Cluster_Cache_Analytics.readyState === 1) {
+      try {
+        const { ServerEvent } = require("./models/ServerMonitoring");
+        await ServerEvent.create({
+          eventType: 'crash',
+          timestamp: new Date(),
+          error: error.message,
+          details: {
+            stack: error.stack,
+            port: PORT,
+            reason: 'MongoDB connection failed'
+          }
+        });
+      } catch (err) {
+        // Ignore errors when tracking crash - DB might not be available
+        logger.error({ error: err.message }, "Failed to record crash event (DB unavailable)");
+      }
+    }
+    
     process.exit(1);
   }
 }
+
+// Track unhandled errors and crashes
+process.on('uncaughtException', async (error) => {
+  logger.error({ error: error.message, stack: error.stack }, "Uncaught Exception");
+  
+  // Only track if database is connected
+  if (Cluster_Cache_Analytics && Cluster_Cache_Analytics.readyState === 1) {
+    try {
+      const { ServerEvent } = require("./models/ServerMonitoring");
+      await ServerEvent.create({
+        eventType: 'crash',
+        timestamp: new Date(),
+        error: error.message,
+        details: {
+          stack: error.stack,
+          type: 'uncaughtException'
+        }
+      });
+    } catch (err) {
+      // Ignore errors when tracking crash - DB might not be available
+      logger.error({ error: err.message }, "Failed to record crash event");
+    }
+  }
+  
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+  logger.error({ reason, promise }, "Unhandled Rejection");
+  
+  // Only track if database is connected
+  if (Cluster_Cache_Analytics && Cluster_Cache_Analytics.readyState === 1) {
+    try {
+      const { ServerEvent } = require("./models/ServerMonitoring");
+      await ServerEvent.create({
+        eventType: 'crash',
+        timestamp: new Date(),
+        error: reason?.toString() || 'Unhandled Promise Rejection',
+        details: {
+          type: 'unhandledRejection',
+          promise: promise?.toString()
+        }
+      });
+    } catch (err) {
+      // Ignore errors when tracking crash - DB might not be available
+      logger.error({ error: err.message }, "Failed to record crash event");
+    }
+  }
+});
+
+// Track graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info("SIGTERM received, shutting down gracefully");
+  
+  try {
+    const { ServerEvent } = require("./models/ServerMonitoring");
+    await ServerEvent.create({
+      eventType: 'stop',
+      timestamp: new Date(),
+      details: {
+        signal: 'SIGTERM'
+      }
+    });
+  } catch (err) {
+    // Ignore errors when tracking stop
+  }
+  
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  logger.info("SIGINT received, shutting down gracefully");
+  
+  try {
+    const { ServerEvent } = require("./models/ServerMonitoring");
+    await ServerEvent.create({
+      eventType: 'stop',
+      timestamp: new Date(),
+      details: {
+        signal: 'SIGINT'
+      }
+    });
+  } catch (err) {
+    // Ignore errors when tracking stop
+  }
+  
+  process.exit(0);
+});
 
 startServer();
