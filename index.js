@@ -9,7 +9,17 @@ const cookieParser = require("cookie-parser");
 const path = require("path");
 const logger = require("./utils/pinoLogger");
 
-// Import CSRF protection middleware
+// Import security configurations
+const {
+  configureHelmet,
+  applyPermissionsPolicy,
+  configureTrustProxy,
+  additionalSecurityHeaders,
+} = require('./middleware/securityConfig');
+const { getCorsConfig } = require('./middleware/corsConfig');
+const { apiLimiter } = require('./middleware/rateLimit');
+
+// Import CSRF protection middleware (currently disabled)
 const lusca = require('lusca');
 const { csrfProtection, csrfTokenEndpoint, refreshCSRFToken } = require('./middleware/csrfMiddleware');
 
@@ -65,11 +75,38 @@ const menuSortRoutes = require("./routes/menuSortRoutes");
 const vendorNotificationRoutes = require("./routes/vendorNotificationRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const { trackApiHit } = require("./middleware/apiTrackingMiddleware");
+
+// ✅ Initialize Express app
 const app = express();
 
-app.use(express.json()); // ✅ Parses incoming JSON data
-app.use(express.urlencoded({ extended: true })); // ✅ Parses form data
-app.use(cookieParser()); // 🔒 Parse cookies for admin authentication
+// ============================================================================
+// 🔒 SECURITY MIDDLEWARE (Applied in correct order)
+// ============================================================================
+
+// 1. Trust proxy - MUST be first for Render deployment
+configureTrustProxy(app);
+
+// 2. Helmet security headers - Comprehensive protection
+app.use(configureHelmet());
+
+// 3. Permissions Policy - Additional browser feature restrictions
+app.use(applyPermissionsPolicy);
+
+// 4. Additional security headers - Cache control, etc.
+app.use(additionalSecurityHeaders);
+
+// 5. CORS - Must come before routes
+app.use(cors(getCorsConfig()));
+
+// 6. Body parsers - Parse incoming requests
+app.use(express.json({ limit: '10mb' })); // Limit payload size
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 7. Cookie parser - Parse cookies for authentication
+app.use(cookieParser());
+
+// 8. Global rate limiting - Protect against DDoS
+app.use(apiLimiter);
 
 // 🔒 CSRF Protection - DISABLED
 // CSRF protection has been disabled for development/testing purposes
@@ -117,46 +154,8 @@ app.use(cookieParser()); // 🔒 Parse cookies for admin authentication
 // });
 
 // ✅ Load environment variables
-// const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const PORT = process.env.PORT || 5001;
 
-// Get all allowed origins from environment variables
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.FRONTEND_URL_2,
-  process.env.FRONTEND_URL_3,
-  process.env.FRONTEND_URL_4,
-  process.env.FRONTEND_URL_5,
-]
-  .filter(Boolean) // Remove any undefined/null values
-  .map((url) => url.trim()) // Remove any whitespace
-  .reduce((acc, url) => {
-    // If the URL is localhost, add both http and https versions
-    if (url.includes("localhost")) {
-      acc.push(url.replace("http://", "https://"));
-      acc.push(url.replace("https://", "http://"));
-    }
-    acc.push(url);
-    return acc;
-  }, []);
-
-// ✅ Fix CORS issues: Use a single instance
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        logger.info({ origin, allowedOrigins }, "CORS blocked for origin");
-        callback(new Error("CORS not allowed: " + origin));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-CSRF-Token"],
-    exposedHeaders: ["Content-Range", "X-Content-Range"],
-  })
-);
 
 // ✅ Ensure MONGO_URL exists
 
@@ -230,16 +229,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Internal Server Error" });
 });
 
-// ✅ Redirect HTTP to HTTPS in Production
-if (process.env.NODE_ENV === "production") {
-  app.use((req, res, next) => {
-    if (req.headers["x-forwarded-proto"] !== "https") {
-      return res.redirect("https://" + req.headers.host + req.url);
-    }
-    next();
-  });
-}
-
 // Export app for testing
 module.exports = app;
 
@@ -288,7 +277,7 @@ async function startServer() {
     });
   } catch (error) {
     logger.error({ error: error.message }, "Unable to start server - MongoDB connection failed");
-    
+
     // Only track server crash if database is connected (check Cache cluster)
     // If DB connection failed, we can't write to it anyway
     if (Cluster_Cache_Analytics.readyState === 1) {
@@ -309,7 +298,7 @@ async function startServer() {
         logger.error({ error: err.message }, "Failed to record crash event (DB unavailable)");
       }
     }
-    
+
     process.exit(1);
   }
 }
@@ -317,7 +306,7 @@ async function startServer() {
 // Track unhandled errors and crashes
 process.on('uncaughtException', async (error) => {
   logger.error({ error: error.message, stack: error.stack }, "Uncaught Exception");
-  
+
   // Only track if database is connected
   if (Cluster_Cache_Analytics && Cluster_Cache_Analytics.readyState === 1) {
     try {
@@ -336,13 +325,13 @@ process.on('uncaughtException', async (error) => {
       logger.error({ error: err.message }, "Failed to record crash event");
     }
   }
-  
+
   process.exit(1);
 });
 
 process.on('unhandledRejection', async (reason, promise) => {
   logger.error({ reason, promise }, "Unhandled Rejection");
-  
+
   // Only track if database is connected
   if (Cluster_Cache_Analytics && Cluster_Cache_Analytics.readyState === 1) {
     try {
@@ -366,7 +355,7 @@ process.on('unhandledRejection', async (reason, promise) => {
 // Track graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info("SIGTERM received, shutting down gracefully");
-  
+
   try {
     const { ServerEvent } = require("./models/ServerMonitoring");
     await ServerEvent.create({
@@ -379,13 +368,13 @@ process.on('SIGTERM', async () => {
   } catch (err) {
     // Ignore errors when tracking stop
   }
-  
+
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   logger.info("SIGINT received, shutting down gracefully");
-  
+
   try {
     const { ServerEvent } = require("./models/ServerMonitoring");
     await ServerEvent.create({
@@ -398,7 +387,7 @@ process.on('SIGINT', async () => {
   } catch (err) {
     // Ignore errors when tracking stop
   }
-  
+
   process.exit(0);
 });
 

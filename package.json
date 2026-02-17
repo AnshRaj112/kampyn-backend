@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-"start": "node scripts/start-server.js",
+    "start": "node scripts/start-server.js",
     "dev": "nodemon index.js",
     "verify-debug": "node scripts/verify-debug.js",
     "fix-debug": "node scripts/fix-debug.js",
@@ -27,6 +27,7 @@
     "dotenv": "16.6.1",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
+    "helmet": "8.1.0",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "lusca": "^1.7.0",

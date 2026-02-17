@@ -2,15 +2,16 @@ const express = require("express");
 const router = express.Router();
 const adminAuthController = require("../../controllers/auth/adminAuthController");
 const { adminAuthMiddleware } = require("../../middleware/auth/adminAuthMiddleware");
+const { perApiAuthLimiter } = require("../../middleware/rateLimit");
 
-// Public routes (no authentication required)
-router.post("/login", adminAuthController.adminLogin);
-router.post("/logout", adminAuthController.adminLogout);
+// Public routes with per-API rate limiting
+router.post("/login", perApiAuthLimiter, adminAuthController.adminLogin);
+router.post("/logout", perApiAuthLimiter, adminAuthController.adminLogout);
 
-// Protected routes (authentication required)
-router.get("/profile", adminAuthMiddleware, adminAuthController.getAdminProfile);
-router.put("/profile", adminAuthMiddleware, adminAuthController.updateAdminProfile);
-router.put("/change-password", adminAuthMiddleware, adminAuthController.changePassword);
-router.post("/refresh-token", adminAuthMiddleware, adminAuthController.refreshToken);
+// Protected routes (authentication required) with per-API rate limiting
+router.get("/profile", perApiAuthLimiter, adminAuthMiddleware, adminAuthController.getAdminProfile);
+router.put("/profile", perApiAuthLimiter, adminAuthMiddleware, adminAuthController.updateAdminProfile);
+router.put("/change-password", perApiAuthLimiter, adminAuthMiddleware, adminAuthController.changePassword);
+router.post("/refresh-token", perApiAuthLimiter, adminAuthMiddleware, adminAuthController.refreshToken);
 
 module.exports = router; 
