@@ -5,7 +5,7 @@ const { atomicCache } = require("../utils/cacheUtils");
 const invoiceController = require("../controllers/invoice/invoiceController");
 const Uni = require("../models/account/Uni");
 const Vendor = require("../models/account/Vendor");
-const { adminLimiter, strictLimiter } = require("../middleware/rateLimit");
+const { adminLimiter, strictLimiter, sharedStore } = require("../middleware/rateLimit");
 const logger = require("../utils/pinoLogger");
 
 // Authentication removed - anyone can access admin routes for now
@@ -65,7 +65,7 @@ router.post("/locks/release/:orderId", async (req, res) => {
   try {
     const { orderId } = req.params;
     const result = await forceReleaseOrderLocks(orderId);
-    
+
     res.json({
       success: true,
       data: result,
@@ -90,7 +90,7 @@ router.post("/locks/release/:orderId", async (req, res) => {
 router.post("/locks/cleanup", async (req, res) => {
   try {
     const result = await cleanupExpiredOrders();
-    
+
     res.json({
       success: true,
       data: result,
@@ -115,7 +115,7 @@ router.post("/locks/cleanup", async (req, res) => {
 router.post("/locks/clear-all", async (req, res) => {
   try {
     const result = await atomicCache.clearAllLocks();
-    
+
     res.json({
       success: true,
       data: result,
@@ -141,7 +141,7 @@ router.get("/locks/items/:itemId", async (req, res) => {
   try {
     const { itemId } = req.params;
     const locks = await atomicCache.getLocksForItem(itemId);
-    
+
     res.json({
       success: true,
       data: locks,
@@ -175,7 +175,7 @@ router.get("/system/health", async (req, res) => {
       arch: process.arch,
       nodeEnv: process.env.NODE_ENV || 'development'
     };
-    
+
     res.json({
       success: true,
       data: healthInfo,
@@ -192,6 +192,101 @@ router.get("/system/health", async (req, res) => {
 });
 
 /**
+ * GET /admin/rate-limits/blocked-ips
+ * Get list of all currently rate-limited IP addresses
+ * No authentication required
+ */
+router.get("/rate-limits/blocked-ips", adminLimiter, async (req, res) => {
+  try {
+    logger.info("🔵 Admin: Fetching blocked IP addresses");
+
+    // Get the rate limit from query params or use default
+    const limit = parseInt(req.query.limit) || 200;
+
+    const blockedIPs = sharedStore.getBlockedIPs(limit);
+
+    logger.info(`✅ Admin: Found ${blockedIPs.length} blocked IP addresses`);
+
+    res.json({
+      success: true,
+      data: blockedIPs,
+      total: blockedIPs.length,
+      limit: limit,
+      requestedBy: 'anonymous',
+      timestamp: new Date()
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error fetching blocked IPs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch blocked IP addresses",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /admin/rate-limits/release/:ip
+ * Release a specific IP address from rate limiting
+ * No authentication required
+ */
+router.post("/rate-limits/release/:ip", strictLimiter, async (req, res) => {
+  try {
+    const { ip } = req.params;
+    logger.info(`🔵 Admin: Releasing rate limit for IP ${ip}`);
+
+    // Reset the IP in the store
+    await sharedStore.resetKey(ip);
+
+    logger.info(`✅ Admin: Successfully released rate limit for IP ${ip}`);
+
+    res.json({
+      success: true,
+      message: `Rate limit released for IP ${ip}`,
+      ip: ip,
+      requestedBy: 'anonymous',
+      timestamp: new Date()
+    });
+  } catch (error) {
+    logger.error(`❌ Admin: Error releasing rate limit for IP ${req.params.ip}:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to release rate limit",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /admin/rate-limits/clear-all
+ * Clear all rate limits (use with caution)
+ * No authentication required
+ */
+router.post("/rate-limits/clear-all", strictLimiter, async (req, res) => {
+  try {
+    logger.info("🔵 Admin: Clearing all rate limits");
+
+    await sharedStore.resetAll();
+
+    logger.info("✅ Admin: Successfully cleared all rate limits");
+
+    res.json({
+      success: true,
+      message: "All rate limits have been cleared",
+      requestedBy: 'anonymous',
+      timestamp: new Date()
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error clearing all rate limits:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to clear all rate limits",
+      error: error.message
+    });
+  }
+});
+
+/**
  * GET /admin/invoices
  * Get all invoices with pagination and filtering
  * No authentication required
@@ -199,7 +294,7 @@ router.get("/system/health", async (req, res) => {
 router.get("/invoices", adminLimiter, async (req, res) => {
   try {
     const { page = 1, limit = 10, status, type, recipientType, startDate, endDate } = req.query;
-    
+
     const result = await invoiceController.getAdminInvoices({
       page: parseInt(page),
       limit: parseInt(limit),
@@ -209,7 +304,7 @@ router.get("/invoices", adminLimiter, async (req, res) => {
       startDate,
       endDate
     });
-    
+
     res.json({
       success: true,
       data: result.invoices,
@@ -234,7 +329,7 @@ router.get("/invoices", adminLimiter, async (req, res) => {
 router.get("/invoices/stats", adminLimiter, async (req, res) => {
   try {
     const stats = await invoiceController.getInvoiceStats();
-    
+
     res.json({
       success: true,
       data: stats,
@@ -258,16 +353,16 @@ router.get("/invoices/stats", adminLimiter, async (req, res) => {
 router.post("/invoices/bulk-download", async (req, res) => {
   try {
     const { invoiceIds, format = 'pdf' } = req.body;
-    
+
     if (!invoiceIds || !Array.isArray(invoiceIds) || invoiceIds.length === 0) {
       return res.status(400).json({
         success: false,
         message: "Invoice IDs array is required"
       });
     }
-    
+
     const result = await invoiceController.getInvoicesForBulkDownload(invoiceIds, format);
-    
+
     res.json({
       success: true,
       data: result,
@@ -291,16 +386,16 @@ router.post("/invoices/bulk-download", async (req, res) => {
 router.post("/invoices/generate-order-invoices", async (req, res) => {
   try {
     const { orderId } = req.body;
-    
+
     if (!orderId) {
       return res.status(400).json({
         success: false,
         message: "Order ID is required"
       });
     }
-    
+
     const result = await invoiceController.generateOrderInvoices(orderId);
-    
+
     res.json({
       success: true,
       data: result,
@@ -324,7 +419,7 @@ router.post("/invoices/generate-order-invoices", async (req, res) => {
 router.get("/universities", adminLimiter, async (req, res) => {
   try {
     logger.info("🔵 Admin: Fetching all universities with details");
-    
+
     // Fetch all universities with full details
     const universities = await Uni.find({})
       .select('_id fullName email phone gstNumber packingCharge deliveryCharge platformFee isVerified isAvailable createdAt updatedAt vendors')
@@ -335,10 +430,10 @@ router.get("/universities", adminLimiter, async (req, res) => {
       universities.map(async (uni) => {
         // Count total vendors for this university
         const totalVendors = await Vendor.countDocuments({ uniID: uni._id });
-        
+
         // Count active vendors (vendors that are marked as available in the uni's vendors array)
         const activeVendors = uni.vendors.filter(vendor => vendor.isAvailable === 'Y').length;
-        
+
         return {
           _id: uni._id,
           fullName: uni.fullName,
@@ -363,7 +458,7 @@ router.get("/universities", adminLimiter, async (req, res) => {
     universitiesWithVendorCounts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     logger.info(`✅ Admin: Found ${universitiesWithVendorCounts.length} universities`);
-    
+
     res.json({
       success: true,
       data: universitiesWithVendorCounts,
@@ -389,7 +484,7 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
   try {
     const { uniId } = req.params;
     logger.info(`🔵 Admin: Fetching details for university ${uniId}`);
-    
+
     // Fetch university details
     const university = await Uni.findById(uniId)
       .select('_id fullName email phone gstNumber packingCharge deliveryCharge isVerified isAvailable createdAt updatedAt vendors')
@@ -452,7 +547,7 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
     };
 
     logger.info(`✅ Admin: Found university with ${totalVendors} vendors`);
-    
+
     res.json({
       success: true,
       data: universityDetails,
@@ -625,7 +720,7 @@ router.put("/universities/bulk-platform-fees", async (req, res) => {
     // Get all university IDs for validation
     const uniIds = updates.map(update => update.uniId);
     const existingUnis = await Uni.find({ _id: { $in: uniIds } }).select('_id fullName');
-    
+
     if (existingUnis.length !== uniIds.length) {
       return res.status(400).json({
         success: false,
@@ -714,13 +809,13 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
 router.get("/help-messages", adminLimiter, async (req, res) => {
   try {
     logger.info("🔵 Admin: Fetching all help messages");
-    
+
     const ContactMessage = require("../models/users/ContactMessage");
-    
+
     // Get query parameters
     const { page = 1, limit = 50, status = 'all' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     // Build filter query
     let filter = {};
     if (status === 'read') {
@@ -728,21 +823,21 @@ router.get("/help-messages", adminLimiter, async (req, res) => {
     } else if (status === 'unread') {
       filter.isRead = false;
     }
-    
+
     // Fetch messages with pagination
     const messages = await ContactMessage.find(filter)
       .sort({ createdAt: -1 }) // Newest first
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
-    
+
     // Get total count
     const totalMessages = await ContactMessage.countDocuments(filter);
     const unreadCount = await ContactMessage.countDocuments({ isRead: false });
     const readCount = await ContactMessage.countDocuments({ isRead: true });
-    
+
     logger.info(`✅ Admin: Found ${messages.length} help messages (${unreadCount} unread)`);
-    
+
     res.json({
       success: true,
       messages: messages,
@@ -779,24 +874,24 @@ router.put("/help-messages/:messageId/read", strictLimiter, async (req, res) => 
   try {
     const { messageId } = req.params;
     logger.info(`🔵 Admin: Marking message ${messageId} as read`);
-    
+
     const ContactMessage = require("../models/users/ContactMessage");
-    
+
     const message = await ContactMessage.findByIdAndUpdate(
       messageId,
       { isRead: true },
       { new: true, runValidators: true }
     ).lean();
-    
+
     if (!message) {
       return res.status(404).json({
         success: false,
         message: "Message not found"
       });
     }
-    
+
     logger.info(`✅ Admin: Message ${messageId} marked as read`);
-    
+
     res.json({
       success: true,
       message: "Message marked as read",
@@ -825,24 +920,24 @@ router.put("/help-messages/:messageId/unread", strictLimiter, async (req, res) =
   try {
     const { messageId } = req.params;
     logger.info(`🔵 Admin: Marking message ${messageId} as unread`);
-    
+
     const ContactMessage = require("../models/users/ContactMessage");
-    
+
     const message = await ContactMessage.findByIdAndUpdate(
       messageId,
       { isRead: false },
       { new: true, runValidators: true }
     ).lean();
-    
+
     if (!message) {
       return res.status(404).json({
         success: false,
         message: "Message not found"
       });
     }
-    
+
     logger.info(`✅ Admin: Message ${messageId} marked as unread`);
-    
+
     res.json({
       success: true,
       message: "Message marked as unread",
@@ -871,20 +966,20 @@ router.get("/help-messages/:messageId", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
     logger.info(`🔵 Admin: Fetching help message ${messageId}`);
-    
+
     const ContactMessage = require("../models/users/ContactMessage");
-    
+
     const message = await ContactMessage.findById(messageId).lean();
-    
+
     if (!message) {
       return res.status(404).json({
         success: false,
         message: "Message not found"
       });
     }
-    
+
     logger.info(`✅ Admin: Retrieved help message ${messageId}`);
-    
+
     res.json({
       success: true,
       message: message,
@@ -909,20 +1004,20 @@ router.delete("/help-messages/:messageId", strictLimiter, async (req, res) => {
   try {
     const { messageId } = req.params;
     logger.info(`🔵 Admin: Deleting help message ${messageId}`);
-    
+
     const ContactMessage = require("../models/users/ContactMessage");
-    
+
     const message = await ContactMessage.findByIdAndDelete(messageId);
-    
+
     if (!message) {
       return res.status(404).json({
         success: false,
         message: "Message not found"
       });
     }
-    
+
     logger.info(`✅ Admin: Deleted help message ${messageId}`);
-    
+
     res.json({
       success: true,
       message: "Message deleted successfully",
@@ -946,51 +1041,51 @@ router.delete("/help-messages/:messageId", strictLimiter, async (req, res) => {
 router.get("/monitoring/stats", adminLimiter, async (req, res) => {
   try {
     const { ServerEvent, ApiHit, DailyApiStats } = require("../models/ServerMonitoring");
-    
+
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const currentMonth = today.substring(0, 7);
     const currentYear = today.substring(0, 4);
-    
+
     // Get current server status
     const lastEvent = await ServerEvent.findOne().sort({ timestamp: -1 }).lean();
     const isRunning = lastEvent?.eventType === 'start' || lastEvent?.eventType === 'active';
-    
+
     // Get today's API hits
     const todayStats = await DailyApiStats.findOne({ date: today }).lean();
     const todayHits = todayStats?.totalHits || 0;
-    
+
     // Get this month's API hits
     const monthHits = await ApiHit.countDocuments({ month: currentMonth });
-    
+
     // Get this year's API hits
     const yearHits = await ApiHit.countDocuments({ year: currentYear });
-    
+
     // Get server events (last 50)
     const recentEvents = await ServerEvent.find()
       .sort({ timestamp: -1 })
       .limit(50)
       .lean();
-    
+
     // Get crashes
     const crashes = await ServerEvent.find({ eventType: 'crash' })
       .sort({ timestamp: -1 })
       .limit(20)
       .lean();
-    
+
     // Calculate uptime
     const lastStart = await ServerEvent.findOne({ eventType: 'start' })
       .sort({ timestamp: -1 })
       .lean();
-    
+
     let uptime = null;
     if (lastStart && isRunning) {
       uptime = Math.floor((now - new Date(lastStart.timestamp)) / 1000); // seconds
     }
-    
+
     // Get idle periods (gaps between requests)
     const idlePeriods = await getIdlePeriods();
-    
+
     // Safely convert todayStats
     let todayStatsData = null;
     if (todayStats) {
@@ -1011,7 +1106,7 @@ router.get("/monitoring/stats", adminLimiter, async (req, res) => {
         };
       }
     }
-    
+
     res.json({
       success: true,
       data: {
@@ -1067,18 +1162,18 @@ router.get("/monitoring/api-hits", adminLimiter, async (req, res) => {
   try {
     const { ApiHit, DailyApiStats } = require("../models/ServerMonitoring");
     const { date, month, year, endpoint, limit = 100 } = req.query;
-    
+
     let query = {};
     if (date) query.date = date;
     if (month) query.month = month;
     if (year) query.year = year;
     if (endpoint) query.endpoint = { $regex: endpoint, $options: 'i' };
-    
+
     const hits = await ApiHit.find(query)
       .sort({ timestamp: -1 })
       .limit(parseInt(limit))
       .lean();
-    
+
     res.json({
       success: true,
       data: hits,
@@ -1104,27 +1199,27 @@ router.get("/monitoring/detailed-analytics", adminLimiter, async (req, res) => {
   try {
     const { ApiHit } = require("../models/ServerMonitoring");
     const { startDate, endDate, endpoint, category } = req.query;
-    
+
     const now = new Date();
     const defaultEndDate = endDate || now.toISOString().split('T')[0];
     const defaultStartDate = startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
+
     let query = {
       date: { $gte: defaultStartDate, $lte: defaultEndDate }
     };
-    
+
     if (endpoint) {
       query.endpoint = { $regex: endpoint, $options: 'i' };
     }
-    
+
     if (category) {
       query.endpointCategory = category;
     }
-    
+
     const hits = await ApiHit.find(query)
       .sort({ timestamp: 1 })
       .lean();
-    
+
     // Process data for graphs
     const hourlyData = {};
     const endpointData = {};
@@ -1132,21 +1227,21 @@ router.get("/monitoring/detailed-analytics", adminLimiter, async (req, res) => {
     const categoryData = {};
     const authEndpoints = { login: 0, signup: 0, logout: 0, other: 0 };
     const responseTimeData = [];
-    
+
     hits.forEach(hit => {
       // Hourly distribution
       const hourKey = `${hit.date} ${hit.hour}:00`;
       hourlyData[hourKey] = (hourlyData[hourKey] || 0) + 1;
-      
+
       // Endpoint distribution
       endpointData[hit.endpoint] = (endpointData[hit.endpoint] || 0) + 1;
-      
+
       // Status code distribution
       statusCodeData[hit.statusCode] = (statusCodeData[hit.statusCode] || 0) + 1;
-      
+
       // Category distribution
       categoryData[hit.endpointCategory] = (categoryData[hit.endpointCategory] || 0) + 1;
-      
+
       // Auth endpoints
       if (hit.isAuthEndpoint) {
         if (hit.endpoint.includes('login')) authEndpoints.login++;
@@ -1154,7 +1249,7 @@ router.get("/monitoring/detailed-analytics", adminLimiter, async (req, res) => {
         else if (hit.endpoint.includes('logout')) authEndpoints.logout++;
         else authEndpoints.other++;
       }
-      
+
       // Response time data
       responseTimeData.push({
         timestamp: hit.timestamp,
@@ -1162,28 +1257,28 @@ router.get("/monitoring/detailed-analytics", adminLimiter, async (req, res) => {
         endpoint: hit.endpoint
       });
     });
-    
+
     // Format hourly data for line chart
     const hourlyChartData = Object.entries(hourlyData)
       .map(([time, count]) => ({ time, count }))
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-    
+
     // Format endpoint data for bar chart (top 20)
     const topEndpoints = Object.entries(endpointData)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 20)
       .map(([endpoint, count]) => ({ endpoint, count }));
-    
+
     // Format status code data
     const statusCodeChartData = Object.entries(statusCodeData)
       .map(([code, count]) => ({ code: String(code), count }))
       .sort((a, b) => parseInt(a.code) - parseInt(b.code));
-    
+
     // Format category data
     const categoryChartData = Object.entries(categoryData)
       .map(([category, count]) => ({ category, count }))
       .sort((a, b) => b.count - a.count);
-    
+
     // Calculate average response time by hour
     const avgResponseTimeByHour = {};
     hits.forEach(hit => {
@@ -1194,14 +1289,14 @@ router.get("/monitoring/detailed-analytics", adminLimiter, async (req, res) => {
       avgResponseTimeByHour[hourKey].total += hit.responseTime;
       avgResponseTimeByHour[hourKey].count += 1;
     });
-    
+
     const responseTimeChartData = Object.entries(avgResponseTimeByHour)
       .map(([time, data]) => ({
         time,
         avgResponseTime: Math.round(data.total / data.count)
       }))
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-    
+
     res.json({
       success: true,
       data: {
@@ -1209,7 +1304,7 @@ router.get("/monitoring/detailed-analytics", adminLimiter, async (req, res) => {
           totalHits: hits.length,
           dateRange: { start: defaultStartDate, end: defaultEndDate },
           uniqueEndpoints: Object.keys(endpointData).length,
-          averageResponseTime: hits.length > 0 
+          averageResponseTime: hits.length > 0
             ? Math.round(hits.reduce((sum, h) => sum + h.responseTime, 0) / hits.length)
             : 0
         },
@@ -1249,7 +1344,7 @@ router.get("/monitoring/daily-stats", adminLimiter, async (req, res) => {
   try {
     const { DailyApiStats } = require("../models/ServerMonitoring");
     const { startDate, endDate, limit = 30 } = req.query;
-    
+
     let query = {};
     if (startDate && endDate) {
       query.date = { $gte: startDate, $lte: endDate };
@@ -1258,12 +1353,12 @@ router.get("/monitoring/daily-stats", adminLimiter, async (req, res) => {
     } else if (endDate) {
       query.date = { $lte: endDate };
     }
-    
+
     const stats = await DailyApiStats.find(query)
       .sort({ date: -1 })
       .limit(parseInt(limit))
       .lean();
-    
+
     res.json({
       success: true,
       data: Array.isArray(stats) ? stats.map(s => ({
@@ -1294,12 +1389,12 @@ function convertMapToObject(mapField) {
   if (mapField == null) {
     return {};
   }
-  
+
   // If it's already a plain object (most common case with .lean()), return it directly
   if (typeof mapField === 'object' && mapField.constructor === Object) {
     return mapField;
   }
-  
+
   // If it's a Map, convert it to object
   if (mapField instanceof Map) {
     try {
@@ -1309,7 +1404,7 @@ function convertMapToObject(mapField) {
       return {};
     }
   }
-  
+
   // If it's an array of [key, value] pairs, convert it
   if (Array.isArray(mapField)) {
     try {
@@ -1319,7 +1414,7 @@ function convertMapToObject(mapField) {
       return {};
     }
   }
-  
+
   // Fallback to empty object for any other type
   logger.warn({ type: typeof mapField, value: mapField }, 'Unexpected type in convertMapToObject');
   return {};
@@ -1329,19 +1424,19 @@ function convertMapToObject(mapField) {
 async function getIdlePeriods() {
   try {
     const { ApiHit } = require("../models/ServerMonitoring");
-    
+
     // Get last 24 hours of API hits, sorted by timestamp
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const hits = await ApiHit.find({ timestamp: { $gte: oneDayAgo } })
       .sort({ timestamp: 1 })
       .select('timestamp')
       .lean();
-    
+
     if (hits.length < 2) return [];
-    
+
     const idlePeriods = [];
     const IDLE_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
-    
+
     for (let i = 1; i < hits.length; i++) {
       const gap = new Date(hits[i].timestamp) - new Date(hits[i - 1].timestamp);
       if (gap > IDLE_THRESHOLD) {
@@ -1353,7 +1448,7 @@ async function getIdlePeriods() {
         });
       }
     }
-    
+
     return idlePeriods.slice(-10); // Return last 10 idle periods
   } catch (error) {
     logger.error({ error: error.message }, 'Error getting idle periods');
@@ -1367,7 +1462,7 @@ function formatUptime(seconds) {
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-  
+
   if (days > 0) {
     return `${days}d ${hours}h ${minutes}m ${secs}s`;
   } else if (hours > 0) {
@@ -1384,7 +1479,7 @@ function formatDuration(seconds) {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-  
+
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
   } else if (minutes > 0) {

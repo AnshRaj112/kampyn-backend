@@ -8,9 +8,93 @@ const rateLimit = require("express-rate-limit");
  * - Standard rate limit headers (RateLimit-*)
  * - Skip function for health checks
  * - Environment-specific limits
+ * - Shared memory store for admin access
  */
 
 const isProduction = process.env.NODE_ENV === 'production';
+
+// Create a shared memory store for rate limiting
+// This allows admin endpoints to access and manipulate rate limit data
+class RateLimitStore {
+  constructor() {
+    this.hits = new Map(); // Map<key, { count: number, resetTime: number }>
+    this.clients = new Map(); // Map<key, { ip: string, endpoint: string }>
+  }
+
+  async increment(key) {
+    const now = Date.now();
+    const hit = this.hits.get(key);
+
+    if (!hit || now > hit.resetTime) {
+      // First hit or expired window
+      this.hits.set(key, {
+        count: 1,
+        resetTime: now + (15 * 60 * 1000) // 15 minutes from now
+      });
+      return { totalHits: 1, resetTime: new Date(now + (15 * 60 * 1000)) };
+    } else {
+      // Increment existing hit count
+      hit.count++;
+      this.hits.set(key, hit);
+      return { totalHits: hit.count, resetTime: new Date(hit.resetTime) };
+    }
+  }
+
+  async decrement(key) {
+    const hit = this.hits.get(key);
+    if (hit && hit.count > 0) {
+      hit.count--;
+      if (hit.count === 0) {
+        this.hits.delete(key);
+      } else {
+        this.hits.set(key, hit);
+      }
+    }
+  }
+
+  async resetKey(key) {
+    this.hits.delete(key);
+    this.clients.delete(key);
+  }
+
+  async resetAll() {
+    this.hits.clear();
+    this.clients.clear();
+  }
+
+  // Get all blocked IPs (those that have hit the limit)
+  getBlockedIPs(limit = 200) {
+    const blocked = [];
+    const now = Date.now();
+
+    for (const [key, hit] of this.hits.entries()) {
+      // Only include if still within the window and hit count >= limit
+      if (now <= hit.resetTime && hit.count >= limit) {
+        const clientInfo = this.clients.get(key) || {};
+        const [ip, endpoint] = key.includes(':') ? key.split(':') : [key, 'unknown'];
+
+        blocked.push({
+          key,
+          ip: clientInfo.ip || ip,
+          endpoint: clientInfo.endpoint || endpoint,
+          hitCount: hit.count,
+          resetTime: new Date(hit.resetTime),
+          blockedUntil: new Date(hit.resetTime)
+        });
+      }
+    }
+
+    return blocked;
+  }
+
+  // Store client information for better tracking
+  setClientInfo(key, ip, endpoint) {
+    this.clients.set(key, { ip, endpoint });
+  }
+}
+
+// Create shared store instance
+const sharedStore = new RateLimitStore();
 
 // Skip rate limiting for health check endpoints
 const skipHealthChecks = (req) => {
@@ -36,7 +120,7 @@ const authLimiter = rateLimit({
 // General API rate limiter - more lenient for regular API calls
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isProduction ? 100 : 200, // More lenient in development
+  max: isProduction ? 200 : 250, // More lenient in development
   message: {
     success: false,
     message: "Too many requests from this IP, please try again later"
@@ -44,6 +128,13 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipHealthChecks,
+  store: sharedStore,
+  // Track client info for admin dashboard
+  handler: (req, res, next, options) => {
+    const identifier = req.ip || req.connection.remoteAddress || 'unknown';
+    sharedStore.setClientInfo(identifier, identifier, req.originalUrl || req.path);
+    res.status(options.statusCode).json(options.message);
+  }
 });
 
 // Admin rate limiter - moderate for admin operations
@@ -155,4 +246,6 @@ module.exports = {
   perApiAuthLimiter,
   perApiStrictLimiter,
   perApiGeneralLimiter,
+  // Shared store for admin access
+  sharedStore,
 };
