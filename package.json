@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "pm2-runtime start ecosystem.config.js",
+"start": "node scripts/start-server.js",
     "dev": "nodemon index.js",
     "verify-debug": "node scripts/verify-debug.js",
     "fix-debug": "node scripts/fix-debug.js",
