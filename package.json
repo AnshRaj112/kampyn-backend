@@ -1,10 +1,10 @@
 {
-  "name": "bitesbay-backend",
+  "name": "kampyn-backend",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node scripts/start-server.js",
+    "start": "pm2-runtime start ecosystem.config.js",
     "dev": "nodemon index.js",
     "verify-debug": "node scripts/verify-debug.js",
     "fix-debug": "node scripts/fix-debug.js",
