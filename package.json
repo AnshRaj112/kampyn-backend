@@ -1,5 +1,5 @@
 {
-  "name": "bitesbay-backend",
+  "name": "kampyn-backend",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -27,6 +27,7 @@
     "dotenv": "16.6.1",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
+    "helmet": "8.1.0",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "lusca": "^1.7.0",
@@ -36,6 +37,7 @@
     "nodemon": "^3.1.10",
     "pdfkit": "^0.14.0",
     "pino": "10.1.0",
+    "pm2": "6.0.14",
     "razorpay": "^2.9.6",
     "sanitize-filename": "^1.6.3"
   },

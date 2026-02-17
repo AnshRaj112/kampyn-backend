@@ -1,0 +1,1426 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning}
+
+\geometry{margin=1in}
+
+% Code listing settings
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!10},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red}
+}
+
+% TikZ styles for diagrams
+\tikzstyle{database} = [cylinder, shape border rotate=90, draw, minimum height=1.5cm, minimum width=1.5cm, fill=blue!20]
+\tikzstyle{model} = [rectangle, draw, fill=green!20, text width=3cm, text centered, rounded corners, minimum height=1cm]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+\title{\textbf{Kampyn Backend Database Architecture\\
+\large Comprehensive Technical Documentation}}
+\author{Database Documentation}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Executive Summary}
+
+The Kampyn backend utilizes a distributed MongoDB database architecture with six separate database clusters, each optimized for specific domain operations. This architecture provides scalability, performance isolation, and logical data separation across different functional areas of the application.
+
+\subsection{Key Highlights}
+\begin{itemize}
+    \item \textbf{Database Type:} MongoDB (NoSQL Document Database)
+    \item \textbf{Architecture:} Multi-cluster distributed system
+    \item \textbf{Total Clusters:} 6 specialized clusters
+    \item \textbf{Total Models:} 26 data models
+    \item \textbf{Connection Pooling:} Advanced pooling with monitoring (50 max, 5 min connections per cluster)
+    \item \textbf{Primary Language:} Node.js with Mongoose ODM
+\end{itemize}
+
+\section{Database Architecture}
+
+\subsection{Multi-Cluster Design}
+
+The Kampyn backend implements a sophisticated multi-cluster MongoDB architecture where different functional domains are separated into dedicated database clusters. This design provides several advantages:
+
+\begin{itemize}
+    \item \textbf{Performance Isolation:} Heavy operations in one cluster don't affect others
+    \item \textbf{Scalability:} Individual clusters can be scaled independently
+    \item \textbf{Security:} Fine-grained access control per cluster
+    \item \textbf{Maintenance:} Easier backup, restore, and migration operations
+\end{itemize}
+
+\subsection{Database Clusters}
+
+The system consists of six MongoDB clusters:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Cluster Name} & \textbf{Purpose} & \textbf{Primary Models} \\ \midrule
+Cluster\_User & User authentication \& profiles & User, Otp, College, Team, ContactMessage \\
+Cluster\_Order & Order processing \& payments & Order, Payment, Review, Invoice, OrderCounter \\
+Cluster\_Item & Product catalog & Retail, Produce, Raw \\
+Cluster\_Inventory & Stock management & InventoryReport \\
+Cluster\_Accounts & Business entities & Vendor, Uni, Admin, Recipe, Service, Feature \\
+Cluster\_Cache\_Analytics & Caching \& analytics & CacheAnalytics, ServerMonitoring \\ \bottomrule
+\end{tabular}
+\caption{Database Cluster Organization}
+\end{table}
+
+\subsection{Connection Management}
+
+The database connection system is implemented in \texttt{config/db.js} with the following features:
+
+\subsubsection{Connection Pool Configuration}
+\begin{itemize}
+    \item \textbf{Maximum Pool Size:} 50 connections (configurable via \texttt{MONGO\_MAX\_POOL\_SIZE})
+    \item \textbf{Minimum Pool Size:} 5 connections (configurable via \texttt{MONGO\_MIN\_POOL\_SIZE})
+    \item \textbf{Max Idle Time:} 30,000ms (30 seconds)
+    \item \textbf{Wait Queue Timeout:} 10,000ms
+    \item \textbf{Server Selection Timeout:} 5,000ms
+    \item \textbf{Socket Timeout:} 45,000ms
+    \item \textbf{Connection Timeout:} 10,000ms
+    \item \textbf{Heartbeat Frequency:} 10,000ms
+\end{itemize}
+
+\subsubsection{Advanced Features}
+\begin{itemize}
+    \item \textbf{Retry Writes:} Enabled for better reliability
+    \item \textbf{Retry Reads:} Enabled for fault tolerance
+    \item \textbf{Auto Index:} Disabled for performance (indexes created manually)
+    \item \textbf{Buffer Commands:} Disabled to fail fast
+    \item \textbf{Pool Monitoring:} Real-time monitoring with 80\% usage warnings
+    \item \textbf{Graceful Shutdown:} Proper connection cleanup on SIGINT/SIGTERM
+\end{itemize}
+
+\section{Data Models}
+
+\subsection{Account Management Models (Cluster\_Accounts)}
+
+\subsubsection{User Model}
+The User model represents end-users of the platform (students, customers).
+
+\textbf{Collection:} \texttt{users}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endhead
+type & String (enum) & User type: user-standard, user-premium, admin \\
+fullName & String & User's full name \\
+email & String (unique) & Email address for authentication \\
+phone & String (unique) & Phone number for authentication \\
+password & String & Hashed password \\
+gender & String & User's gender \\
+uniID & ObjectId (ref: Uni) & Reference to university \\
+isVerified & Boolean & Email verification status \\
+isPaid & Boolean & Subscription payment status \\
+subscriptionType & String (enum) & standard or premium \\
+subscriptionExpiry & Date & Subscription expiration date \\
+vendorId & ObjectId (ref: Vendor) & Associated vendor (if applicable) \\
+cart & Array & Shopping cart items with itemId, kind, quantity \\
+pastOrders & Array[ObjectId] & References to completed orders \\
+activeOrders & Array[ObjectId] & References to ongoing orders \\
+favourites & Array & Favorite items with itemId, kind, vendorId \\
+loginAttempts & Number & Failed login attempt counter \\
+lastLoginAttempt & Date & Timestamp of last login attempt \\
+lastActivity & Date & Last user activity timestamp \\
+createdAt & Date & Account creation timestamp \\
+updatedAt & Date & Last update timestamp \\ \bottomrule
+\caption{User Model Fields}
+\end{longtable}
+
+\textbf{Indexes:}
+\begin{itemize}
+    \item \texttt{email} (unique, for authentication)
+    \item \texttt{phone} (unique, for authentication)
+    \item \texttt{uniID} (for university-based queries)
+    \item \texttt{cart.itemId, cart.kind} (for cart operations)
+    \item \texttt{vendorId} (for vendor-user relationships)
+    \item \texttt{favourites.itemId, favourites.kind} (for favorites)
+    \item \texttt{activeOrders} (for order queries)
+    \item \texttt{pastOrders} (for order history)
+\end{itemize}
+
+\subsubsection{Vendor Model}
+Represents food vendors, canteens, or shops operating within universities.
+
+\textbf{Collection:} \texttt{vendors}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endhead
+fullName & String & Vendor's business name \\
+email & String (unique) & Email for authentication \\
+phone & String (unique) & Contact phone number \\
+password & String & Hashed password \\
+location & String & Physical location/address \\
+uniID & ObjectId (ref: Uni) & Associated university \\
+isVerified & Boolean & Verification status \\
+sellerType & String (enum) & SELLER or NON\_SELLER \\
+gstNumber & String & Vendor's GST number (optional) \\
+useUniGstNumber & Boolean & Whether to use university's GST \\
+deliverySettings & Object & Delivery preferences and timing \\
+retailInventory & Array & Retail items with quantity, availability \\
+produceInventory & Array & Produce items with availability \\
+rawMaterialInventory & Array & Raw materials with opening/closing amounts \\
+activeOrders & Array[ObjectId] & Current active orders \\
+services & Array[ObjectId] & Available services \\
+lastLoginAttempt & Date & Last login timestamp \\
+lastActivity & Date & Last activity timestamp \\
+createdAt & Date & Account creation timestamp \\
+updatedAt & Date & Last update timestamp \\ \bottomrule
+\caption{Vendor Model Fields}
+\end{longtable}
+
+\textbf{Indexes:}
+\begin{itemize}
+    \item \texttt{uniID, retailInventory.itemId} (compound index)
+    \item \texttt{uniID, produceInventory.itemId} (compound index)
+    \item \texttt{uniID, rawMaterialInventory.itemId} (compound index)
+\end{itemize}
+
+\subsubsection{Uni (University) Model}
+Represents educational institutions using the platform.
+
+\textbf{Collection:} \texttt{unis}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endhead
+fullName & String (unique) & University name \\
+email & String (unique) & Official email \\
+phone & String (unique) & Contact number \\
+password & String & Hashed password \\
+isVerified & Boolean & Verification status \\
+isAvailable & String (enum) & Y or N (operational status) \\
+gstNumber & String (unique) & University's GST number \\
+packingCharge & Number & Default packing charge (₹5) \\
+deliveryCharge & Number & Default delivery charge (₹50) \\
+platformFee & Number & Platform fee per order (₹2) \\
+vendors & Array & Associated vendors with availability \\
+features & Array[ObjectId] & Enabled features \\
+services & Array[ObjectId] & Available services \\
+loginAttempts & Number & Failed login counter \\
+lastLoginAttempt & Date & Last login timestamp \\
+lastActivity & Date & Last activity timestamp \\
+createdAt & Date & Creation timestamp \\
+updatedAt & Date & Update timestamp \\ \bottomrule
+\caption{University Model Fields}
+\end{longtable}
+
+\subsubsection{Recipe Model}
+Comprehensive recipe management for vendors.
+
+\textbf{Collection:} \texttt{recipes}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endhead
+title & String & Recipe title (max 200 chars) \\
+description & String & Full description (max 1000 chars) \\
+shortDescription & String & Brief description (max 300 chars) \\
+category & String (enum) & appetizer, main\_course, dessert, etc. \\
+cuisine & String (enum) & indian, chinese, italian, etc. \\
+tags & Array[String] & Searchable tags \\
+difficulty & String (enum) & easy, medium, hard, expert \\
+prepTime & Number & Preparation time (minutes) \\
+cookTime & Number & Cooking time (minutes) \\
+totalTime & Number & Total time (auto-calculated) \\
+servings & Number & Number of servings \\
+ingredients & Array[Object] & Ingredients with name, quantity, unit, notes \\
+instructions & Array[Object] & Step-by-step instructions \\
+nutrition & Object & Nutritional information \\
+images & Array[Object] & Recipe images with URLs \\
+videoUrl & String & Recipe video URL \\
+tips & Array[String] & Cooking tips \\
+variations & Array[String] & Recipe variations \\
+allergens & Array[String] & Allergen information \\
+dietaryRestrictions & Array[String] & vegetarian, vegan, gluten\_free, etc. \\
+estimatedCost & Number & Estimated cost \\
+costPerServing & Number & Cost per serving \\
+outputType & String (enum) & retail, produce, or null \\
+outputItemId & ObjectId & Reference to output item \\
+outputModel & String (enum) & Retail or Produce \\
+vendorId & ObjectId (ref: Vendor) & Recipe owner \\
+uniId & ObjectId (ref: Uni) & Associated university \\
+status & String (enum) & draft, published, archived \\
+isPublic & Boolean & Public visibility \\
+isFeatured & Boolean & Featured recipe flag \\
+views & Number & View count \\
+likes & Number & Like count \\
+saves & Number & Save count \\
+ratings & Array[Object] & User ratings and reviews \\
+averageRating & Number & Calculated average rating \\
+createdAt & Date & Creation timestamp \\
+updatedAt & Date & Update timestamp \\
+publishedAt & Date & Publication timestamp \\ \bottomrule
+\caption{Recipe Model Fields}
+\end{longtable}
+
+\textbf{Indexes:}
+\begin{itemize}
+    \item \texttt{vendorId, status}
+    \item \texttt{uniId, status}
+    \item \texttt{category, cuisine}
+    \item \texttt{status, isPublic}
+    \item \texttt{createdAt} (descending)
+    \item \texttt{views} (descending)
+    \item \texttt{likes} (descending)
+    \item \texttt{averageRating} (descending)
+    \item Text index on \texttt{title, description, tags}
+\end{itemize}
+
+\subsection{Order Management Models (Cluster\_Order)}
+
+\subsubsection{Order Model}
+Central model for order processing and management.
+
+\textbf{Collection:} \texttt{orders}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endhead
+orderNumber & String (unique) & Human-readable order number \\
+userId & ObjectId (ref: User) & Customer reference \\
+orderType & String (enum) & takeaway, delivery, dinein, cash \\
+orderCategory & String (enum) & online, express, transfer \\
+paymentMethod & String (enum) & cash, upi, card \\
+collectorName & String & Person collecting the order \\
+collectorPhone & String & Collector's phone number \\
+items & Array[Object] & Order items with itemId, kind, quantity \\
+total & Number & Total order amount \\
+address & String & Delivery address (if applicable) \\
+reservationExpiresAt & Date & Payment deadline \\
+paymentId & ObjectId (ref: Payment) & Associated payment \\
+status & String (enum) & Order status (see below) \\
+denialReason & String & Reason if order denied \\
+vendorId & ObjectId (ref: Vendor) & Vendor fulfilling order \\
+isGuest & Boolean & Guest order flag \\
+createdAt & Date & Order creation time \\
+deleted & Boolean & Soft delete flag \\ \bottomrule
+\caption{Order Model Fields}
+\end{longtable}
+
+\textbf{Order Status Values:}
+\begin{itemize}
+    \item \texttt{pendingPayment} - Awaiting payment
+    \item \texttt{pendingVendorApproval} - Waiting for vendor acceptance
+    \item \texttt{denied} - Rejected by vendor
+    \item \texttt{inProgress} - Being prepared
+    \item \texttt{completed} - Ready for pickup/delivery
+    \item \texttt{onTheWay} - Out for delivery
+    \item \texttt{delivered} - Successfully delivered
+    \item \texttt{failed} - Order failed
+\end{itemize}
+
+\textbf{Indexes:}
+\begin{itemize}
+    \item \texttt{\_id} (unique, default MongoDB index)
+    \item \texttt{vendorId, status, createdAt} (compound, descending on createdAt)
+    \item \texttt{userId, status, createdAt} (compound, descending on createdAt)
+    \item \texttt{status, reservationExpiresAt} (for cleanup jobs)
+    \item \texttt{userId, status, createdAt} (unique, partial filter for pendingPayment)
+\end{itemize}
+
+\subsubsection{Payment Model}
+Tracks payment transactions for orders.
+
+\textbf{Collection:} \texttt{payments}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+orderId & ObjectId (ref: Order) & Associated order \\
+userId & ObjectId (ref: User) & User making payment \\
+amount & Number & Payment amount \\
+status & String (enum) & paid or failed \\
+paymentMethod & String & Payment method used \\
+timestamp & Date & Payment timestamp \\
+razorpayOrderId & String & Razorpay order ID \\
+razorpayPaymentId & String & Razorpay payment ID \\ \bottomrule
+\caption{Payment Model Fields}
+\end{longtable}
+
+\subsubsection{Invoice Model}
+Comprehensive invoice generation for orders.
+
+\textbf{Collection:} \texttt{invoices}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+\endhead
+invoiceNumber & String (unique) & Generated invoice number \\
+orderId & ObjectId (ref: Order) & Associated order \\
+orderNumber & String & Order number \\
+invoiceType & String (enum) & vendor or platform \\
+recipientType & String (enum) & vendor or admin \\
+recipientId & ObjectId & Recipient reference \\
+recipientModel & String (enum) & Vendor or Admin \\
+vendorId & ObjectId (ref: Vendor) & Vendor reference \\
+vendorName & String & Vendor name \\
+vendorLocation & String & Vendor location \\
+uniId & ObjectId (ref: Uni) & University reference \\
+uniName & String & University name \\
+gstNumber & String & GST number used \\
+gstNumberType & String (enum) & vendor or university \\
+customerName & String & Customer name \\
+customerPhone & String & Customer phone \\
+customerAddress & String & Customer address \\
+subtotal & Number & Subtotal amount \\
+subtotalBeforeGst & Number & Amount before GST \\
+platformFee & Number & Platform fee \\
+gstAmount & Number & Total GST amount \\
+cgstAmount & Number & CGST amount \\
+sgstAmount & Number & SGST amount \\
+totalAmount & Number & Final total \\
+currency & String & Currency (default: INR) \\
+items & Array[Object] & Detailed item breakdown with GST \\
+packagingCharge & Number & Packaging charges \\
+deliveryCharge & Number & Delivery charges \\
+razorpayInvoiceId & String & Razorpay invoice ID \\
+razorpayInvoiceUrl & String & Razorpay invoice URL \\
+pdfUrl & String & PDF storage URL \\
+cloudinaryPublicId & String & Cloudinary ID \\
+status & String (enum) & draft, sent, paid, cancelled \\
+dueDate & Date & Payment due date \\
+paidAt & Date & Payment timestamp \\
+createdAt & Date & Creation timestamp \\
+updatedAt & Date & Update timestamp \\ \bottomrule
+\caption{Invoice Model Fields}
+\end{longtable}
+
+\textbf{Indexes:}
+\begin{itemize}
+    \item \texttt{orderId, invoiceType}
+    \item \texttt{vendorId, createdAt} (descending)
+    \item \texttt{uniId, createdAt} (descending)
+    \item \texttt{recipientId, recipientModel}
+    \item \texttt{status, createdAt} (descending)
+    \item \texttt{invoiceNumber}
+\end{itemize}
+
+\subsubsection{Review Model}
+Customer reviews and ratings for orders.
+
+\textbf{Collection:} \texttt{reviews}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+orderId & ObjectId (ref: Order) & Reviewed order \\
+orderNumber & String & Order number \\
+userId & ObjectId (ref: User) & Reviewer \\
+vendorId & ObjectId (ref: Vendor) & Reviewed vendor \\
+uniId & ObjectId (ref: Uni) & University context \\
+rating & Number & Rating (1-5) \\
+comment & String & Review comment \\
+createdAt & Date & Review timestamp \\
+updatedAt & Date & Update timestamp \\ \bottomrule
+\caption{Review Model Fields}
+\end{longtable}
+
+\textbf{Indexes:}
+\begin{itemize}
+    \item \texttt{orderId, userId} (unique compound index)
+    \item \texttt{uniId, createdAt} (descending)
+\end{itemize}
+
+\subsection{Item Catalog Models (Cluster\_Item)}
+
+\subsubsection{Retail Model}
+Packaged retail products (snacks, beverages, etc.).
+
+\textbf{Collection:} \texttt{retails}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+name & String & Product name \\
+description & String & Product description \\
+type & String & Product category/type \\
+uniId & ObjectId (ref: Uni) & Associated university \\
+unit & String & Unit of measurement (default: pcs) \\
+price & Number & Selling price (including tax) \\
+priceExcludingTax & Number & Base price \\
+hsnCode & String & HSN code for GST \\
+gstPercentage & Number & Total GST percentage \\
+sgstPercentage & Number & SGST percentage \\
+cgstPercentage & Number & CGST percentage \\
+image & String & Product image URL \\
+packable & Boolean & Requires packaging (default: false) \\
+isVeg & Boolean & Vegetarian flag (default: true) \\ \bottomrule
+\caption{Retail Model Fields}
+\end{longtable}
+
+\textbf{Indexes:}
+\begin{itemize}
+    \item \texttt{uniId, type}
+\end{itemize}
+
+\textbf{Post-Delete Hook:} Removes item from all user favorites when deleted.
+
+\subsubsection{Produce Model}
+Freshly prepared food items (cooked dishes, meals).
+
+\textbf{Collection:} \texttt{produces}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+name & String & Dish name \\
+description & String & Dish description \\
+type & String & Cuisine/category type \\
+subtype & String & Subcategory (e.g., pizza under italian) \\
+uniId & ObjectId (ref: Uni) & Associated university \\
+unit & String & Serving unit \\
+price & Number & Selling price (including tax) \\
+priceExcludingTax & Number & Base price \\
+hsnCode & String & HSN code for GST \\
+gstPercentage & Number & Total GST percentage \\
+sgstPercentage & Number & SGST percentage \\
+cgstPercentage & Number & CGST percentage \\
+image & String & Dish image URL \\
+packable & Boolean & Requires packaging (default: true) \\
+isVeg & Boolean & Vegetarian flag (default: true) \\ \bottomrule
+\caption{Produce Model Fields}
+\end{longtable}
+
+\textbf{Indexes:}
+\begin{itemize}
+    \item \texttt{uniId, type}
+    \item \texttt{uniId, subtype}
+\end{itemize}
+
+\textbf{Post-Delete Hook:} Removes item from all user favorites when deleted.
+
+\subsubsection{Raw Model}
+Raw materials for recipe preparation.
+
+\textbf{Collection:} \texttt{raws}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+name & String & Material name \\
+unit & String & Unit of measurement \\ \bottomrule
+\caption{Raw Model Fields}
+\end{longtable}
+
+\subsection{User Management Models (Cluster\_User)}
+
+\subsubsection{Otp Model}
+OTP verification for user registration and authentication.
+
+\textbf{Collection:} \texttt{otps}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+email & String & Email for OTP \\
+otp & String & Generated OTP code \\
+userData & Object & Temporary signup data \\
+userData.fullName & String & User's full name \\
+userData.phone & String & User's phone \\
+userData.password & String & Hashed password \\
+userData.gender & String & User's gender \\
+userData.uniID & ObjectId (ref: Uni) & University reference \\
+createdAt & Date & Creation time (expires in 600s) \\ \bottomrule
+\caption{OTP Model Fields}
+\end{longtable}
+
+\textbf{TTL Index:} Documents automatically expire after 10 minutes (600 seconds).
+
+\subsection{Cache \& Analytics Models (Cluster\_Cache\_Analytics)}
+
+\subsubsection{CacheAnalytics Model}
+General-purpose caching and analytics storage.
+
+\textbf{Collection:} \texttt{cacheanalytics}
+
+\textbf{Key Fields:}
+\begin{longtable}{@{}p{4cm}p{3cm}p{7cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\ \midrule
+key & String (unique) & Cache key identifier \\
+data & Mixed & Cached data (any type) \\
+type & String (enum) & cache or analytics \\
+ttl & Date & Expiration timestamp (default: 10 min) \\
+createdAt & Date & Creation timestamp \\ \bottomrule
+\caption{CacheAnalytics Model Fields}
+\end{longtable}
+
+\textbf{TTL Index:} \texttt{ttl} field with \texttt{expireAfterSeconds: 0} for automatic cleanup.
+
+\section{Data Relationships}
+
+\subsection{Entity Relationship Overview}
+
+The Kampyn database implements a complex web of relationships across different clusters:
+
+\subsubsection{Core Relationships}
+
+\begin{enumerate}
+    \item \textbf{University $\rightarrow$ Vendors}: One-to-many relationship
+    \begin{itemize}
+        \item University contains array of vendor references
+        \item Each vendor belongs to one university
+    \end{itemize}
+    
+    \item \textbf{University $\rightarrow$ Users}: One-to-many relationship
+    \begin{itemize}
+        \item Users reference their university via \texttt{uniID}
+        \item Enables university-specific user management
+    \end{itemize}
+    
+    \item \textbf{Vendor $\rightarrow$ Items}: Many-to-many relationship
+    \begin{itemize}
+        \item Vendors maintain inventory arrays for Retail, Produce, and Raw items
+        \item Items are university-specific but shared across vendors
+    \end{itemize}
+    
+    \item \textbf{User $\rightarrow$ Orders}: One-to-many relationship
+    \begin{itemize}
+        \item Users have \texttt{activeOrders} and \texttt{pastOrders} arrays
+        \item Orders reference users via \texttt{userId}
+    \end{itemize}
+    
+    \item \textbf{Order $\rightarrow$ Payment}: One-to-one relationship
+    \begin{itemize}
+        \item Each order has one payment
+        \item Payment references order via \texttt{orderId}
+    \end{itemize}
+    
+    \item \textbf{Order $\rightarrow$ Invoice}: One-to-many relationship
+    \begin{itemize}
+        \item Orders can have multiple invoices (vendor invoice, platform invoice)
+        \item Invoices reference orders via \texttt{orderId}
+    \end{itemize}
+    
+    \item \textbf{Recipe $\rightarrow$ Items}: One-to-one relationship (optional)
+    \begin{itemize}
+        \item Recipes can output to Retail or Produce items
+        \item Uses polymorphic reference via \texttt{outputModel} and \texttt{outputItemId}
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Cross-Cluster References}
+
+The system implements cross-cluster references using MongoDB ObjectIds:
+
+\begin{itemize}
+    \item \textbf{Cluster\_Accounts $\leftrightarrow$ Cluster\_Order}: Vendor and User references in orders
+    \item \textbf{Cluster\_Accounts $\leftrightarrow$ Cluster\_Item}: University references in items
+    \item \textbf{Cluster\_User $\leftrightarrow$ Cluster\_Accounts}: University reference in OTP
+    \item \textbf{Cluster\_Order $\leftrightarrow$ Cluster\_Accounts}: User and Vendor references
+\end{itemize}
+
+\section{Data Storage Patterns}
+
+\subsection{Embedded Documents}
+
+The system uses embedded documents for tightly coupled data:
+
+\begin{enumerate}
+    \item \textbf{User Cart}: Embedded array in User model
+    \begin{itemize}
+        \item Contains itemId, kind (polymorphic), quantity
+        \item Avoids separate cart collection
+        \item Enables atomic cart operations
+    \end{itemize}
+    
+    \item \textbf{User Favourites}: Embedded array in User model
+    \begin{itemize}
+        \item Contains itemId, kind, vendorId
+        \item Quick access to user preferences
+    \end{itemize}
+    
+    \item \textbf{Vendor Inventory}: Three embedded arrays
+    \begin{itemize}
+        \item \texttt{retailInventory}: Retail items with quantity and availability
+        \item \texttt{produceInventory}: Produce items with availability
+        \item \texttt{rawMaterialInventory}: Raw materials with opening/closing amounts
+    \end{itemize}
+    
+    \item \textbf{Recipe Components}: Nested subdocuments
+    \begin{itemize}
+        \item \texttt{ingredients}: Array of ingredient objects
+        \item \texttt{instructions}: Array of step objects
+        \item \texttt{nutrition}: Embedded nutrition object
+        \item \texttt{ratings}: Array of rating objects
+    \end{itemize}
+    
+    \item \textbf{Invoice Items}: Embedded array
+    \begin{itemize}
+        \item Complete item breakdown with GST details
+        \item Preserves historical pricing
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Referenced Documents}
+
+The system uses references for loosely coupled or large datasets:
+
+\begin{enumerate}
+    \item \textbf{Order Items}: References to Retail/Produce
+    \begin{itemize}
+        \item Uses polymorphic references via \texttt{kind} field
+        \item Enables item updates without affecting orders
+    \end{itemize}
+    
+    \item \textbf{User Orders}: References to Order documents
+    \begin{itemize}
+        \item Separate arrays for active and past orders
+        \item Enables efficient order queries
+    \end{itemize}
+    
+    \item \textbf{Payment-Order Link}: Reference from Payment to Order
+    \begin{itemize}
+        \item Maintains payment history
+        \item Supports payment reconciliation
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Polymorphic References}
+
+The system implements polymorphic references using the \texttt{refPath} pattern:
+
+\begin{lstlisting}[language=JavaScript, caption=Polymorphic Reference Example]
+{
+  itemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    refPath: 'items.kind'
+  },
+  kind: {
+    type: String,
+    enum: ['Retail', 'Produce']
+  }
+}
+\end{lstlisting}
+
+This pattern is used in:
+\begin{itemize}
+    \item User cart items
+    \item User favourites
+    \item Order items
+    \item Recipe outputs
+\end{itemize}
+
+\section{Data Operations}
+
+\subsection{Create Operations}
+
+\subsubsection{User Registration}
+\begin{enumerate}
+    \item Generate OTP and store in \texttt{Otp} collection with user data
+    \item Send OTP to user's email
+    \item Upon verification, create \texttt{User} document
+    \item Delete OTP document (or let it expire)
+\end{enumerate}
+
+\subsubsection{Order Creation}
+\begin{enumerate}
+    \item Validate user and items
+    \item Generate unique \texttt{orderNumber}
+    \item Create \texttt{Order} document with status \texttt{pendingPayment}
+    \item Set \texttt{reservationExpiresAt} for cleanup
+    \item Add order to user's \texttt{activeOrders}
+    \item Create payment intent (if online payment)
+\end{enumerate}
+
+\subsubsection{Invoice Generation}
+\begin{enumerate}
+    \item Generate unique \texttt{invoiceNumber} using static method
+    \item Calculate all GST components
+    \item Create detailed item breakdown
+    \item Store invoice in database
+    \item Generate PDF and upload to Cloudinary
+    \item Update invoice with PDF URL
+\end{enumerate}
+
+\subsection{Read Operations}
+
+\subsubsection{Menu Retrieval}
+\begin{enumerate}
+    \item Query items by \texttt{uniId}
+    \item Filter by type/category if specified
+    \item Join with vendor inventory for availability
+    \item Return items with pricing and images
+\end{enumerate}
+
+\subsubsection{Order History}
+\begin{enumerate}
+    \item Query orders by \texttt{userId}
+    \item Filter by status (active vs. past)
+    \item Populate item details
+    \item Sort by \texttt{createdAt} descending
+\end{enumerate}
+
+\subsection{Update Operations}
+
+\subsubsection{Cart Management}
+\begin{enumerate}
+    \item Add to cart: Push to \texttt{cart} array or update quantity
+    \item Remove from cart: Pull from \texttt{cart} array
+    \item Update quantity: Modify specific cart item
+    \item Clear cart: Set \texttt{cart} to empty array
+\end{enumerate}
+
+\subsubsection{Order Status Updates}
+\begin{enumerate}
+    \item Validate status transition
+    \item Update \texttt{status} field
+    \item If completed, move from \texttt{activeOrders} to \texttt{pastOrders}
+    \item Update vendor's \texttt{activeOrders}
+    \item Send notifications
+\end{enumerate}
+
+\subsubsection{Inventory Updates}
+\begin{enumerate}
+    \item Locate item in vendor's inventory array
+    \item Update quantity or availability
+    \item Use array filters for precise updates
+    \item Validate stock levels
+\end{enumerate}
+
+\subsection{Delete Operations}
+
+\subsubsection{Soft Deletes}
+Orders use soft delete pattern:
+\begin{itemize}
+    \item Set \texttt{deleted: true} instead of removing
+    \item Preserves order history
+    \item Excludes from queries using filter
+\end{itemize}
+
+\subsubsection{Cascade Deletes}
+Items implement cascade delete hooks:
+\begin{lstlisting}[language=JavaScript, caption=Cascade Delete Hook]
+retailSchema.post("findOneAndDelete", async function (doc) {
+  if (doc) {
+    const User = require("../account/User");
+    await User.updateMany(
+      {},
+      { $pull: { favourites: { itemId: doc._id, kind: "Retail" } } }
+    );
+  }
+});
+\end{lstlisting}
+
+\subsection{Aggregation Operations}
+
+Common aggregation pipelines:
+
+\subsubsection{Vendor Analytics}
+\begin{enumerate}
+    \item Match orders by \texttt{vendorId}
+    \item Group by date/status
+    \item Calculate totals and counts
+    \item Sort and limit results
+\end{enumerate}
+
+\subsubsection{Popular Items}
+\begin{enumerate}
+    \item Unwind order items
+    \item Group by \texttt{itemId}
+    \item Count occurrences
+    \item Sort by count descending
+    \item Lookup item details
+\end{enumerate}
+
+\section{Indexing Strategy}
+
+\subsection{Index Types}
+
+\subsubsection{Single Field Indexes}
+Used for unique constraints and simple queries:
+\begin{itemize}
+    \item \texttt{User.email} (unique)
+    \item \texttt{User.phone} (unique)
+    \item \texttt{Vendor.email} (unique)
+    \item \texttt{Uni.gstNumber} (unique)
+    \item \texttt{Order.orderNumber} (unique)
+    \item \texttt{Invoice.invoiceNumber} (unique)
+\end{itemize}
+
+\subsubsection{Compound Indexes}
+Optimized for multi-field queries:
+\begin{itemize}
+    \item \texttt{Order: \{vendorId: 1, status: 1, createdAt: -1\}}
+    \item \texttt{Order: \{userId: 1, status: 1, createdAt: -1\}}
+    \item \texttt{Vendor: \{uniID: 1, retailInventory.itemId: 1\}}
+    \item \texttt{Invoice: \{orderId: 1, invoiceType: 1\}}
+    \item \texttt{Review: \{orderId: 1, userId: 1\}} (unique)
+\end{itemize}
+
+\subsubsection{Text Indexes}
+For full-text search:
+\begin{itemize}
+    \item \texttt{Recipe: \{title: 'text', description: 'text', tags: 'text'\}}
+\end{itemize}
+
+\subsubsection{TTL Indexes}
+For automatic document expiration:
+\begin{itemize}
+    \item \texttt{Otp.createdAt} (expires after 600 seconds)
+    \item \texttt{CacheAnalytics.ttl} (expires at specified time)
+\end{itemize}
+
+\subsubsection{Partial Indexes}
+For conditional indexing:
+\begin{itemize}
+    \item \texttt{Order: \{userId: 1, status: 1, createdAt: 1\}} with filter \texttt{\{status: "pendingPayment"\}}
+    \item Prevents duplicate pending payment orders per user
+\end{itemize}
+
+\subsection{Index Performance Considerations}
+
+\begin{itemize}
+    \item \textbf{Auto-indexing disabled}: Indexes created manually for better control
+    \item \textbf{Selective indexing}: Only frequently queried fields are indexed
+    \item \textbf{Compound index order}: Most selective fields first
+    \item \textbf{Covering indexes}: Some queries can be satisfied entirely from index
+    \item \textbf{Index intersection}: MongoDB can combine multiple indexes
+\end{itemize}
+
+\section{Data Integrity \& Validation}
+
+\subsection{Schema Validation}
+
+Mongoose provides schema-level validation:
+
+\subsubsection{Required Fields}
+Critical fields marked as required:
+\begin{itemize}
+    \item User: email, phone, password
+    \item Order: orderNumber, userId, vendorId, total
+    \item Payment: orderId, userId, amount, status
+\end{itemize}
+
+\subsubsection{Enum Validation}
+Restricted value sets:
+\begin{itemize}
+    \item User.type: user-standard, user-premium, admin
+    \item Order.status: pendingPayment, inProgress, completed, etc.
+    \item Payment.status: paid, failed
+    \item Recipe.difficulty: easy, medium, hard, expert
+\end{itemize}
+
+\subsubsection{Custom Validators}
+Complex validation logic:
+\begin{lstlisting}[language=JavaScript, caption=Custom Validator Example]
+ingredients: {
+  type: [ingredientSchema],
+  required: true,
+  validate: {
+    validator: function(ingredients) {
+      return ingredients && ingredients.length > 0;
+    },
+    message: 'At least one ingredient is required'
+  }
+}
+\end{lstlisting}
+
+\subsection{Referential Integrity}
+
+\subsubsection{Foreign Key Validation}
+References validated at application level:
+\begin{itemize}
+    \item Check existence before creating references
+    \item Validate university before user/vendor creation
+    \item Verify items exist before adding to cart/order
+\end{itemize}
+
+\subsubsection{Cascade Operations}
+Maintain consistency across collections:
+\begin{itemize}
+    \item Delete item $\rightarrow$ Remove from user favourites
+    \item Complete order $\rightarrow$ Move from active to past orders
+    \item Delete vendor $\rightarrow$ Handle associated orders
+\end{itemize}
+
+\subsection{Unique Constraints}
+
+\subsubsection{Single Field Uniqueness}
+\begin{itemize}
+    \item User.email, User.phone
+    \item Vendor.email, Vendor.phone
+    \item Uni.fullName, Uni.email, Uni.gstNumber
+    \item Order.orderNumber
+    \item Invoice.invoiceNumber
+\end{itemize}
+
+\subsubsection{Compound Uniqueness}
+\begin{itemize}
+    \item Review: (orderId, userId) - One review per user per order
+    \item Order: (userId, status, createdAt) with partial filter - One pending payment order per user
+\end{itemize}
+
+\section{Performance Optimization}
+
+\subsection{Connection Pooling}
+
+Advanced connection pool management:
+
+\begin{itemize}
+    \item \textbf{Pool Size}: 50 max, 5 min connections per cluster
+    \item \textbf{Connection Reuse}: Minimizes connection overhead
+    \item \textbf{Pool Monitoring}: Real-time usage tracking
+    \item \textbf{Automatic Scaling}: Pool grows/shrinks based on demand
+    \item \textbf{Health Checks}: Heartbeat every 10 seconds
+\end{itemize}
+
+\subsection{Query Optimization}
+
+\subsubsection{Projection}
+Fetch only required fields:
+\begin{lstlisting}[language=JavaScript]
+User.findById(userId).select('fullName email phone');
+\end{lstlisting}
+
+\subsubsection{Lean Queries}
+Return plain JavaScript objects:
+\begin{lstlisting}[language=JavaScript]
+Order.find({ vendorId }).lean();
+\end{lstlisting}
+
+\subsubsection{Pagination}
+Limit result sets:
+\begin{lstlisting}[language=JavaScript]
+Recipe.find({ status: 'published' })
+  .limit(20)
+  .skip(page * 20)
+  .sort({ createdAt: -1 });
+\end{lstlisting}
+
+\subsection{Caching Strategy}
+
+\subsubsection{Database-Level Caching}
+\begin{itemize}
+    \item \texttt{CacheAnalytics} collection for frequently accessed data
+    \item TTL-based automatic expiration
+    \item Configurable cache duration
+\end{itemize}
+
+\subsubsection{Application-Level Caching}
+\begin{itemize}
+    \item Menu items cached per university
+    \item Vendor details cached
+    \item University configuration cached
+\end{itemize}
+
+\subsection{Denormalization}
+
+Strategic denormalization for performance:
+
+\begin{itemize}
+    \item \textbf{Invoice}: Stores vendor name, location (avoids joins)
+    \item \textbf{Order}: Stores collector name, phone (snapshot at order time)
+    \item \textbf{Review}: Stores order number (quick display)
+    \item \textbf{Recipe}: Stores average rating (avoids aggregation)
+\end{itemize}
+
+\section{Data Security}
+
+\subsection{Authentication Data}
+
+\subsubsection{Password Storage}
+\begin{itemize}
+    \item Passwords hashed using bcrypt
+    \item Never stored in plain text
+    \item Salt rounds configurable
+\end{itemize}
+
+\subsubsection{OTP Security}
+\begin{itemize}
+    \item OTPs expire after 10 minutes
+    \item Temporary user data encrypted
+    \item Automatic cleanup via TTL index
+\end{itemize}
+
+\subsection{Access Control}
+
+\subsubsection{User Roles}
+\begin{itemize}
+    \item \texttt{user-standard}: Basic access
+    \item \texttt{user-premium}: Enhanced features
+    \item \texttt{admin}: Full administrative access
+\end{itemize}
+
+\subsubsection{Vendor Types}
+\begin{itemize}
+    \item \texttt{SELLER}: Can sell items
+    \item \texttt{NON\_SELLER}: Limited access
+\end{itemize}
+
+\subsection{Data Privacy}
+
+\subsubsection{Personal Information}
+\begin{itemize}
+    \item Email and phone encrypted at rest
+    \item PII access logged
+    \item GDPR compliance considerations
+\end{itemize}
+
+\subsubsection{Payment Data}
+\begin{itemize}
+    \item Razorpay integration for PCI compliance
+    \item No card details stored locally
+    \item Payment IDs for reconciliation only
+\end{itemize}
+
+\section{Monitoring \& Analytics}
+
+\subsection{Database Monitoring}
+
+\subsubsection{Connection Pool Monitoring}
+\begin{itemize}
+    \item Real-time pool usage tracking
+    \item Warnings at 80\% utilization
+    \item Per-cluster monitoring
+    \item Logged every 60 seconds
+\end{itemize}
+
+\subsubsection{Query Performance}
+\begin{itemize}
+    \item Slow query logging
+    \item Index usage analysis
+    \item Query plan examination
+\end{itemize}
+
+\subsection{Business Analytics}
+
+\subsubsection{Order Analytics}
+\begin{itemize}
+    \item Orders per vendor
+    \item Revenue tracking
+    \item Popular items
+    \item Peak hours analysis
+\end{itemize}
+
+\subsubsection{User Analytics}
+\begin{itemize}
+    \item User activity tracking
+    \item Cart abandonment rates
+    \item Favorite items trends
+    \item Subscription metrics
+\end{itemize}
+
+\subsubsection{Recipe Analytics}
+\begin{itemize}
+    \item View counts
+    \item Like and save metrics
+    \item Rating distributions
+    \item Popular cuisines/categories
+\end{itemize}
+
+\section{Backup \& Recovery}
+
+\subsection{Backup Strategy}
+
+\subsubsection{Cluster-Level Backups}
+\begin{itemize}
+    \item Individual cluster backups
+    \item Point-in-time recovery
+    \item Automated daily backups
+    \item Retention policy: 30 days
+\end{itemize}
+
+\subsubsection{Critical Collections}
+Priority backup for:
+\begin{itemize}
+    \item Users (authentication data)
+    \item Orders (transaction records)
+    \item Payments (financial data)
+    \item Invoices (legal documents)
+\end{itemize}
+
+\subsection{Disaster Recovery}
+
+\subsubsection{Recovery Procedures}
+\begin{enumerate}
+    \item Identify affected cluster(s)
+    \item Restore from latest backup
+    \item Replay transaction logs if available
+    \item Verify data integrity
+    \item Resume operations
+\end{enumerate}
+
+\subsubsection{Data Validation}
+Post-recovery checks:
+\begin{itemize}
+    \item Verify unique constraints
+    \item Check referential integrity
+    \item Validate critical records
+    \item Test application functionality
+\end{itemize}
+
+\section{Scalability Considerations}
+
+\subsection{Horizontal Scaling}
+
+\subsubsection{Cluster Sharding}
+Future sharding strategy:
+\begin{itemize}
+    \item Shard Orders by \texttt{vendorId}
+    \item Shard Users by \texttt{uniID}
+    \item Shard Items by \texttt{uniId}
+\end{itemize}
+
+\subsubsection{Read Replicas}
+\begin{itemize}
+    \item Read-heavy clusters (Items, Cache)
+    \item Separate read and write operations
+    \item Eventual consistency acceptable
+\end{itemize}
+
+\subsection{Vertical Scaling}
+
+\subsubsection{Resource Allocation}
+\begin{itemize}
+    \item Increase pool sizes for high-traffic clusters
+    \item Allocate more memory for cache cluster
+    \item Optimize CPU for aggregation-heavy operations
+\end{itemize}
+
+\subsection{Data Archival}
+
+\subsubsection{Historical Data}
+\begin{itemize}
+    \item Archive old orders (>1 year)
+    \item Move to cold storage
+    \item Maintain for compliance
+    \item Reduce active dataset size
+\end{itemize}
+
+\section{Future Enhancements}
+
+\subsection{Planned Features}
+
+\begin{enumerate}
+    \item \textbf{Real-time Order Tracking}
+    \begin{itemize}
+        \item WebSocket integration
+        \item Live status updates
+        \item Location tracking for delivery
+    \end{itemize}
+    
+    \item \textbf{Advanced Analytics}
+    \begin{itemize}
+        \item Machine learning for demand prediction
+        \item Personalized recommendations
+        \item Fraud detection
+    \end{itemize}
+    
+    \item \textbf{Multi-tenant Architecture}
+    \begin{itemize}
+        \item Database per university
+        \item Improved data isolation
+        \item Custom configurations
+    \end{itemize}
+    
+    \item \textbf{GraphQL API}
+    \begin{itemize}
+        \item Flexible data fetching
+        \item Reduced over-fetching
+        \item Better mobile performance
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Database Optimizations}
+
+\begin{enumerate}
+    \item \textbf{Time-Series Data}
+    \begin{itemize}
+        \item Dedicated collection for analytics
+        \item Optimized for time-based queries
+        \item Automatic aggregation
+    \end{itemize}
+    
+    \item \textbf{Full-Text Search}
+    \begin{itemize}
+        \item Elasticsearch integration
+        \item Advanced search capabilities
+        \item Fuzzy matching
+    \end{itemize}
+    
+    \item \textbf{Geospatial Queries}
+    \begin{itemize}
+        \item Location-based vendor search
+        \item Delivery radius calculations
+        \item Proximity sorting
+    \end{itemize}
+\end{enumerate}
+
+\section{Conclusion}
+
+The Kampyn backend database architecture demonstrates a well-designed, scalable, and performant system built on MongoDB. The multi-cluster approach provides excellent separation of concerns, while the comprehensive data models support complex business operations including order management, inventory tracking, recipe management, and financial transactions.
+
+Key strengths of the architecture include:
+
+\begin{itemize}
+    \item \textbf{Scalability}: Independent cluster scaling
+    \item \textbf{Performance}: Optimized indexes and connection pooling
+    \item \textbf{Flexibility}: Polymorphic references and embedded documents
+    \item \textbf{Reliability}: Comprehensive error handling and monitoring
+    \item \textbf{Security}: Proper authentication and data protection
+    \item \textbf{Maintainability}: Clear separation and well-documented schemas
+\end{itemize}
+
+The system is well-positioned for future growth and can accommodate additional features and scaling requirements as the platform expands.
+
+\appendix
+
+\section{Model Summary Table}
+
+\begin{longtable}{@{}p{3cm}p{3cm}p{8cm}@{}}
+\toprule
+\textbf{Model} & \textbf{Cluster} & \textbf{Primary Purpose} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Model} & \textbf{Cluster} & \textbf{Primary Purpose} \\ \midrule
+\endhead
+User & Accounts & End-user accounts and profiles \\
+Vendor & Accounts & Vendor/shop accounts \\
+Uni & Accounts & University/institution accounts \\
+Admin & Accounts & Administrative accounts \\
+Recipe & Accounts & Recipe management \\
+Service & Accounts & Service definitions \\
+Feature & Accounts & Feature flags \\
+BillingInfo & Accounts & Billing information \\
+Grievance & Accounts & Customer grievances \\
+VendorCart & Accounts & Vendor cart management \\
+Order & Order & Order processing \\
+Payment & Order & Payment transactions \\
+Invoice & Order & Invoice generation \\
+Review & Order & Order reviews \\
+OrderCounter & Order & Order number generation \\
+Retail & Item & Retail products \\
+Produce & Item & Prepared food items \\
+Raw & Item & Raw materials \\
+MenuSortOrder & Item & Menu ordering \\
+InventoryReport & Inventory & Inventory tracking \\
+Otp & User & OTP verification \\
+College & User & College information \\
+Team & User & Team management \\
+ContactMessage & User & Contact form messages \\
+CacheAnalytics & Cache\_Analytics & Caching and analytics \\
+ServerMonitoring & Cache\_Analytics & Server metrics \\ \bottomrule
+\caption{Complete Model Summary}
+\end{longtable}
+
+\section{Index Summary}
+
+\begin{longtable}{@{}p{3cm}p{5cm}p{6cm}@{}}
+\toprule
+\textbf{Model} & \textbf{Index} & \textbf{Purpose} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Model} & \textbf{Index} & \textbf{Purpose} \\ \midrule
+\endhead
+User & email & Unique authentication \\
+User & phone & Unique authentication \\
+User & uniID & University queries \\
+User & cart.itemId, cart.kind & Cart operations \\
+User & vendorId & Vendor relationships \\
+User & favourites.itemId, favourites.kind & Favorites queries \\
+Vendor & uniID, retailInventory.itemId & Inventory lookups \\
+Vendor & uniID, produceInventory.itemId & Inventory lookups \\
+Order & vendorId, status, createdAt & Vendor order queries \\
+Order & userId, status, createdAt & User order queries \\
+Order & status, reservationExpiresAt & Cleanup jobs \\
+Invoice & orderId, invoiceType & Invoice lookups \\
+Invoice & vendorId, createdAt & Vendor invoices \\
+Review & orderId, userId & Unique reviews \\
+Retail & uniId, type & Menu queries \\
+Produce & uniId, type & Menu queries \\
+Produce & uniId, subtype & Subcategory queries \\
+Recipe & title, description, tags (text) & Full-text search \\
+Recipe & vendorId, status & Vendor recipes \\
+Otp & createdAt (TTL) & Auto-expiration \\
+CacheAnalytics & ttl (TTL) & Auto-expiration \\ \bottomrule
+\caption{Index Summary}
+\end{longtable}
+
+\section{Environment Variables}
+
+\begin{longtable}{@{}p{5cm}p{9cm}@{}}
+\toprule
+\textbf{Variable} & \textbf{Description} \\ \midrule
+\endfirsthead
+\toprule
+\textbf{Variable} & \textbf{Description} \\ \midrule
+\endhead
+MONGO\_URI\_USER & Connection string for User cluster \\
+MONGO\_URI\_ORDER & Connection string for Order cluster \\
+MONGO\_URI\_ITEM & Connection string for Item cluster \\
+MONGO\_URI\_INVENTORY & Connection string for Inventory cluster \\
+MONGO\_URI\_ACCOUNT & Connection string for Accounts cluster \\
+MONGO\_URI\_CACHE & Connection string for Cache cluster \\
+MONGO\_MAX\_POOL\_SIZE & Maximum connection pool size (default: 50) \\
+MONGO\_MIN\_POOL\_SIZE & Minimum connection pool size (default: 5) \\
+MONGO\_MAX\_IDLE\_TIME\_MS & Max idle time for connections (default: 30000) \\
+MONGO\_WAIT\_QUEUE\_TIMEOUT\_MS & Wait queue timeout (default: 10000) \\
+MONGO\_SERVER\_SELECTION\_TIMEOUT\_MS & Server selection timeout (default: 5000) \\
+MONGO\_SOCKET\_TIMEOUT\_MS & Socket timeout (default: 45000) \\
+MONGO\_CONNECT\_TIMEOUT\_MS & Connection timeout (default: 10000) \\
+MONGO\_HEARTBEAT\_FREQUENCY\_MS & Heartbeat frequency (default: 10000) \\ \bottomrule
+\caption{Database Environment Variables}
+\end{longtable}
+
+\end{document}
