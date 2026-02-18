@@ -125,8 +125,8 @@ exports.verifyOtp = async (req, res) => {
     if (otpRecord.userData && otpRecord.userData.fullName) {
       // This is a signup OTP - create user account now
       // Double-check user doesn't already exist (race condition protection)
-      const existingUser = await Account.findOne({ 
-        $or: [{ email: emailLower }, { phone: otpRecord.userData.phone }] 
+      const existingUser = await Account.findOne({
+        $or: [{ email: emailLower }, { phone: otpRecord.userData.phone }]
       }).lean().select('_id');
 
       if (existingUser) {
@@ -241,19 +241,19 @@ exports.login = async (req, res) => {
     }
 
     const { identifier, password } = req.body;
-    
+
     // Process identifier based on type
-    const processedIdentifier = identifier.includes('@') 
+    const processedIdentifier = identifier.includes('@')
       ? identifier.toLowerCase() // Convert email to lowercase
       : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
-    
+
     // Use .lean() for faster queries (returns plain JS object instead of Mongoose document)
     // Only select needed fields to reduce data transfer
     const user = await Account.findOne({
       $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
     })
-    .lean()
-    .select('_id password isVerified uniID email');
+      .lean()
+      .select('_id password isVerified uniID email');
 
     if (!user) {
       return res.status(400).json({ message: "User not found" });
@@ -290,8 +290,8 @@ exports.login = async (req, res) => {
     // Check if the university is available
     if (university) {
       if (!university.isAvailable || university.isAvailable !== 'Y') {
-        return res.status(403).json({ 
-          message: `Access denied. ${university.fullName || 'University'} is currently unavailable. Please contact support for assistance.` 
+        return res.status(403).json({
+          message: `Access denied. ${university.fullName || 'University'} is currently unavailable. Please contact support for assistance.`
         });
       }
     }
@@ -322,7 +322,7 @@ exports.forgotPassword = async (req, res) => {
     const { identifier } = req.body;
 
     // Process identifier based on type
-    const processedIdentifier = identifier.includes('@') 
+    const processedIdentifier = identifier.includes('@')
       ? identifier.toLowerCase() // Convert email to lowercase
       : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
 
@@ -462,18 +462,18 @@ exports.verifyToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Check if user should be logged out due to inactivity
     const { shouldLogout } = await checkUserActivity(decoded.userId, 'user');
     if (shouldLogout) {
-      return res.status(401).json({ 
-        message: "Session expired due to inactivity. Please log in again." 
+      return res.status(401).json({
+        message: "Session expired due to inactivity. Please log in again."
       });
     }
 
     // Update last activity
     await updateUserActivity(decoded.userId, 'user');
-    
+
     req.user = decoded;
     next();
   } catch (error) {
@@ -572,8 +572,8 @@ exports.getUser = async (req, res) => {
 
 exports.getColleges = async (req, res) => {
   try {
-    // Fetch only _id and fullName of available colleges
-    const colleges = await Uni.find({ isAvailable: 'Y' }, '_id fullName');
+    // Fetch only _id, fullName, and category images of available colleges
+    const colleges = await Uni.find({ isAvailable: 'Y' }, '_id fullName retailImage produceImage categoryImages');
 
     res.status(200).json(colleges);
   } catch (error) {

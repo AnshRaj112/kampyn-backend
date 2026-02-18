@@ -9,6 +9,19 @@ const uniSchema = new mongoose.Schema(
     password: { type: String, required: true },
     isVerified: { type: Boolean, default: false },
     isAvailable: { type: String, enum: ["Y", "N"], default: "Y" },
+
+    // College-specific Category Images
+    retailImage: { type: String, default: "" },
+    produceImage: { type: String, default: "" },
+
+    // Dynamic Category (Kind) Images (e.g., Pizza -> url)
+    categoryImages: [
+      {
+        name: { type: String, required: true }, // e.g., "Pizza"
+        image: { type: String, required: true }
+      }
+    ],
+
     // GST Information
     gstNumber: { type: String, required: true, unique: true },
     // Packing and delivery charges

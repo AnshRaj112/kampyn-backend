@@ -1,19 +1,21 @@
 const express = require("express");
 const router = express.Router();
-const { 
-  getVendorsByUni, 
-  getVendorsWithAvailability, 
-  updateVendorAvailability, 
-  updateItemSpecialStatus, 
+const {
+  getVendorsByUni,
+  getVendorsWithAvailability,
+  updateVendorAvailability,
+  updateItemSpecialStatus,
   updateItemAvailableStatus,
   deleteVendor,
   getDeliverySettings,
   updateDeliverySettings,
   toggleVendorAvailability,
-  getVendorAvailability
+  getVendorAvailability,
+  updateProfile
 } = require("../controllers/vendor/vendorController");
 const Vendor = require("../models/account/Vendor");
 const Uni = require("../models/account/Uni");
+const upload = require("../middleware/upload");
 
 // Get all vendors for a specific university
 router.get("/list/uni/:uniId", getVendorsByUni);
@@ -49,7 +51,7 @@ router.patch("/:vendorId/toggle-availability", toggleVendorAvailability);
 router.get("/:vendorId/university-charges", async (req, res) => {
   try {
     const { vendorId } = req.params;
-    
+
     if (!vendorId) {
       return res.status(400).json({
         success: false,
@@ -58,7 +60,7 @@ router.get("/:vendorId/university-charges", async (req, res) => {
     }
 
     const vendor = await Vendor.findById(vendorId).select('uniID').lean();
-    
+
     if (!vendor) {
       return res.status(404).json({
         success: false,
@@ -74,7 +76,7 @@ router.get("/:vendorId/university-charges", async (req, res) => {
     }
 
     const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge fullName').lean();
-    
+
     if (!university) {
       return res.status(404).json({
         success: false,
@@ -103,7 +105,7 @@ router.get("/:vendorId/university-charges", async (req, res) => {
 router.get("/:vendorId/assignments", async (req, res) => {
   try {
     const { vendorId } = req.params;
-    
+
     if (!vendorId) {
       return res.status(400).json({
         success: false,
@@ -114,7 +116,7 @@ router.get("/:vendorId/assignments", async (req, res) => {
     const vendor = await Vendor.findById(vendorId)
       .populate({ path: 'services', populate: { path: 'feature' } })
       .select('services fullName uniID');
-    
+
     if (!vendor) {
       return res.status(404).json({
         success: false,
@@ -141,5 +143,8 @@ router.get("/:vendorId/assignments", async (req, res) => {
     });
   }
 });
+
+// Update vendor profile (including images)
+router.put("/:vendorId/profile", upload.fields([{ name: 'image', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]), updateProfile);
 
 module.exports = router;

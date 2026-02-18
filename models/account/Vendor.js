@@ -12,6 +12,10 @@ const vendorSchema = new mongoose.Schema(
     uniID: { type: mongoose.Schema.Types.ObjectId, ref: "Uni" },
     isVerified: { type: Boolean, default: false },
 
+    // Profile Images
+    image: { type: String, default: "" }, // Main profile image
+    coverImage: { type: String, default: "" }, // Background/Cover image
+
     // Seller type: whether the vendor participates as a seller or non-seller
     sellerType: {
       type: String,

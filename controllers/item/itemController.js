@@ -53,19 +53,19 @@ exports.addItem = async (req, res) => {
     }
 
     const ItemModel = getModel(category);
-    
+
     // Check for duplicate item: same name, uniId, type, and subtype (if subtype exists)
     // Items with the same name but different type or subtype are allowed
     const baseQuery = {
       name: name.trim(),
       uniId
     };
-    
+
     // Include type in the duplicate check if it's provided
     if (type) {
       baseQuery.type = type;
     }
-    
+
     // Build subtype condition
     let duplicateQuery;
     if (subtype && subtype.trim() !== "") {
@@ -90,7 +90,7 @@ exports.addItem = async (req, res) => {
         ]
       };
     }
-    
+
     const existingItem = await ItemModel.findOne(duplicateQuery);
 
     if (existingItem) {
@@ -104,11 +104,11 @@ exports.addItem = async (req, res) => {
     if (category.toLowerCase() === 'retail' || category.toLowerCase() === 'produce') {
       const gstPercentageNum = parseFloat(gstPercentage);
       const priceExcludingTaxNum = parseFloat(priceExcludingTax);
-      
+
       // Calculate SGST and CGST (each is half of GST)
       const sgstPercentage = gstPercentageNum / 2;
       const cgstPercentage = gstPercentageNum / 2;
-      
+
       itemData = {
         ...itemData,
         sgstPercentage: Math.round(sgstPercentage * 100) / 100,
@@ -142,11 +142,11 @@ exports.addItem = async (req, res) => {
       } else if (category.toLowerCase() === 'raw') {
         // Only add if not already present
         if (!vendor.rawMaterialInventory.some(inv => inv.itemId.equals(item._id))) {
-          vendor.rawMaterialInventory.push({ 
-            itemId: item._id, 
-            openingAmount: 0, 
-            closingAmount: 0, 
-            unit: item.unit || 'kg' 
+          vendor.rawMaterialInventory.push({
+            itemId: item._id,
+            openingAmount: 0,
+            closingAmount: 0,
+            unit: item.unit || 'kg'
           });
           await vendor.save();
         }
@@ -176,11 +176,11 @@ exports.addItem = async (req, res) => {
         await Promise.all(vendors.map(vendor => {
           // Only add if not already present
           if (!vendor.rawMaterialInventory.some(inv => inv.itemId.equals(item._id))) {
-            vendor.rawMaterialInventory.push({ 
-              itemId: item._id, 
-              openingAmount: 0, 
-              closingAmount: 0, 
-              unit: item.unit || 'kg' 
+            vendor.rawMaterialInventory.push({
+              itemId: item._id,
+              openingAmount: 0,
+              closingAmount: 0,
+              unit: item.unit || 'kg'
             });
             return vendor.save();
           }
@@ -337,6 +337,8 @@ exports.getItemsByVendor = async (req, res) => {
       success: true,
       foodCourtName,
       uniID: vendor.uniID, // Include the university ID
+      image: vendor.image,
+      coverImage: vendor.coverImage,
       data: {
         retailItems: retailItems || [],
         produceItems: produceItems || [],
@@ -522,12 +524,12 @@ exports.searchItems = async (req, res) => {
 
       // Find items that contain the search query in name or type
       const matchingRetailItems = allRetailItems.filter((item) =>
-        item.name.toLowerCase().includes(queryLower) || 
+        item.name.toLowerCase().includes(queryLower) ||
         item.type.toLowerCase().includes(queryLower) ||
         (item.subtype && item.subtype.toLowerCase().includes(queryLower))
       );
       const matchingProduceItems = allProduceItems.filter((item) =>
-        item.name.toLowerCase().includes(queryLower) || 
+        item.name.toLowerCase().includes(queryLower) ||
         item.type.toLowerCase().includes(queryLower) ||
         (item.subtype && item.subtype.toLowerCase().includes(queryLower))
       );
@@ -711,7 +713,7 @@ exports.getItemById = async (req, res) => {
 exports.getVendorSpecificItems = async (req, res) => {
   try {
     const { vendorId, category } = req.params;
-    
+
     // Check if vendor exists
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) {
@@ -719,18 +721,18 @@ exports.getVendorSpecificItems = async (req, res) => {
     }
 
     const ItemModel = getModel(category);
-    
+
     // Get all items for the vendor's university
     const allItems = await ItemModel.find({ uniId: vendor.uniID }).lean();
-    
+
     // Get vendor's inventory
     const inventoryField = category.toLowerCase() === 'retail' ? 'retailInventory' : 'produceInventory';
     const vendorInventory = vendor[inventoryField] || [];
-    
+
     // Get items that are in vendor's inventory
     const vendorItemIds = vendorInventory.map(inv => inv.itemId.toString());
     const vendorItems = allItems.filter(item => vendorItemIds.includes(item._id.toString()));
-    
+
     // Add inventory information to each item
     const itemsWithInventory = vendorItems.map(item => {
       const inventory = vendorInventory.find(inv => inv.itemId.toString() === item._id.toString());

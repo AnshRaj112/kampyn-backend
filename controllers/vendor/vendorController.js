@@ -19,7 +19,7 @@ exports.getVendorsByUni = async (req, res) => {
 
     // Get all vendors for this university
     const vendors = await Vendor.find({ uniID: uniId })
-      .select("_id fullName retailInventory produceInventory")
+      .select("_id fullName retailInventory produceInventory image coverImage")
       .lean();
 
     // Create a map of vendor availability
@@ -89,6 +89,61 @@ exports.getVendorsWithAvailability = async (req, res) => {
   }
 };
 
+// Update Vendor Profile (including images)
+exports.updateProfile = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const updates = req.body;
+
+    // Check if files were uploaded
+    if (req.files) {
+      const cloudinary = require('../../config/cloudinary');
+
+      // Upload Profile Image
+      if (req.files.image && req.files.image[0]) {
+        const result = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
+            { folder: 'vendor_profiles' },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          uploadStream.end(req.files.image[0].buffer);
+        });
+        updates.image = result.secure_url;
+      }
+
+      // Upload Cover Image
+      if (req.files.coverImage && req.files.coverImage[0]) {
+        const result = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
+            { folder: 'vendor_covers' },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          uploadStream.end(req.files.coverImage[0].buffer);
+        });
+        updates.coverImage = result.secure_url;
+      }
+    }
+
+    const vendor = await Vendor.findByIdAndUpdate(vendorId, updates, { new: true });
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "Vendor not found" });
+    }
+
+    res.status(200).json({ success: true, vendor });
+  } catch (error) {
+    console.error("Error updating vendor profile:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
 // Update vendor availability in university
 exports.updateVendorAvailability = async (req, res) => {
   try {
@@ -105,12 +160,12 @@ exports.updateVendorAvailability = async (req, res) => {
 
     // Update the vendor availability in the university
     const result = await Uni.updateOne(
-      { 
+      {
         _id: uniId,
-        "vendors.vendorId": vendorId 
+        "vendors.vendorId": vendorId
       },
-      { 
-        $set: { "vendors.$.isAvailable": isAvailable } 
+      {
+        $set: { "vendors.$.isAvailable": isAvailable }
       }
     );
 
@@ -118,9 +173,9 @@ exports.updateVendorAvailability = async (req, res) => {
       return res.status(404).json({ error: "University or vendor not found." });
     }
 
-    res.status(200).json({ 
-      success: true, 
-      message: `Vendor availability updated to ${isAvailable === 'Y' ? 'available' : 'unavailable'}` 
+    res.status(200).json({
+      success: true,
+      message: `Vendor availability updated to ${isAvailable === 'Y' ? 'available' : 'unavailable'}`
     });
   } catch (err) {
     logger.error("Error in updateVendorAvailability:", err);
@@ -223,16 +278,16 @@ exports.updateItemAvailableStatus = async (req, res) => {
 exports.getDeliverySettings = async (req, res) => {
   try {
     const { vendorId } = req.params;
-    
+
     const vendor = await Vendor.findById(vendorId).select('deliverySettings').lean();
-    
+
     if (!vendor) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Vendor not found" 
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found"
       });
     }
-    
+
     res.json({
       success: true,
       data: vendor.deliverySettings || {
@@ -242,9 +297,9 @@ exports.getDeliverySettings = async (req, res) => {
     });
   } catch (err) {
     logger.error("Error getting delivery settings:", err);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error" 
+    res.status(500).json({
+      success: false,
+      message: "Server error"
     });
   }
 };
@@ -260,7 +315,7 @@ exports.updateDeliverySettings = async (req, res) => {
       offersDelivery,
       deliveryPreparationTime
     } = req.body;
-    
+
     // Validate input
     if (typeof offersDelivery !== 'boolean') {
       return res.status(400).json({
@@ -268,32 +323,32 @@ exports.updateDeliverySettings = async (req, res) => {
         message: "offersDelivery must be a boolean"
       });
     }
-    
+
     if (deliveryPreparationTime !== undefined && (deliveryPreparationTime < 0 || deliveryPreparationTime > 180)) {
       return res.status(400).json({
         success: false,
         message: "deliveryPreparationTime must be between 0 and 180 minutes"
       });
     }
-    
+
     // Build update object
     const updateData = {};
     if (offersDelivery !== undefined) updateData['deliverySettings.offersDelivery'] = offersDelivery;
     if (deliveryPreparationTime !== undefined) updateData['deliverySettings.deliveryPreparationTime'] = deliveryPreparationTime;
-    
+
     const vendor = await Vendor.findByIdAndUpdate(
       vendorId,
       { $set: updateData },
       { new: true, runValidators: true }
     ).select('deliverySettings');
-    
+
     if (!vendor) {
       return res.status(404).json({
         success: false,
         message: "Vendor not found"
       });
     }
-    
+
     res.json({
       success: true,
       data: vendor.deliverySettings,
@@ -333,7 +388,7 @@ exports.toggleVendorAvailability = async (req, res) => {
 
     // First, get the vendor to find their university
     const vendor = await Vendor.findById(vendorId).select('uniID').lean();
-    
+
     if (!vendor) {
       return res.status(404).json({
         success: false,
@@ -350,12 +405,12 @@ exports.toggleVendorAvailability = async (req, res) => {
 
     // Update the vendor availability in the university
     const result = await Uni.updateOne(
-      { 
+      {
         _id: vendor.uniID,
-        "vendors.vendorId": vendorId 
+        "vendors.vendorId": vendorId
       },
-      { 
-        $set: { "vendors.$.isAvailable": isAvailable } 
+      {
+        $set: { "vendors.$.isAvailable": isAvailable }
       }
     );
 
@@ -399,7 +454,7 @@ exports.getVendorAvailability = async (req, res) => {
 
     // Get the vendor to find their university
     const vendor = await Vendor.findById(vendorId).select('uniID').lean();
-    
+
     if (!vendor) {
       return res.status(404).json({
         success: false,
@@ -416,7 +471,7 @@ exports.getVendorAvailability = async (req, res) => {
 
     // Get the vendor's availability from the university
     const uni = await Uni.findById(vendor.uniID).select('vendors').lean();
-    
+
     if (!uni) {
       return res.status(404).json({
         success: false,
@@ -425,7 +480,7 @@ exports.getVendorAvailability = async (req, res) => {
     }
 
     const vendorInUni = uni.vendors.find(v => v.vendorId.toString() === vendorId);
-    
+
     if (!vendorInUni) {
       return res.status(404).json({
         success: false,

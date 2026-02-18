@@ -3,6 +3,7 @@ const Uni = require('../models/account/Uni');
 const Feature = require('../models/account/Feature');
 const Service = require('../models/account/Service');
 const logger = require('../utils/pinoLogger');
+const upload = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -11,11 +12,11 @@ router.get('/charges/:uniId', async (req, res) => {
   try {
     const { uniId } = req.params;
     const university = await Uni.findById(uniId).select('packingCharge deliveryCharge platformFee fullName');
-    
+
     if (!university) {
       return res.status(404).json({ message: "University not found" });
     }
-    
+
     res.json({
       packingCharge: university.packingCharge,
       deliveryCharge: university.deliveryCharge,
@@ -33,30 +34,30 @@ router.put('/charges/:uniId', async (req, res) => {
   try {
     const { uniId } = req.params;
     const { packingCharge, deliveryCharge } = req.body;
-    
+
     // Validate input
     if (packingCharge !== undefined && (packingCharge < 0 || !Number.isFinite(packingCharge))) {
       return res.status(400).json({ message: "Packing charge must be a non-negative number" });
     }
-    
+
     if (deliveryCharge !== undefined && (deliveryCharge < 0 || !Number.isFinite(deliveryCharge))) {
       return res.status(400).json({ message: "Delivery charge must be a non-negative number" });
     }
-    
+
     const updateData = {};
     if (packingCharge !== undefined) updateData.packingCharge = packingCharge;
     if (deliveryCharge !== undefined) updateData.deliveryCharge = deliveryCharge;
-    
+
     const university = await Uni.findByIdAndUpdate(
-      uniId, 
+      uniId,
       updateData,
       { new: true, runValidators: true }
     ).select('packingCharge deliveryCharge fullName');
-    
+
     if (!university) {
       return res.status(404).json({ message: "University not found" });
     }
-    
+
     res.json({
       message: "Charges updated successfully",
       packingCharge: university.packingCharge,
@@ -193,9 +194,9 @@ router.get('/universities/:uniId/vendors/:vendorId/services', async (req, res) =
     }
 
     // Get all services from the university's features
-    const allServices = await Service.find({ 
+    const allServices = await Service.find({
       feature: { $in: university.features.map(f => f._id) },
-      isActive: true 
+      isActive: true
     }).populate('feature').lean();
 
     // Check which services are assigned to this vendor
@@ -207,8 +208,8 @@ router.get('/universities/:uniId/vendors/:vendorId/services', async (req, res) =
       isAssigned: assignedServiceIds.includes(service._id.toString())
     }));
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         services: servicesWithStatus,
         features: university.features
@@ -235,13 +236,13 @@ router.get('/universities/:uniId/allowed-services', async (req, res) => {
     }
 
     // Get all services from the university's features
-    const allServices = await Service.find({ 
+    const allServices = await Service.find({
       feature: { $in: university.features.map(f => f._id) },
-      isActive: true 
+      isActive: true
     }).populate('feature').lean();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         services: allServices,
         features: university.features
@@ -277,7 +278,7 @@ router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res)
     }
 
     // Validate that all services belong to university's features
-    const validServices = await Service.find({ 
+    const validServices = await Service.find({
       _id: { $in: services },
       feature: { $in: university.features.map(f => f._id) }
     });
@@ -299,6 +300,129 @@ router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res)
   } catch (err) {
     logger.error('Error updating vendor services:', err);
     res.status(500).json({ success: false, message: 'Failed to update vendor services' });
+  }
+});
+
+// Get university profile (including images)
+router.get('/:uniId/profile', async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const university = await Uni.findById(uniId).select('fullName email phone retailImage produceImage categoryImages packingCharge deliveryCharge');
+
+    if (!university) {
+      return res.status(404).json({ message: "University not found" });
+    }
+
+    res.json(university);
+  } catch (err) {
+    logger.error('Error fetching university profile:', err);
+    res.status(500).json({ message: "Failed to fetch university profile" });
+  }
+});
+
+// Update university profile (including images)
+router.put('/:uniId/profile', upload.fields([{ name: 'retailImage', maxCount: 1 }, { name: 'produceImage', maxCount: 1 }]), async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const { packingCharge, deliveryCharge } = req.body;
+
+    // Check if university exists
+    let university = await Uni.findById(uniId);
+    if (!university) {
+      return res.status(404).json({ message: "University not found" });
+    }
+
+    // Handle Image Uploads
+    if (req.files) {
+      const cloudinary = require('../config/cloudinary');
+
+      if (req.files.retailImage) {
+        const file = req.files.retailImage[0];
+        const b64 = Buffer.from(file.buffer).toString("base64");
+        const dataURI = "data:" + file.mimetype + ";base64," + b64;
+        const result = await cloudinary.uploader.upload(dataURI, {
+          folder: "university_images",
+        });
+        university.retailImage = result.secure_url;
+      }
+
+      if (req.files.produceImage) {
+        const file = req.files.produceImage[0];
+        const b64 = Buffer.from(file.buffer).toString("base64");
+        const dataURI = "data:" + file.mimetype + ";base64," + b64;
+        const result = await cloudinary.uploader.upload(dataURI, {
+          folder: "university_images",
+        });
+        university.produceImage = result.secure_url;
+      }
+    }
+
+    // Update charges if provided
+    if (packingCharge !== undefined) university.packingCharge = packingCharge;
+    if (deliveryCharge !== undefined) university.deliveryCharge = deliveryCharge;
+
+    await university.save();
+
+    res.json({
+      message: "University profile updated successfully",
+      university: {
+        retailImage: university.retailImage,
+        produceImage: university.produceImage,
+        packingCharge: university.packingCharge,
+        deliveryCharge: university.deliveryCharge
+      }
+    });
+
+  } catch (err) {
+    logger.error('Error updating university profile:', err);
+    res.status(500).json({ message: "Failed to update university profile" });
+  }
+});
+
+// Update or Add Category Image (Kind Image)
+router.put('/:uniId/category-images', upload.single('image'), async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const { name } = req.body; // Category Name (e.g., "Pizza")
+
+    if (!name) return res.status(400).json({ message: "Category name is required" });
+
+    let university = await Uni.findById(uniId);
+    if (!university) {
+      return res.status(404).json({ message: "University not found" });
+    }
+
+    let imageUrl = null;
+    if (req.file) {
+      const cloudinary = require('../config/cloudinary');
+      const b64 = Buffer.from(req.file.buffer).toString("base64");
+      const dataURI = "data:" + req.file.mimetype + ";base64," + b64;
+      const result = await cloudinary.uploader.upload(dataURI, {
+        folder: "university_category_images",
+      });
+      imageUrl = result.secure_url;
+    }
+
+    if (!imageUrl) return res.status(400).json({ message: "Image file is required" });
+
+    // Update existing or push new
+    const existingIndex = university.categoryImages.findIndex(img => img.name === name);
+    if (existingIndex >= 0) {
+      university.categoryImages[existingIndex].image = imageUrl;
+    } else {
+      university.categoryImages.push({ name, image: imageUrl });
+    }
+
+    await university.save();
+
+    res.json({
+      message: "Category image updated successfully",
+      categoryImages: university.categoryImages
+    });
+
+  } catch (err) {
+    logger.error('Error updating category image:', err);
+    res.status(500).json({ message: "Failed to update category image" });
   }
 });
 
