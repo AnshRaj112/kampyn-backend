@@ -203,6 +203,14 @@ async function getVendorsByItemId(itemKind, itemId) {
           ? { quantity: entry.quantity || 0 }
           : { isAvailable: entry.isAvailable || "N" };
 
+      // Filter out unavailable items
+      if (itemKind === "retail" && inventoryValue.quantity <= 0) {
+        continue;
+      }
+      if (itemKind === "produce" && inventoryValue.isAvailable !== "Y") {
+        continue;
+      }
+
       results.push({
         vendorId: v._id,
         vendorName: v.fullName,
