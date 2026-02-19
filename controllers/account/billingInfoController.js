@@ -83,7 +83,7 @@ const getVendorBillingHistory = async (req, res) => {
 // Get customer billing history
 const getCustomerBillingHistory = async (req, res) => {
   try {
-    const { phoneNumber } = req.params;
+    const { phoneNumber } = req.body;
     const { limit = 20 } = req.query;
 
     if (!phoneNumber) {
