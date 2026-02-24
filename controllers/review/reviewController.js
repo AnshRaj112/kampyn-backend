@@ -39,6 +39,12 @@ exports.upsertReview = async (req, res) => {
       // ignore, fallback to provided uniId
     }
 
+    // Check if review already exists to prevent duplicates
+    const existingReview = await Review.findOne({ orderId: order._id, userId }).lean();
+    if (existingReview) {
+      return res.status(400).json({ success: false, message: "You have already reviewed this order" });
+    }
+
     const payload = {
       orderId: order._id,
       orderNumber: order.orderNumber,
@@ -49,11 +55,7 @@ exports.upsertReview = async (req, res) => {
       comment: comment || "",
     };
 
-    const review = await Review.findOneAndUpdate(
-      { orderId: order._id, userId },
-      { $set: payload },
-      { new: true, upsert: true }
-    ).lean();
+    const review = await Review.create(payload);
 
     return res.json({ success: true, data: review });
   } catch (err) {

@@ -61,16 +61,16 @@ exports.placeOrderHandler = async (req, res) => {
     });
   } catch (err) {
     logger.error({ error: err.message }, "Error in placeOrderHandler");
-    
+
     if (err.code === 11000) {
       // MongoDB duplicate key error
-      return res.status(409).json({ 
-        success: false, 
+      return res.status(409).json({
+        success: false,
         message: "Order number already exists. Please try again.",
         errorType: "DUPLICATE_ORDER_NUMBER"
       });
     }
-    
+
     return res.status(400).json({ success: false, message: err && err.message ? err.message : 'Unknown error occurred' });
   }
 };
@@ -103,10 +103,10 @@ exports.storeOrderDetails = async (req, res) => {
       finalTotal,
       timestamp: Date.now()
     };
-    
+
     logger.debug({ razorpayOrderId }, "Storing order details with key");
     orderUtils.storePendingOrderDetails(razorpayOrderId, orderDetailsToStore);
-    
+
     // Verify storage
     const storedDetails = orderUtils.getPendingOrderDetails(razorpayOrderId);
     logger.debug({ stored: !!storedDetails }, "Verification - order details stored successfully");
@@ -256,15 +256,15 @@ exports.getPastOrders = async (req, res) => {
     // 2) Clean up delivered orders - move them from activeOrders to pastOrders if they're not already there
     if (user.activeOrders && user.activeOrders.length > 0) {
       logger.debug({ activeOrdersCount: user.activeOrders.length }, 'Checking active orders for delivered status');
-      
+
       const activeOrderIds = user.activeOrders.map(id => id.toString());
       const deliveredOrders = await Order.find(
         { _id: { $in: activeOrderIds }, status: "delivered", deleted: false }
       ).lean();
-      
+
       if (deliveredOrders.length > 0) {
         logger.info({ deliveredOrdersCount: deliveredOrders.length }, 'Found delivered orders in active orders, moving to past orders');
-        
+
         const deliveredOrderIds = deliveredOrders.map(order => order._id);
         await User.updateOne(
           { _id: userId },
@@ -273,7 +273,7 @@ exports.getPastOrders = async (req, res) => {
             $push: { pastOrders: { $each: deliveredOrderIds } }
           }
         );
-        
+
         logger.info({ movedCount: deliveredOrders.length }, 'Moved delivered orders to past orders');
       }
     }
@@ -302,22 +302,22 @@ exports.getPastOrders = async (req, res) => {
     // 6) Get vendor details for all orders
     const vendorIds = [...new Set(orders.map(order => order.vendorId).filter(Boolean))];
     logger.debug({ vendorIds }, 'Fetching vendors with IDs');
-    
+
     const vendors = await Vendor.find({ _id: { $in: vendorIds } }, 'fullName uniID').lean();
     const vendorMap = Object.fromEntries(vendors.map(v => [v._id.toString(), v]));
-    
+
     // 7) Get college details for all vendors
     const collegeIds = [...new Set(vendors.map(v => v.uniID).filter(Boolean))];
     logger.debug({ collegeIds }, 'Fetching colleges with IDs');
-    
+
     const colleges = await Uni.find({ _id: { $in: collegeIds } }, 'fullName shortName').lean();
     const collegeMap = Object.fromEntries(colleges.map(c => [c._id.toString(), c]));
-    
+
     // 8) Attach vendor and college details to orders
     const ordersWithVendors = orders.map(order => {
       const vendor = order.vendorId ? vendorMap[order.vendorId.toString()] : null;
       const college = vendor && vendor.uniID ? collegeMap[vendor.uniID.toString()] : null;
-      
+
       const result = {
         ...order,
         vendorId: vendor ? {
@@ -325,7 +325,7 @@ exports.getPastOrders = async (req, res) => {
           college: college
         } : null
       };
-      
+
       logger.debug({ orderId: order._id, vendorId: result.vendorId }, 'Order vendor data');
       return result;
     });
@@ -333,9 +333,9 @@ exports.getPastOrders = async (req, res) => {
     // 9) Filter orders by college if specified
     let filteredOrders = ordersWithVendors;
     if (collegeId) {
-      filteredOrders = ordersWithVendors.filter(order => 
-        order.vendorId && 
-        order.vendorId.uniID && 
+      filteredOrders = ordersWithVendors.filter(order =>
+        order.vendorId &&
+        order.vendorId.uniID &&
         order.vendorId.uniID.toString() === collegeId
       );
       logger.debug({ filteredOrdersCount: filteredOrders.length }, 'Orders after college filter');
@@ -354,24 +354,24 @@ exports.getPastOrders = async (req, res) => {
               ...orderDetails,
               vendorId: order.vendorId // Preserve the vendor info we built with college details
             };
-          } 
-            logger.warn({ orderId: order._id }, 'No details found for order');
-            // If order details not found, return basic order info
-            return {
-              _id: order._id,
-              orderId: order._id,
-              orderNumber: order.orderNumber || 'Unknown',
-              orderType: order.orderType || 'unknown',
-              status: order.status || 'unknown',
-              createdAt: order.createdAt,
-              collectorName: order.collectorName || 'Unknown',
-              collectorPhone: order.collectorPhone || 'Unknown',
-              address: order.address || '',
-              total: order.total || 0,
-              vendorId: order.vendorId, // Preserve the vendor info we built
-              items: []
-            };
-          
+          }
+          logger.warn({ orderId: order._id }, 'No details found for order');
+          // If order details not found, return basic order info
+          return {
+            _id: order._id,
+            orderId: order._id,
+            orderNumber: order.orderNumber || 'Unknown',
+            orderType: order.orderType || 'unknown',
+            status: order.status || 'unknown',
+            createdAt: order.createdAt,
+            collectorName: order.collectorName || 'Unknown',
+            collectorPhone: order.collectorPhone || 'Unknown',
+            address: order.address || '',
+            total: order.total || 0,
+            vendorId: order.vendorId, // Preserve the vendor info we built
+            items: []
+          };
+
         } catch (error) {
           logger.error({ error: error.message, orderId: order._id }, 'Error getting details for order');
           // Return basic order info if details fetch fails
@@ -393,16 +393,28 @@ exports.getPastOrders = async (req, res) => {
       })
     );
 
-    logger.info({ processedOrdersCount: detailedOrders.length }, 'Successfully processed orders');
+    // 10.5) Check which orders have reviews
+    const reviews = await mongoose.model('Review').find({
+      orderId: { $in: detailedOrders.map(o => o._id) },
+      userId: userId
+    }, 'orderId').lean();
+    const reviewedOrderIds = new Set(reviews.map(r => r.orderId.toString()));
+
+    const finalOrders = detailedOrders.map(order => ({
+      ...order,
+      isReviewed: reviewedOrderIds.has(order._id.toString())
+    }));
+
+    logger.info({ processedOrdersCount: finalOrders.length }, 'Successfully processed orders');
 
     // Debug: Log the first order to see the structure
-    if (detailedOrders.length > 0) {
-      logger.debug({ vendorId: detailedOrders[0].vendorId }, 'Sample order vendor data');
+    if (finalOrders.length > 0) {
+      logger.debug({ vendorId: finalOrders[0].vendorId, isReviewed: finalOrders[0].isReviewed }, 'Sample order vendor data');
     }
 
     return res.json({
       success: true,
-      orders: detailedOrders
+      orders: finalOrders
     });
   } catch (err) {
     logger.error({ error: err.message }, "Error in getPastOrders");
@@ -426,14 +438,14 @@ exports.getOrderById = async (req, res) => {
 
     // Get order details using the existing utility function
     const orderDetails = await orderUtils.getOrderWithDetails(orderId);
-    
+
     if (!orderDetails) {
       return res.status(404).json({ message: "Order not found." });
     }
 
     // Get vendor details
     const vendor = await Vendor.findById(orderDetails.vendorId).select('fullName uniID').lean();
-    
+
     // Get college details if vendor has uniID
     let college = null;
     if (vendor && vendor.uniID) {
@@ -507,7 +519,7 @@ exports.cleanupDeliveredOrders = async (req, res) => {
 
     logger.info({ movedCount: deliveredOrders.length }, 'Moved delivered orders to past orders');
 
-    return res.json({ 
+    return res.json({
       message: `Successfully moved ${deliveredOrders.length} delivered orders to past orders.`,
       movedOrders: deliveredOrderIds
     });
@@ -541,15 +553,15 @@ exports.getUserActiveOrders = async (req, res) => {
     // 2) Clean up delivered orders - move them from activeOrders to pastOrders if they're not already there
     if (user.activeOrders && user.activeOrders.length > 0) {
       logger.debug({ activeOrdersCount: user.activeOrders.length }, 'Checking active orders for delivered status');
-      
+
       const activeOrderIds = user.activeOrders.map(id => id.toString());
       const deliveredOrders = await Order.find(
         { _id: { $in: activeOrderIds }, status: "delivered", deleted: false }
       ).lean();
-      
+
       if (deliveredOrders.length > 0) {
         logger.info({ deliveredOrdersCount: deliveredOrders.length }, 'Found delivered orders in active orders, moving to past orders');
-        
+
         const deliveredOrderIds = deliveredOrders.map(order => order._id);
         await User.updateOne(
           { _id: userId },
@@ -558,7 +570,7 @@ exports.getUserActiveOrders = async (req, res) => {
             $push: { pastOrders: { $each: deliveredOrderIds } }
           }
         );
-        
+
         logger.info({ movedCount: deliveredOrders.length }, 'Moved delivered orders to past orders');
       }
     }
@@ -586,22 +598,22 @@ exports.getUserActiveOrders = async (req, res) => {
     // 6) Get vendor details for all orders
     const vendorIds = [...new Set(orders.map(order => order.vendorId).filter(Boolean))];
     logger.debug({ vendorIds }, 'Fetching vendors with IDs');
-    
+
     const vendors = await Vendor.find({ _id: { $in: vendorIds } }, 'fullName uniID').lean();
     const vendorMap = Object.fromEntries(vendors.map(v => [v._id.toString(), v]));
-    
+
     // 7) Get college details for all vendors
     const collegeIds = [...new Set(vendors.map(v => v.uniID).filter(Boolean))];
     logger.debug({ collegeIds }, 'Fetching colleges with IDs');
-    
+
     const colleges = await Uni.find({ _id: { $in: collegeIds } }, 'fullName shortName').lean();
     const collegeMap = Object.fromEntries(colleges.map(c => [c._id.toString(), c]));
-    
+
     // 8) Attach vendor and college details to orders
     const ordersWithVendors = orders.map(order => {
       const vendor = order.vendorId ? vendorMap[order.vendorId.toString()] : null;
       const college = vendor && vendor.uniID ? collegeMap[vendor.uniID.toString()] : null;
-      
+
       const result = {
         ...order,
         vendorId: vendor ? {
@@ -609,7 +621,7 @@ exports.getUserActiveOrders = async (req, res) => {
           college: college
         } : null
       };
-      
+
       logger.debug({ orderId: order._id, vendorId: result.vendorId }, 'Order vendor data');
       return result;
     });
@@ -617,9 +629,9 @@ exports.getUserActiveOrders = async (req, res) => {
     // 9) Filter orders by college if specified
     let filteredOrders = ordersWithVendors;
     if (collegeId) {
-      filteredOrders = ordersWithVendors.filter(order => 
-        order.vendorId && 
-        order.vendorId.uniID && 
+      filteredOrders = ordersWithVendors.filter(order =>
+        order.vendorId &&
+        order.vendorId.uniID &&
         order.vendorId.uniID.toString() === collegeId
       );
       logger.debug({ filteredOrdersCount: filteredOrders.length }, 'Orders after college filter');
@@ -638,24 +650,24 @@ exports.getUserActiveOrders = async (req, res) => {
               ...orderDetails,
               vendorId: order.vendorId // Preserve the vendor info we built with college details
             };
-          } 
-            logger.warn({ orderId: order._id }, 'No details found for order');
-            // If order details not found, return basic order info
-            return {
-              _id: order._id,
-              orderId: order._id,
-              orderNumber: order.orderNumber || 'Unknown',
-              orderType: order.orderType || 'unknown',
-              status: order.status || 'unknown',
-              createdAt: order.createdAt,
-              collectorName: order.collectorName || 'Unknown',
-              collectorPhone: order.collectorPhone || 'Unknown',
-              address: order.address || '',
-              total: order.total || 0,
-              vendorId: order.vendorId, // Preserve the vendor info we built
-              items: []
-            };
-          
+          }
+          logger.warn({ orderId: order._id }, 'No details found for order');
+          // If order details not found, return basic order info
+          return {
+            _id: order._id,
+            orderId: order._id,
+            orderNumber: order.orderNumber || 'Unknown',
+            orderType: order.orderType || 'unknown',
+            status: order.status || 'unknown',
+            createdAt: order.createdAt,
+            collectorName: order.collectorName || 'Unknown',
+            collectorPhone: order.collectorPhone || 'Unknown',
+            address: order.address || '',
+            total: order.total || 0,
+            vendorId: order.vendorId, // Preserve the vendor info we built
+            items: []
+          };
+
         } catch (error) {
           logger.error({ error: error.message, orderId: order._id }, 'Error getting details for order');
           // Return basic order info if details fetch fails
@@ -817,7 +829,7 @@ exports.createGuestOrder = async (req, res) => {
     let userId = null;
     let isNewUser = false;
     const existingUser = await User.findOne({ phone: collectorPhone });
-    
+
     if (existingUser) {
       userId = existingUser._id;
     } else {
@@ -831,7 +843,7 @@ exports.createGuestOrder = async (req, res) => {
         isVerified: true,
         uniID: vendor.uniID,
       });
-      
+
       const savedGuestUser = await guestUser.save();
       userId = savedGuestUser._id;
       isNewUser = true;
@@ -876,15 +888,15 @@ exports.createGuestOrder = async (req, res) => {
 
   } catch (err) {
     logger.error({ error: err.message }, "Error in createGuestOrder");
-    
+
     if (err.code === 11000) {
-      return res.status(409).json({ 
-        success: false, 
+      return res.status(409).json({
+        success: false,
         message: "Order number already exists. Please try again.",
         errorType: "DUPLICATE_ORDER_NUMBER"
       });
     }
-    
+
     return res.status(400).json({ success: false, message: err && err.message ? err.message : 'Unknown error occurred' });
   }
 };
@@ -900,7 +912,7 @@ exports.getActiveOrdersByVendor = async (req, res) => {
 
     // Use the utility function that properly populates item details
     const orders = await orderUtils.getOrdersWithDetails(vendorId);
-    
+
     logger.info({ ordersCount: orders.length }, "getActiveOrdersByVendor - Orders found");
     if (orders.length > 0) {
       logger.debug({
@@ -924,7 +936,7 @@ exports.getActiveOrdersByVendor = async (req, res) => {
 exports.cancelOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
-    
+
     logger.info({ orderId }, 'Cancelling order');
 
     // Validate orderId
@@ -943,8 +955,8 @@ exports.cancelOrder = async (req, res) => {
     // 2) Check if order can be cancelled (only pendingPayment orders)
     if (order.status !== "pendingPayment") {
       logger.warn({ orderId, status: order.status }, 'Order cannot be cancelled - invalid status');
-      return res.status(400).json({ 
-        message: `Order cannot be cancelled. Current status: ${order.status}` 
+      return res.status(400).json({
+        message: `Order cannot be cancelled. Current status: ${order.status}`
       });
     }
 
@@ -974,7 +986,7 @@ exports.cancelOrder = async (req, res) => {
           failedLocks: lockReleaseResult.failed.length
         };
       });
-      
+
       logger.info({ orderId }, 'Order hard deleted successfully with transaction');
       return res.json({
         success: true,
@@ -984,9 +996,9 @@ exports.cancelOrder = async (req, res) => {
       });
     } catch (error) {
       logger.error({ error: error.message, orderId }, 'Failed to hard delete order atomically');
-      return res.status(500).json({ 
+      return res.status(500).json({
         message: "Failed to cancel and delete order. Please try again.",
-        error: error.message 
+        error: error.message
       });
     } finally {
       await session.endSession();
@@ -1006,7 +1018,7 @@ exports.cancelOrderManual = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { userId } = req.body; // User ID for verification
-    
+
     logger.info({ orderId, userId }, 'Manual cancellation requested for order');
 
     // Validate orderId
@@ -1030,8 +1042,8 @@ exports.cancelOrderManual = async (req, res) => {
     // 2) Check if order can be cancelled (only pendingPayment orders)
     if (order.status !== "pendingPayment") {
       logger.warn({ orderId, status: order.status }, 'Order cannot be cancelled - invalid status');
-      return res.status(400).json({ 
-        message: `Order cannot be cancelled. Current status: ${order.status}` 
+      return res.status(400).json({
+        message: `Order cannot be cancelled. Current status: ${order.status}`
       });
     }
 
@@ -1061,7 +1073,7 @@ exports.cancelOrderManual = async (req, res) => {
           failedLocks: lockReleaseResult.failed.length
         };
       });
-      
+
       logger.info({ orderId }, 'Order manually hard deleted successfully with transaction');
       return res.json({
         success: true,
@@ -1071,9 +1083,9 @@ exports.cancelOrderManual = async (req, res) => {
       });
     } catch (error) {
       logger.error({ error: error.message, orderId }, 'Failed to manually hard delete order atomically');
-      return res.status(500).json({ 
+      return res.status(500).json({
         message: "Failed to cancel and delete order. Please try again.",
-        error: error.message 
+        error: error.message
       });
     } finally {
       await session.endSession();
@@ -1141,7 +1153,7 @@ exports.getVendorAnalytics = async (req, res) => {
       const totalOrders = orders.length;
       const avgOrderValue = totalOrders ? totalRevenue / totalOrders : 0;
       const uniqueCustomers = new Set(orders.map(o => o.collectorPhone)).size;
-      
+
       // Collect all item IDs by kind
       const retailIds = new Set();
       const produceIds = new Set();
