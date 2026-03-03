@@ -243,7 +243,7 @@ async function getRetailItemsForVendorId(vendorId) {
     _id: { $in: retailItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name description price type image isVeg") // include image field
+    .select("name description price type image isVeg packable") // include image and packable fields
     .lean();
 
   const retailMap = new Map(retailDocs.map((d) => [String(d._id), d]));
@@ -260,6 +260,7 @@ async function getRetailItemsForVendorId(vendorId) {
         type: doc.type,
         image: doc.image,
         isVeg: doc.isVeg,
+        packable: doc.packable ?? false,
         isSpecial, // from vendor's inventory
         isAvailable, // from vendor's inventory
       };
@@ -285,7 +286,7 @@ async function getProduceItemsForVendorId(vendorId) {
     _id: { $in: produceItemIds.map(toObjectId) },
     uniId: vendor.uniID,
   })
-    .select("name description price type subtype image isVeg") // include image field
+    .select("name description price type subtype image isVeg packable") // include image and packable fields
     .lean();
 
   const produceMap = new Map(produceDocs.map((d) => [String(d._id), d]));
@@ -303,6 +304,7 @@ async function getProduceItemsForVendorId(vendorId) {
         subtype: doc.subtype,
         image: doc.image,
         isVeg: doc.isVeg,
+        packable: doc.packable ?? true,
         isSpecial, // from vendor's inventory
       };
     })

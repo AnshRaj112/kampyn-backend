@@ -37,6 +37,10 @@ const vendorCartItemSchema = new mongoose.Schema({
     type: String,
     enum: ['Y', 'N'],
     default: 'Y'
+  },
+  packable: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -63,13 +67,13 @@ const vendorCartSchema = new mongoose.Schema({
 vendorCartSchema.index({ vendorId: 1 });
 
 // Method to calculate total
-vendorCartSchema.methods.calculateTotal = function() {
+vendorCartSchema.methods.calculateTotal = function () {
   this.total = this.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   return this.total;
 };
 
 // Pre-save middleware to update total and lastUpdated
-vendorCartSchema.pre('save', function(next) {
+vendorCartSchema.pre('save', function (next) {
   this.calculateTotal();
   this.lastUpdated = new Date();
   next();
