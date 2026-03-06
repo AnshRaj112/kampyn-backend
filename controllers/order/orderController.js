@@ -1185,13 +1185,15 @@ exports.getVendorAnalytics = async (req, res) => {
           if (!itemName) {
             // Fallback to looking up by ID
             if (item.kind === "Retail") {
-              itemName = retailMap[item.itemId.toString()] || "Deleted Retail Item";
+              itemName = retailMap[item.itemId.toString()];
             } else if (item.kind === "Produce") {
-              itemName = produceMap[item.itemId.toString()] || "Deleted Produce Item";
-            } else {
-              itemName = "Deleted Item";
+              itemName = produceMap[item.itemId.toString()];
             }
           }
+
+          // Hide items if they got hard-deleted and don't exist in map
+          if (!itemName) return;
+
           itemStats[itemName] = (itemStats[itemName] || 0) + item.quantity;
         });
       });
