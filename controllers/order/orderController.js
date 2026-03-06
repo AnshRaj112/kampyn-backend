@@ -1125,19 +1125,28 @@ exports.readyOrder = async (req, res) => {
 exports.getVendorAnalytics = async (req, res) => {
   try {
     const { vendorId } = req.params;
-    const date = req.query.date ? new Date(req.query.date) : new Date();
+    // Parse the date safely as a local date regardless of UTC offset
+    let parsedDate = new Date();
+    if (req.query.date) {
+      // Force local parsing by appending time to YYYY-MM-DD
+      parsedDate = new Date(`${req.query.date}T00:00:00`);
+    }
 
-    // Calculate start/end for day, week, month
-    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const startOfWeek = new Date(date);
-    startOfWeek.setDate(date.getDate() - date.getDay() + 1); // Monday as first day
-    const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    // Calculate strict local start and end bounds
+    const startOfDay = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate(), 23, 59, 59, 999);
 
-    // Helper to fetch orders in a range
+    const startOfWeek = new Date(startOfDay);
+    startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay() + 1); // Monday as first day
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const startOfMonth = new Date(startOfDay.getFullYear(), startOfDay.getMonth(), 1, 0, 0, 0, 0);
+
+    // Helper to fetch orders securely bounded by the very end of the requested local day
     const getOrders = (start) =>
       Order.find({
         vendorId,
-        createdAt: { $gte: start, $lte: date },
+        createdAt: { $gte: start, $lte: endOfDay },
         deleted: false
       }).lean();
 
