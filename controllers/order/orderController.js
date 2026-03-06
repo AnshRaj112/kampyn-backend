@@ -1185,11 +1185,11 @@ exports.getVendorAnalytics = async (req, res) => {
           if (!itemName) {
             // Fallback to looking up by ID
             if (item.kind === "Retail") {
-              itemName = retailMap[item.itemId.toString()] || `Unknown Retail Item (${item.itemId})`;
+              itemName = retailMap[item.itemId.toString()] || "Deleted Retail Item";
             } else if (item.kind === "Produce") {
-              itemName = produceMap[item.itemId.toString()] || `Unknown Produce Item (${item.itemId})`;
+              itemName = produceMap[item.itemId.toString()] || "Deleted Produce Item";
             } else {
-              itemName = `Unknown Item (${item.itemId})`;
+              itemName = "Deleted Item";
             }
           }
           itemStats[itemName] = (itemStats[itemName] || 0) + item.quantity;
