@@ -65,9 +65,9 @@ async function cancelOrderAtomically(orderId, order, session) {
 
     // 4) Release item locks (outside transaction since it's in-memory cache)
     const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, order.userId);
-    
+
     logger.info({ orderId, locksReleased: lockReleaseResult.released.length }, 'Order cancelled atomically');
-    
+
     return {
       success: true,
       locksReleased: lockReleaseResult.released.length,
@@ -94,16 +94,16 @@ async function cancelOrderAtomically(orderId, order, session) {
  */
 async function generateOrderNumber(userId, vendorId) {
   const today = new Date();
-  const datePrefix = today.getFullYear().toString() + 
-                    (today.getMonth() + 1).toString().padStart(2, '0') + 
-                    today.getDate().toString().padStart(2, '0');
-  
+  const datePrefix = today.getFullYear().toString() +
+    (today.getMonth() + 1).toString().padStart(2, '0') +
+    today.getDate().toString().padStart(2, '0');
+
   // Get last 4 characters of user ID for identification
   const userSuffix = userId.toString().slice(-4).toUpperCase();
-  
+
   // Create vendor-specific counter ID: "YYYYMMDD-VENDORID"
   const counterId = `${datePrefix}-${vendorId}`;
-  
+
   // Use atomic counter to get next sequence number for this vendor on this date
   // This ensures each vendor starts from 00001 each day
   const counterResult = await OrderCounter.findOneAndUpdate(
@@ -111,9 +111,9 @@ async function generateOrderNumber(userId, vendorId) {
     { $inc: { sequence: 1 }, $set: { lastUpdated: new Date() } },
     { upsert: true, new: true }
   );
-  
+
   const sequenceNumber = counterResult.sequence.toString().padStart(5, '0');
-  
+
   return `KYN-${datePrefix}-${userSuffix}-${sequenceNumber}`;
 }
 
@@ -135,23 +135,23 @@ async function generateOrderNumber(userId, vendorId) {
 async function generateTimeBasedOrderNumber(userId, vendorId) {
   // Get last 4 characters of user ID for identification
   const userSuffix = userId.toString().slice(-4).toUpperCase();
-  
+
   // Use current timestamp (10 digits) - provides microsecond precision
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  
+
   // Create time-based counter ID: "TIMESTAMP-VENDORID"
   // This creates a new counter every second for each vendor
   const counterId = `${timestamp}-${vendorId}`;
-  
+
   // Use atomic counter to get next sequence number for this vendor at this timestamp
   const counterResult = await OrderCounter.findOneAndUpdate(
     { counterId: counterId },
     { $inc: { sequence: 1 }, $set: { lastUpdated: new Date() } },
     { upsert: true, new: true }
   );
-  
+
   const sequenceNumber = counterResult.sequence.toString().padStart(5, '0');
-  
+
   return `KYN-${timestamp}-${userSuffix}-${sequenceNumber}`;
 }
 
@@ -172,17 +172,17 @@ async function generateTimeBasedOrderNumber(userId, vendorId) {
 async function generateUltraHighPerformanceOrderNumberWithDailyReset(userId, vendorId) {
   // Get last 4 characters of user ID for identification
   const userSuffix = userId.toString().slice(-4).toUpperCase();
-  
+
   // Use microsecond timestamp (13 digits) for maximum precision
   const microTime = Date.now().toString();
-  
+
   // Create daily counter ID: "YYYYMMDD-VENDORID" for daily reset
   const today = new Date();
-  const datePrefix = today.getFullYear().toString() + 
-                    (today.getMonth() + 1).toString().padStart(2, '0') + 
-                    today.getDate().toString().padStart(2, '0');
+  const datePrefix = today.getFullYear().toString() +
+    (today.getMonth() + 1).toString().padStart(2, '0') +
+    today.getDate().toString().padStart(2, '0');
   const dailyCounterId = `${datePrefix}-${vendorId}`;
-  
+
   // Use atomic counter to get next sequence number for this vendor on this date
   // This ensures each vendor starts from 00001 each day
   const counterResult = await OrderCounter.findOneAndUpdate(
@@ -190,9 +190,9 @@ async function generateUltraHighPerformanceOrderNumberWithDailyReset(userId, ven
     { $inc: { sequence: 1 }, $set: { lastUpdated: new Date() } },
     { upsert: true, new: true }
   );
-  
+
   const sequenceNumber = counterResult.sequence.toString().padStart(5, '0');
-  
+
   return `KYN-${microTime}-${userSuffix}-${sequenceNumber}`;
 }
 
@@ -235,51 +235,53 @@ async function generateRazorpayOrderForUser({
   // Get vendor to find university and check delivery settings
   const vendor = await Vendor.findById(user.vendorId).select('uniID deliverySettings').lean();
   if (!vendor) throw new Error("Vendor not found");
-  
+
   // Check if vendor offers delivery for delivery orders
   if (orderType === "delivery") {
     if (!vendor.deliverySettings?.offersDelivery) {
       throw new Error("This vendor does not offer delivery service.");
     }
   }
-  
+
   // Get university charges
   const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge platformFee').lean();
   const packingCharge = university?.packingCharge ?? DEFAULT_PRODUCE_SURCHARGE;
   const deliveryCharge = university?.deliveryCharge ?? DEFAULT_DELIVERY_CHARGE;
   const platformFee = typeof university?.platformFee === 'number' ? university.platformFee : 2; // Use university platform fee or default to 2
-  
+
   // Calculate total - use the same logic as frontend
   let itemTotal = 0;
   let packableItemsTotal = 0;
-  
-  logger.debug({ cartItems: populatedCart.map(item => ({
-    name: item.name,
-    price: item.price,
-    quantity: item.quantity,
-    packable: item.packable,
-    kind: item.kind,
-    totalPrice: (item.price || 0) * (item.quantity || 0)
-  })) }, "Cart items for calculation");
-  
+
+  logger.debug({
+    cartItems: populatedCart.map(item => ({
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      packable: item.packable,
+      kind: item.kind,
+      totalPrice: (item.price || 0) * (item.quantity || 0)
+    }))
+  }, "Cart items for calculation");
+
   for (const cartItem of populatedCart) {
     const itemPrice = cartItem.price || 0;
     const itemQuantity = cartItem.quantity || 0;
     const itemTotalPrice = itemPrice * itemQuantity;
-    
+
     logger.debug({ name: cartItem.name, price: itemPrice, quantity: itemQuantity, total: itemTotalPrice }, 'Item calculation');
-    
+
     itemTotal += itemTotalPrice;
-    
+
     // Check if item is packable (produce items are packable by default)
     const isPackable = cartItem.packable === true || cartItem.kind === "Produce";
     logger.debug({ name: cartItem.name, packable: cartItem.packable, kind: cartItem.kind, isPackable }, 'Packable check');
-    
+
     if (isPackable) {
       packableItemsTotal += itemQuantity;
     }
   }
-  
+
   logger.debug({
     itemTotal,
     packableItemsTotal,
@@ -287,13 +289,13 @@ async function generateRazorpayOrderForUser({
     deliveryCharge,
     platformFee
   }, "Calculation summary");
-  
+
   // Calculate packaging and delivery charges
   const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
   const delivery = (orderType === "delivery") ? deliveryCharge : 0;
-  
+
   const finalTotal = itemTotal + packaging + delivery + platformFee;
-  
+
   logger.debug({
     itemTotal,
     packableItemsTotal,
@@ -325,21 +327,21 @@ async function generateRazorpayOrderForUser({
   // Generate Razorpay order
   const shortUserId = userId.toString().slice(-6);
   const tempOrderId = `T${Date.now()}-${shortUserId}`; // always < 40 chars
-  
+
   logger.debug({
     finalTotal,
     amountInPaise: finalTotal * 100,
     currency: "INR",
     receipt: tempOrderId
   }, "Creating Razorpay order with amount");
-  
+
   const razorpayOrder = await razorpay.orders.create({
     amount: finalTotal * 100,
     currency: "INR",
     receipt: tempOrderId,
     payment_capture: 1,
   });
-  
+
   logger.info({
     razorpayOrderId: razorpayOrder.id,
     amount: razorpayOrder.amount,
@@ -419,45 +421,45 @@ async function createOrderForApproval({
   // Get vendor to find university and check delivery settings
   const vendor = await Vendor.findById(user.vendorId).select('uniID deliverySettings').lean();
   if (!vendor) throw new Error("Vendor not found");
-  
+
   // Check if vendor offers delivery for delivery orders
   if (orderType === "delivery") {
     if (!vendor.deliverySettings?.offersDelivery) {
       throw new Error("This vendor does not offer delivery service.");
     }
   }
-  
+
   // Get university charges
   const university = await Uni.findById(vendor.uniID).select('packingCharge deliveryCharge platformFee').lean();
   const packingCharge = university?.packingCharge ?? DEFAULT_PRODUCE_SURCHARGE;
   const deliveryCharge = university?.deliveryCharge ?? DEFAULT_DELIVERY_CHARGE;
   const platformFee = typeof university?.platformFee === 'number' ? university.platformFee : 2; // Use university platform fee or default to 2
-  
+
   // Calculate total - use the same logic as frontend
   let itemTotal = 0;
   let packableItemsTotal = 0;
-  
+
   for (const cartItem of populatedCart) {
     const itemPrice = cartItem.price || 0;
     const itemQuantity = cartItem.quantity || 0;
     itemTotal += itemPrice * itemQuantity;
-    
+
     // Check if item is packable (produce items are packable by default)
     const isPackable = cartItem.packable === true || cartItem.kind === "Produce";
     if (isPackable) {
       packableItemsTotal += itemQuantity;
     }
   }
-  
+
   // Calculate packaging and delivery charges
   const packaging = (orderType !== "dinein") ? packableItemsTotal * packingCharge : 0;
   const delivery = (orderType === "delivery") ? deliveryCharge : 0;
-  
+
   const finalTotal = itemTotal + packaging + delivery + platformFee;
 
   // Generate unique order number
   const orderNumber = await generateUltraHighPerformanceOrderNumberWithDailyReset(userId, user.vendorId);
-  
+
   // Create order items array
   const itemsForOrder = populatedCart.map(item => ({
     itemId: item.itemId,
@@ -595,7 +597,7 @@ async function verifyAndProcessPaymentWithOrderId({
       const { locksReleased, failedLocks } = await session.withTransaction(async () => {
         return await cancelOrderAtomically(ourOrderId, order, session);
       });
-      
+
       logger.info({ orderId: ourOrderId, locksReleased }, 'Payment failed for order - cancelled atomically');
       return { success: false, msg: "Invalid signature, payment failed" };
     } catch (error) {
@@ -633,18 +635,18 @@ async function postPaymentProcessing(orderDoc) {
           update: { $inc: { "retailInventory.$.quantity": -quantity } },
         },
       };
-    } 
-      return {
-        updateOne: {
-          filter: {
-            _id: vendorId,
-            "produceInventory.itemId": itemId,
-            "produceInventory.isAvailable": "Y",
-          },
-          update: { $set: { "produceInventory.$.isAvailable": "Y" } },
+    }
+    return {
+      updateOne: {
+        filter: {
+          _id: vendorId,
+          "produceInventory.itemId": itemId,
+          "produceInventory.isAvailable": "Y",
         },
-      };
-    
+        update: { $set: { "produceInventory.$.isAvailable": "Y" } },
+      },
+    };
+
   });
   if (bulkOps.length) await Vendor.bulkWrite(bulkOps);
 
@@ -786,14 +788,14 @@ async function getOrdersWithDetails(vendorId, orderType, statusFilter = null) {
   // 5) Assemble each order's detailed items
   return orders.map((order) => {
     logger.debug({ orderNumber: order.orderNumber, total: order.total }, "Processing order");
-    
+
     const detailedItems = order.items.map(({ itemId, kind, quantity }) => {
       const key = itemId.toString();
       const doc = kind === "Retail" ? retailMap[key] : produceMap[key];
       return {
-        name: doc.name,
-        price: doc.price,
-        unit: doc.unit,
+        name: doc ? doc.name : "Unknown Item",
+        price: doc ? doc.price : 0,
+        unit: doc ? doc.unit : "",
         type: kind.toLowerCase(),
         quantity,
       };
@@ -811,13 +813,13 @@ async function getOrdersWithDetails(vendorId, orderType, statusFilter = null) {
       total: order.total,
       items: detailedItems,
     };
-    
+
     logger.debug({
       orderNumber: result.orderNumber,
       total: result.total,
       totalType: typeof result.total
     }, "Returning order result");
-    
+
     return result;
   });
 }

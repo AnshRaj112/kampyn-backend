@@ -1,5 +1,6 @@
 // src/controllers/orderController.js
 
+const Review = require("../../models/order/Review");
 const orderUtils = require("../../utils/orderUtils");
 const Vendor = require("../../models/account/Vendor");
 const User = require("../../models/account/User");
@@ -394,7 +395,7 @@ exports.getPastOrders = async (req, res) => {
     );
 
     // 10.5) Check which orders have reviews
-    const reviews = await mongoose.model('Review').find({
+    const reviews = await Review.find({
       orderId: { $in: detailedOrders.map(o => o._id) },
       userId: userId
     }, 'orderId').lean();
