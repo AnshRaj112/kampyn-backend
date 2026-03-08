@@ -1,6 +1,7 @@
 const Account = require("../../models/account/User");
 const Otp = require("../../models/users/Otp");
 const Uni = require("../../models/account/Uni");
+const Vendor = require("../../models/account/Vendor");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
@@ -210,14 +211,33 @@ exports.resendOtp = async (req, res) => {
     }
 
     const emailLower = email.toLowerCase().trim();
-    const otpRecord = await Otp.findOne({ email: { $eq: emailLower } });
+    let otpRecord = await Otp.findOne({ email: { $eq: emailLower } });
 
     if (!otpRecord) {
-      return res
-        .status(404)
-        .json({ message: "No OTP request found. Please restart the process." });
+      // If no OTP record, it might have expired from TTL (10 mins).
+      // Check if this email belongs to an existing account (User, Uni, or Vendor)
+      // to allow regenerating the OTP for the login/forgot password flow.
+      const [user, uni, vendor] = await Promise.all([
+        Account.findOne({ email: { $eq: emailLower } }).lean().select('_id'),
+        Uni.findOne({ email: { $eq: emailLower } }).lean().select('_id'),
+        Vendor.findOne({ email: { $eq: emailLower } }).lean().select('_id')
+      ]);
+
+      if (user || uni || vendor) {
+        const otp = generateOtp();
+        await new Otp({ email: emailLower, otp, createdAt: new Date() }).save();
+        await sendOtpEmail(emailLower, otp);
+        return res.json({ message: "OTP resent successfully" });
+      }
+
+      // If no account found, then it was likely a signup flow where OTP expired 
+      // (and since signup data is stored IN the OTP record, we've lost it).
+      return res.status(404).json({
+        message: "Session expired. Please restart the login or signup process."
+      });
     }
 
+    // OTP record exists - just refresh it
     const otp = generateOtp();
     otpRecord.otp = otp;
     otpRecord.createdAt = new Date();
@@ -273,7 +293,7 @@ exports.login = async (req, res) => {
       // Redirect user to OTP verification
       return res.status(400).json({
         message: "User not verified. OTP sent to email.",
-        redirectTo: `/otpverification?email=${user.email}&from=login`,
+        redirectTo: `/otpverification?email=${user.email}&from=login&role=user`,
       });
     }
 

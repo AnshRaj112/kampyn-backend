@@ -1,5 +1,5 @@
 const express = require("express");
-const { signup, verifyOtp, login, forgotPassword, resetPassword, googleAuth, googleSignup, logout, refreshToken, verifyToken, checkSession, getUser } = require("../../controllers/auth/vendorAuthController");
+const { signup, verifyOtp, resendOtp, login, forgotPassword, resetPassword, googleAuth, googleSignup, logout, refreshToken, verifyToken, checkSession, getUser } = require("../../controllers/auth/vendorAuthController");
 const { perApiAuthLimiter } = require("../../middleware/rateLimit");
 const router = express.Router();
 
@@ -8,6 +8,7 @@ const router = express.Router();
 // Hitting limit on /login won't block /signup or other endpoints
 router.post("/signup", perApiAuthLimiter, signup);
 router.post("/otpverification", perApiAuthLimiter, verifyOtp);
+router.post("/resendotp", perApiAuthLimiter, resendOtp);
 router.post("/login", perApiAuthLimiter, login);
 router.post("/forgotpassword", perApiAuthLimiter, forgotPassword);
 router.post("/resetpassword", perApiAuthLimiter, resetPassword);

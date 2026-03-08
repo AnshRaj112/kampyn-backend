@@ -159,7 +159,49 @@ exports.verifyOtp = async (req, res) => {
   }
 };
 
-// **3. Login**
+// **2a. Resend OTP**
+exports.resendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ message: "Valid email is required" });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    let otpRecord = await Otp.findOne({ email: { $eq: emailLower } });
+
+    if (!otpRecord) {
+      // If no OTP record, it might have expired from TTL (10 mins).
+      // Check if this email belongs to an existing account to allow regenerating the OTP.
+      const account = await Account.findOne({ email: { $eq: emailLower } }).lean().select('_id');
+
+      if (account) {
+        const otp = generateOtp();
+        await new Otp({ email: emailLower, otp, createdAt: new Date() }).save();
+        await sendOtpEmail(emailLower, otp);
+        return res.json({ message: "OTP resent successfully" });
+      }
+
+      return res.status(404).json({
+        message: "Session expired or no OTP request found. Please restart the process."
+      });
+    }
+
+    // OTP record exists - just refresh it
+    const otp = generateOtp();
+    otpRecord.otp = otp;
+    otpRecord.createdAt = new Date();
+    await otpRecord.save();
+
+    await sendOtpEmail(emailLower, otp);
+
+    return res.json({ message: "OTP resent successfully" });
+  } catch (error) {
+    logger.error({ error: error.message }, "Resend OTP Error");
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
 exports.login = async (req, res) => {
   try {
     logger.info({ body: req.body }, "Login Request");
@@ -190,7 +232,7 @@ exports.login = async (req, res) => {
       // Redirect user to OTP verification
       return res.status(400).json({
         message: "User not verified. OTP sent to email.",
-        redirectTo: `/otpverification?email=${user.email}&from=login`,
+        redirectTo: `/otpverification?email=${user.email}&from=login&role=uni`,
       });
     }
 

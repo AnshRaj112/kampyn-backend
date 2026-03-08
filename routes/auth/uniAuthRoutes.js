@@ -1,10 +1,11 @@
 const express = require("express");
-const { signup, verifyOtp, login, forgotPassword, resetPassword, googleAuth, googleSignup, logout, refreshToken, verifyToken, checkSession, getUser } = require("../../controllers/auth/uniAuthController");
+const { signup, verifyOtp, resendOtp, login, forgotPassword, resetPassword, googleAuth, googleSignup, logout, refreshToken, verifyToken, checkSession, getUser } = require("../../controllers/auth/uniAuthController");
 const router = express.Router();
 
 // Auth routes
 router.post("/signup", signup);
 router.post("/otpverification", verifyOtp);
+router.post("/resendotp", resendOtp);
 router.post("/login", login);
 router.post("/forgotpassword", forgotPassword);
 router.post("/resetpassword", resetPassword);

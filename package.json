@@ -30,7 +30,7 @@
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "lusca": "^1.7.0",
-    "minimatch": "10.2.1",
+    "minimatch": "10.2.3",
     "mongoose": "^8.12.1",
     "multer": "2.1.1",
     "node-fetch": "3.3.2",
@@ -54,9 +54,10 @@
   "overrides": {
     "debug": "4.3.4",
     "glob": "^10.5.0",
-    "minimatch": "10.2.1"
+    "minimatch": "10.2.3"
   },
   "resolutions": {
+    "minimatch": "10.2.3",
     "debug": "4.3.4",
     "glob": "^10.5.0"
   },
