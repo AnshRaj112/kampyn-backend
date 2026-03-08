@@ -39,7 +39,8 @@
     "pino": "10.1.0",
     "pm2": "6.0.14",
     "razorpay": "^2.9.6",
-    "sanitize-filename": "^1.6.3"
+    "sanitize-filename": "^1.6.3",
+    "uuid": "13.0.0"
   },
   "devDependencies": {
     "husky": "^9.0.11",
