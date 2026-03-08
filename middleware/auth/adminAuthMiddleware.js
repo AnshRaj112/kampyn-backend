@@ -21,10 +21,10 @@ const adminAuthMiddleware = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Check if admin exists and is active
-    const admin = await Admin.findById(decoded.adminId).select("-password");
-    
+    const admin = await Admin.findById(decoded.userId).select("-password");
+
     if (!admin || !admin.isActive) {
       return res.status(401).json({
         success: false,
@@ -33,7 +33,7 @@ const adminAuthMiddleware = async (req, res, next) => {
     }
 
     // Check if admin should be logged out due to inactivity
-    const { shouldLogout } = await checkUserActivity(decoded.adminId, 'admin');
+    const { shouldLogout } = await checkUserActivity(decoded.userId, 'admin');
     if (shouldLogout) {
       return res.status(401).json({
         success: false,
@@ -42,7 +42,7 @@ const adminAuthMiddleware = async (req, res, next) => {
     }
 
     // Update last activity
-    await updateUserActivity(decoded.adminId, 'admin');
+    await updateUserActivity(decoded.userId, 'admin');
 
     // Add admin info to request
     req.admin = {
@@ -55,14 +55,14 @@ const adminAuthMiddleware = async (req, res, next) => {
     next();
   } catch (error) {
     logger.error({ error: error.message, errorName: error.name }, "Admin auth middleware error");
-    
+
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
         success: false,
         message: "Access denied. Invalid token."
       });
     }
-    
+
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,
@@ -113,7 +113,7 @@ const requirePermission = (permission) => {
  */
 const requireRole = (roles) => {
   const allowedRoles = Array.isArray(roles) ? roles : [roles];
-  
+
   return (req, res, next) => {
     if (!req.admin) {
       return res.status(401).json({

@@ -5,6 +5,9 @@ const {
   getFavouritesByUni,
   toggleFavourite,
 } = require("../controllers/favourites/favouritesController");
+const { authMiddleware } = require("../middleware/auth/authMiddleware");
+
+// Favourite routes
 
 router.get("/:userId", getFavourites);
 router.get("/:userId/:uniId", getFavouritesByUni);

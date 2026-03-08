@@ -64,7 +64,7 @@ exports.signup = async (req, res) => {
     logger.info({ email: emailLower }, "Account created");
 
     const token = jwt.sign(
-      { id: newAccount._id, role: newAccount.type },
+      { userId: newAccount._id, role: newAccount.type },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -123,6 +123,9 @@ exports.verifyOtp = async (req, res) => {
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+    // Reset inactivity timer so immediate user fetches don't fail
+    await updateUserActivity(user._id, 'admin');
+
     setTokenCookie(res, token);
 
     res.status(200).json({
@@ -141,12 +144,12 @@ exports.login = async (req, res) => {
     logger.info({ body: req.body }, "Login Request");
 
     const { identifier, password } = req.body;
-    
+
     // Process identifier based on type
-    const processedIdentifier = identifier.includes('@') 
+    const processedIdentifier = identifier.includes('@')
       ? identifier.toLowerCase() // Convert email to lowercase
       : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
-    
+
     const user = await Account.findOne({
       $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
     });
@@ -199,7 +202,7 @@ exports.forgotPassword = async (req, res) => {
     const { identifier } = req.body;
 
     // Process identifier based on type
-    const processedIdentifier = identifier.includes('@') 
+    const processedIdentifier = identifier.includes('@')
       ? identifier.toLowerCase() // Convert email to lowercase
       : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
 
@@ -334,18 +337,18 @@ exports.verifyToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Check if admin should be logged out due to inactivity
     const { shouldLogout } = await checkUserActivity(decoded.adminId, 'admin');
     if (shouldLogout) {
-      return res.status(401).json({ 
-        message: "Session expired due to inactivity. Please log in again." 
+      return res.status(401).json({
+        message: "Session expired due to inactivity. Please log in again."
       });
     }
 
     // Update last activity
     await updateUserActivity(decoded.adminId, 'admin');
-    
+
     req.user = decoded;
     next();
   } catch (error) {
@@ -463,7 +466,7 @@ exports.adminLogin = async (req, res) => {
 
     // Find admin by credentials
     const admin = await Admin.findByCredentials(email, password);
-    
+
     if (!admin) {
       return res.status(401).json({
         success: false,
@@ -474,7 +477,7 @@ exports.adminLogin = async (req, res) => {
     // Generate JWT token
     const token = jwt.sign(
       {
-        adminId: admin._id,
+        userId: admin._id,
         email: admin.email,
         role: admin.role,
         permissions: admin.permissions
@@ -508,14 +511,14 @@ exports.adminLogin = async (req, res) => {
 
   } catch (error) {
     logger.error({ error: error.message }, "Admin login error");
-    
+
     if (error.message.includes("Invalid login credentials")) {
       return res.status(401).json({
         success: false,
         message: error.message
       });
     }
-    
+
     if (error.message.includes("Account is temporarily locked")) {
       return res.status(423).json({
         success: false,
@@ -564,7 +567,7 @@ exports.adminLogout = async (req, res) => {
 exports.getAdminProfile = async (req, res) => {
   try {
     const admin = await Admin.findById(req.admin.adminId).select("-password -loginAttempts -lockUntil");
-    
+
     if (!admin) {
       return res.status(404).json({
         success: false,
@@ -628,7 +631,7 @@ exports.updateAdminProfile = async (req, res) => {
 
   } catch (error) {
     logger.error({ error: error.message }, "Update admin profile error");
-    
+
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -666,7 +669,7 @@ exports.changePassword = async (req, res) => {
     }
 
     const admin = await Admin.findById(req.admin.adminId);
-    
+
     if (!admin) {
       return res.status(404).json({
         success: false,
@@ -708,7 +711,7 @@ exports.changePassword = async (req, res) => {
 exports.refreshToken = async (req, res) => {
   try {
     const admin = await Admin.findById(req.admin.adminId);
-    
+
     if (!admin || !admin.isActive) {
       return res.status(401).json({
         success: false,
@@ -719,7 +722,7 @@ exports.refreshToken = async (req, res) => {
     // Generate new JWT token
     const newToken = jwt.sign(
       {
-        adminId: admin._id,
+        userId: admin._id,
         email: admin.email,
         role: admin.role,
         permissions: admin.permissions

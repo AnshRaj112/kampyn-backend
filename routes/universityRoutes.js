@@ -4,8 +4,11 @@ const Feature = require('../models/account/Feature');
 const Service = require('../models/account/Service');
 const logger = require('../utils/pinoLogger');
 const upload = require('../middleware/upload');
+const { uniAuthMiddleware } = require('../middleware/auth/uniAuthMiddleware');
 
 const router = express.Router();
+
+// Public Routes (No authentication required)
 
 // Get university charges
 router.get('/charges/:uniId', async (req, res) => {
@@ -26,6 +29,23 @@ router.get('/charges/:uniId', async (req, res) => {
   } catch (err) {
     logger.error('Error fetching university charges:', err);
     res.status(500).json({ message: "Failed to fetch university charges" });
+  }
+});
+
+// Get university profile (including images)
+router.get('/:uniId/profile', async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const university = await Uni.findById(uniId).select('fullName email phone retailImage produceImage categoryImages packingCharge deliveryCharge');
+
+    if (!university) {
+      return res.status(404).json({ message: "University not found" });
+    }
+
+    res.json(university);
+  } catch (err) {
+    logger.error('Error fetching university profile:', err);
+    res.status(500).json({ message: "Failed to fetch university profile" });
   }
 });
 
@@ -69,6 +89,9 @@ router.put('/charges/:uniId', async (req, res) => {
     res.status(500).json({ message: "Failed to update university charges" });
   }
 });
+
+// Protect remaining routes with uniAuthMiddleware
+router.use(uniAuthMiddleware);
 
 router.post('/upload-image', async (req, res) => {
   const { universityId, imageUrl } = req.body;
@@ -300,23 +323,6 @@ router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res)
   } catch (err) {
     logger.error('Error updating vendor services:', err);
     res.status(500).json({ success: false, message: 'Failed to update vendor services' });
-  }
-});
-
-// Get university profile (including images)
-router.get('/:uniId/profile', async (req, res) => {
-  try {
-    const { uniId } = req.params;
-    const university = await Uni.findById(uniId).select('fullName email phone retailImage produceImage categoryImages packingCharge deliveryCharge');
-
-    if (!university) {
-      return res.status(404).json({ message: "University not found" });
-    }
-
-    res.json(university);
-  } catch (err) {
-    logger.error('Error fetching university profile:', err);
-    res.status(500).json({ message: "Failed to fetch university profile" });
   }
 });
 

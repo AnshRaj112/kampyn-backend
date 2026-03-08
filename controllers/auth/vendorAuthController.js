@@ -1,5 +1,6 @@
 const Account = require("../../models/account/Vendor");
 const Uni = require("../../models/account/Uni");
+const User = require("../../models/account/User");
 const mongoose = require("mongoose");
 const Otp = require("../../models/users/Otp");
 const argon2 = require("argon2");
@@ -66,7 +67,7 @@ exports.signup = async (req, res) => {
       email: emailLower,
       phone,
       password: hashedPassword,
-      location, 
+      location,
       uniID,
       sellerType,
       isVerified: false,
@@ -95,7 +96,7 @@ exports.signup = async (req, res) => {
     logger.info("Vendor added to Uni's vendors array");
 
     const token = jwt.sign(
-      { id: newAccount._id, role: newAccount.type },
+      { userId: newAccount._id, role: 'vendor' },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -128,29 +129,29 @@ exports.verifyOtp = async (req, res) => {
     logger.info({ body: req.body }, "OTP Verification Request");
 
     const { email, otp } = req.body;
-    
+
     // Input validation
     if (!email || !otp) {
       return res.status(400).json({ message: "Email and OTP are required" });
     }
-    
+
     // Sanitize email: convert to lowercase and validate format
     const sanitizedEmail = email.toLowerCase().trim();
-    
+
     // Validate email format using regex
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(sanitizedEmail)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
-    
+
     // Validate OTP format (should be 6 digits)
     const otpRegex = /^\d{6}$/;
     if (!otpRegex.test(otp)) {
       return res.status(400).json({ message: "Invalid OTP format" });
     }
-    
+
     logger.debug({ email: sanitizedEmail }, "Looking for OTP");
-    
+
     const otpRecord = await Otp.findOne({ email: sanitizedEmail, otp: { $eq: otp } });
     logger.debug({ found: !!otpRecord }, "OTP record lookup result");
 
@@ -165,11 +166,11 @@ exports.verifyOtp = async (req, res) => {
       { isVerified: true },
       { new: true }
     );
-    
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     logger.info({ email: sanitizedEmail }, "User verified");
 
     // Delete the used OTP using sanitized email
@@ -180,6 +181,10 @@ exports.verifyOtp = async (req, res) => {
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+
+    // Reset inactivity timer so immediate user fetches don't fail
+    await updateUserActivity(user._id, 'vendor');
+
     setTokenCookie(res, token);
 
     res.status(200).json({
@@ -198,12 +203,12 @@ exports.login = async (req, res) => {
     logger.info({ body: req.body }, "Login Request");
 
     const { identifier, password } = req.body;
-    
+
     // Process identifier based on type
-    const processedIdentifier = identifier.includes('@') 
+    const processedIdentifier = identifier.includes('@')
       ? identifier.toLowerCase() // Convert email to lowercase
       : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
-    
+
     const user = await Account.findOne({
       $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
     });
@@ -216,11 +221,11 @@ exports.login = async (req, res) => {
       // Generate new OTP
       const otp = generateOtp();
       logger.info({ email: user.email }, "Generated OTP for login");
-      
+
       // Delete any existing OTPs for this email first
       await Otp.deleteMany({ email: user.email });
       logger.info({ email: user.email }, "Deleted existing OTPs");
-      
+
       // Save new OTP with lowercase email
       const newOtp = new Otp({ email: user.email.toLowerCase(), otp, createdAt: Date.now() });
       await newOtp.save();
@@ -247,19 +252,19 @@ exports.login = async (req, res) => {
     if (user.uniID) {
       const university = await Uni.findById(user.uniID).select('isAvailable fullName');
       if (!university) {
-        return res.status(400).json({ 
-          message: "University not found. Please contact support." 
+        return res.status(400).json({
+          message: "University not found. Please contact support."
         });
       }
-      
+
       if (university.isAvailable !== 'Y') {
-        return res.status(403).json({ 
-          message: `Access denied. ${university.fullName} is currently unavailable. Please contact support for assistance.` 
+        return res.status(403).json({
+          message: `Access denied. ${university.fullName} is currently unavailable. Please contact support for assistance.`
         });
       }
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: user._id, role: 'vendor' }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
 
@@ -281,7 +286,7 @@ exports.forgotPassword = async (req, res) => {
     logger.info({ body: req.body }, "Forgot Password Request");
 
     const { identifier } = req.body;
-    
+
     // Input validation
     if (!identifier) {
       return res.status(400).json({ message: "Email or phone number is required" });
@@ -290,7 +295,7 @@ exports.forgotPassword = async (req, res) => {
     // Sanitize and validate identifier
     let processedIdentifier;
     let isValidEmail = false;
-    
+
     if (identifier.includes('@')) {
       // Email validation
       const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -342,40 +347,40 @@ exports.resetPassword = async (req, res) => {
     logger.info({ body: req.body }, "Reset Password Request");
 
     const { email, password } = req.body;
-    
+
     // Input validation and sanitization
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
     }
-    
+
     // Sanitize email: convert to lowercase and validate format
     const sanitizedEmail = email.toLowerCase().trim();
-    
+
     // Validate email format using regex
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(sanitizedEmail)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
-    
+
     // Validate password strength
     if (password.length < 6) {
       return res.status(400).json({ message: "Password must be at least 6 characters long" });
     }
-    
+
     const hashedPassword = await hashPassword(password);
     logger.info("Password hashed successfully");
 
     // Use sanitized email in query to prevent injection
     const result = await Account.findOneAndUpdate(
-      { email: sanitizedEmail }, 
+      { email: sanitizedEmail },
       { password: hashedPassword },
       { new: true }
     );
-    
+
     if (!result) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     logger.info({ email: sanitizedEmail }, "Password updated");
 
     res.json({ message: "Password updated successfully" });
@@ -391,7 +396,7 @@ exports.googleAuth = async (req, res) => {
     logger.info({ body: req.body }, "Google Login Request");
 
     const { email } = req.body;
-    let user = await User.findOne({ email });
+    let user = await Account.findOne({ email });
 
     if (!user) {
       logger.info({ email }, "User not found for Google login");
@@ -419,7 +424,7 @@ exports.googleSignup = async (req, res) => {
 
     const { email, googleId, fullName } = req.body;
 
-    let existingUser = await User.findOne({ email });
+    let existingUser = await Account.findOne({ email });
 
     if (existingUser) {
       logger.info({ email }, "User already exists");
@@ -428,13 +433,12 @@ exports.googleSignup = async (req, res) => {
         .json({ message: "User already exists. Please log in." });
     }
 
-    const newUser = new User({
+    const newUser = new Account({
       fullName,
       email,
       phone: "", // No phone number required for Google signup
       password: "", // Google users won't have a password
-      gender: "", // Ask later or keep it optional
-      googleId,
+      sellerType: "NON_SELLER", // Default to non-seller for google signup
       isVerified: true, // No OTP needed for Google Signup
     });
 
@@ -461,35 +465,38 @@ exports.logout = (req, res) => {
 
 // ** 9. Middleware: Verify JWT Token**
 exports.verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  const token = req.headers.authorization?.split(" ")[1] || req.cookies?.token || req.query?.token;
 
   if (!token) {
+    logger.warn({ path: req.originalUrl }, "verifyToken: No token provided");
     return res.status(401).json({ message: "Unauthorized: No token provided" });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Check if vendor should be logged out due to inactivity
     const { shouldLogout } = await checkUserActivity(decoded.userId, 'vendor');
     if (shouldLogout) {
-      return res.status(401).json({ 
-        message: "Session expired due to inactivity. Please log in again." 
+      logger.warn({ userId: decoded.userId }, "verifyToken: Inactivity timeout");
+      return res.status(401).json({
+        message: "Session expired due to inactivity. Please log in again."
       });
     }
 
     // Update last activity
     await updateUserActivity(decoded.userId, 'vendor');
-    
+
     req.user = decoded;
     next();
   } catch (error) {
+    logger.warn({ error: error.message, path: req.originalUrl }, "verifyToken: Verification failed");
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: "Token expired. Please log in again." });
     }
     return res
-      .status(403)
-      .json({ message: "Forbidden: Invalid or expired token" });
+      .status(401)
+      .json({ message: "Unauthorized: Invalid or expired token" });
   }
 };
 

@@ -3,6 +3,10 @@ const router = express.Router();
 const Razorpay = require("razorpay");
 const razorpayConfig = require("../config/razorpay");
 const logger = require("../utils/pinoLogger");
+const { authMiddleware } = require("../middleware/auth/authMiddleware");
+
+// All razorpay routes require authentication
+router.use(authMiddleware);
 
 // Initialize Razorpay with configuration
 const razorpay = new Razorpay({
@@ -23,13 +27,13 @@ router.get("/key", (req, res) => {
 router.get("/invoices/:invoiceId", async (req, res) => {
   try {
     const { invoiceId } = req.params;
-    
+
     logger.info("📄 Fetching Razorpay invoice:", invoiceId);
-    
+
     const invoice = await razorpay.invoices.fetch(invoiceId);
-    
+
     logger.info("✅ Razorpay invoice fetched:", invoice.id);
-    
+
     res.json({
       success: true,
       data: invoice
@@ -48,17 +52,17 @@ router.get("/invoices/:invoiceId", async (req, res) => {
 router.get("/invoices/:invoiceId/pdf", async (req, res) => {
   try {
     const { invoiceId } = req.params;
-    
+
     logger.info("📄 Getting PDF for Razorpay invoice:", invoiceId);
-    
+
     // Get invoice details first
     const invoice = await razorpay.invoices.fetch(invoiceId);
-    
+
     // Generate PDF download URL
     const pdfUrl = `${razorpayConfig.apiBase}/invoices/${invoiceId}/pdf`;
-    
+
     logger.info("✅ PDF URL generated for invoice:", invoiceId);
-    
+
     res.json({
       success: true,
       pdfUrl: pdfUrl
@@ -77,13 +81,13 @@ router.get("/invoices/:invoiceId/pdf", async (req, res) => {
 router.post("/invoices", async (req, res) => {
   try {
     const invoiceData = req.body;
-    
+
     logger.info("📄 Creating Razorpay invoice:", invoiceData);
-    
+
     const invoice = await razorpay.invoices.create(invoiceData);
-    
+
     logger.info("✅ Razorpay invoice created:", invoice.id);
-    
+
     res.json({
       success: true,
       data: invoice

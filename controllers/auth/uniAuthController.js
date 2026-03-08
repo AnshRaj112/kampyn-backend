@@ -1,4 +1,6 @@
 const Account = require("../../models/account/Uni");
+const User = require("../../models/account/User");
+const Vendor = require("../../models/account/Vendor");
 const Otp = require("../../models/users/Otp");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
@@ -42,17 +44,17 @@ exports.signup = async (req, res) => {
 
     // Validate required fields
     if (!fullName || !email || !phone || !password || !gstNumber) {
-      return res.status(400).json({ 
-        message: "Missing required fields: fullName, email, phone, password, and gstNumber are required" 
+      return res.status(400).json({
+        message: "Missing required fields: fullName, email, phone, password, and gstNumber are required"
       });
     }
 
-    const existingUser = await Account.findOne({ 
+    const existingUser = await Account.findOne({
       $or: [
-        { email: emailLower }, 
-        { phone }, 
+        { email: emailLower },
+        { phone },
         { gstNumber }
-      ] 
+      ]
     });
     if (existingUser) {
       logger.info({ email: emailLower }, "User already exists");
@@ -78,7 +80,7 @@ exports.signup = async (req, res) => {
     logger.info({ email: emailLower }, "Account created");
 
     const token = jwt.sign(
-      { id: newAccount._id, role: "university" },
+      { userId: newAccount._id, role: "university" },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -103,8 +105,8 @@ exports.signup = async (req, res) => {
   } catch (error) {
     logger.error({ error: error.message }, "Signup Error");
     if (error.code === 11000) {
-      return res.status(400).json({ 
-        message: "Duplicate entry. Email, phone, or GST number already exists." 
+      return res.status(400).json({
+        message: "Duplicate entry. Email, phone, or GST number already exists."
       });
     }
     return res
@@ -142,6 +144,9 @@ exports.verifyOtp = async (req, res) => {
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+    // Reset inactivity timer so immediate user fetches don't fail
+    await updateUserActivity(user._id, 'uni');
+
     setTokenCookie(res, token);
 
     res.status(200).json({
@@ -160,12 +165,12 @@ exports.login = async (req, res) => {
     logger.info({ body: req.body }, "Login Request");
 
     const { identifier, password } = req.body;
-    
+
     // Process identifier based on type
-    const processedIdentifier = identifier.includes('@') 
+    const processedIdentifier = identifier.includes('@')
       ? identifier.toLowerCase() // Convert email to lowercase
       : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
-    
+
     const user = await Account.findOne({
       $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
     });
@@ -196,8 +201,8 @@ exports.login = async (req, res) => {
 
     // Check if the university is available
     if (user.isAvailable !== 'Y') {
-      return res.status(403).json({ 
-        message: `Access denied. ${user.fullName} is currently unavailable. Please contact support for assistance.` 
+      return res.status(403).json({
+        message: `Access denied. ${user.fullName} is currently unavailable. Please contact support for assistance.`
       });
     }
 
@@ -225,7 +230,7 @@ exports.forgotPassword = async (req, res) => {
     const { identifier } = req.body;
 
     // Process identifier based on type
-    const processedIdentifier = identifier.includes('@') 
+    const processedIdentifier = identifier.includes('@')
       ? identifier.toLowerCase() // Convert email to lowercase
       : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
 
@@ -364,18 +369,18 @@ exports.verifyToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Check if university should be logged out due to inactivity
     const { shouldLogout } = await checkUserActivity(decoded.userId, 'uni');
     if (shouldLogout) {
-      return res.status(401).json({ 
-        message: "Session expired due to inactivity. Please log in again." 
+      return res.status(401).json({
+        message: "Session expired due to inactivity. Please log in again."
       });
     }
 
     // Update last activity
     await updateUserActivity(decoded.userId, 'uni');
-    
+
     req.user = decoded;
     next();
   } catch (error) {
@@ -433,44 +438,30 @@ exports.checkSession = (req, res) => {
 // **12. Get User**
 exports.getUser = async (req, res) => {
   try {
-    logger.info("Get User Request");
+    logger.info({ userId: req.user?.userId || req.uni?.userId }, "Get User Request");
 
-    // Get token from either cookie or Authorization header
-    const token =
-      req.cookies?.token || req.headers.authorization?.split(" ")[1];
+    // The user object is already attached to the request by the middleware (either verifyToken or uniAuthMiddleware)
+    // However, to ensure we have the most up-to-date data with populations, we re-fetch:
+    const userId = req.user?.userId || req.uni?._id || req.uni?.userId;
 
-    if (!token) {
-      logger.info("No token provided");
-      return res.status(401).json({ message: "No token provided" });
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: No user ID found in request" });
     }
 
-    // Verify the token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    logger.info({ userId: decoded.userId }, "Token verified");
-
-    // Get user data with populated vendors
-    const user = await Account.findById(decoded.userId)
+    const user = await Account.findById(userId)
       .select("-password -__v")
       .populate({
         path: 'vendors.vendorId',
-        select: 'fullName email phone location' // Select only the fields you want to see
+        select: 'fullName email phone location'
       });
 
     if (!user) {
-      logger.info("User not found");
       return res.status(404).json({ message: "User not found" });
     }
 
-    logger.info("User data retrieved successfully");
     res.json(user);
   } catch (error) {
     logger.error({ error: error.message }, "Get User Error");
-    if (error.name === "JsonWebTokenError") {
-      return res.status(403).json({ message: "Invalid token" });
-    }
-    if (error.name === "TokenExpiredError") {
-      return res.status(403).json({ message: "Token expired" });
-    }
     res.status(500).json({ message: "Internal Server Error" });
   }
 };

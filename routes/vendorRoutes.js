@@ -1,4 +1,6 @@
 const express = require("express");
+const logger = require("../utils/pinoLogger");
+
 const router = express.Router();
 const {
   getVendorsByUni,
@@ -16,36 +18,70 @@ const {
 const Vendor = require("../models/account/Vendor");
 const Uni = require("../models/account/Uni");
 const upload = require("../middleware/upload");
+const vendorAuthMiddleware = require("../middleware/auth/vendorAuthMiddleware");
 
+const { uniAuthMiddleware } = require("../middleware/auth/uniAuthMiddleware");
+const uniOrVendorAuthMiddleware = require("../middleware/auth/uniOrVendorAuthMiddleware");
+
+
+// Public Routes
 // Get all vendors for a specific university
 router.get("/list/uni/:uniId", getVendorsByUni);
 
-// Get all vendors with their availability status for a specific university
-router.get("/availability/uni/:uniId", getVendorsWithAvailability);
+// University Management Routes (Protected by University Auth)
+router.get("/availability/uni/:uniId", uniAuthMiddleware, getVendorsWithAvailability);
+router.patch("/availability/uni/:uniId/vendor/:vendorId", uniAuthMiddleware, updateVendorAvailability);
+router.delete("/delete/uni/:uniId/vendor/:vendorId", uniAuthMiddleware, deleteVendor);
 
-// Update vendor availability in university
-router.patch("/availability/uni/:uniId/vendor/:vendorId", updateVendorAvailability);
-
-// Delete a vendor from a university and the Vendor collection
-router.delete("/delete/uni/:uniId/vendor/:vendorId", deleteVendor);
-
+// Public metadata routes for customer-facing components (Cart, BillBox)
 // Get delivery settings for a vendor
 router.get("/:vendorId/delivery-settings", getDeliverySettings);
 
-// Update delivery settings for a vendor
-router.put("/:vendorId/delivery-settings", updateDeliverySettings);
+// Get assigned services for a vendor
+router.get("/:vendorId/assignments", async (req, res) => {
+  try {
+    const { vendorId } = req.params;
 
-// Add route for updating isSpecial for a vendor's item
-router.patch("/:vendorId/item/:itemId/:kind/special", updateItemSpecialStatus);
+    if (!vendorId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vendor ID is required'
+      });
+    }
 
-// Add route for updating isAvailable for a vendor's item
-router.patch("/:vendorId/item/:itemId/:kind/available", updateItemAvailableStatus);
+    const vendor = await Vendor.findById(vendorId)
+      .populate({ path: 'services', populate: { path: 'feature' } })
+      .select('services fullName uniID');
+
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        vendor: {
+          _id: vendor._id,
+          fullName: vendor.fullName,
+          uniID: vendor.uniID
+        },
+        services: vendor.services || []
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching vendor assignments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch vendor assignments'
+    });
+  }
+});
 
 // Get vendor's current availability status
 router.get("/:vendorId/availability", getVendorAvailability);
-
-// Toggle vendor availability (vendor can toggle their own availability)
-router.patch("/:vendorId/toggle-availability", toggleVendorAvailability);
 
 // Get vendor's university charges
 router.get("/:vendorId/university-charges", async (req, res) => {
@@ -101,48 +137,22 @@ router.get("/:vendorId/university-charges", async (req, res) => {
   }
 });
 
-// Get assigned services for a vendor
-router.get("/:vendorId/assignments", async (req, res) => {
-  try {
-    const { vendorId } = req.params;
+// Update delivery settings for a vendor
+router.put("/:vendorId/delivery-settings", uniOrVendorAuthMiddleware, updateDeliverySettings);
 
-    if (!vendorId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Vendor ID is required'
-      });
-    }
+// Add route for updating isSpecial for a vendor's item
+router.patch("/:vendorId/item/:itemId/:kind/special", uniOrVendorAuthMiddleware, updateItemSpecialStatus);
 
-    const vendor = await Vendor.findById(vendorId)
-      .populate({ path: 'services', populate: { path: 'feature' } })
-      .select('services fullName uniID');
+// Add route for updating isAvailable for a vendor's item
+router.patch("/:vendorId/item/:itemId/:kind/available", uniOrVendorAuthMiddleware, updateItemAvailableStatus);
 
-    if (!vendor) {
-      return res.status(404).json({
-        success: false,
-        message: 'Vendor not found'
-      });
-    }
+// Toggle vendor availability (vendor can toggle their own availability)
+router.patch("/:vendorId/toggle-availability", uniOrVendorAuthMiddleware, toggleVendorAvailability);
 
-    res.json({
-      success: true,
-      data: {
-        vendor: {
-          _id: vendor._id,
-          fullName: vendor.fullName,
-          uniID: vendor.uniID
-        },
-        services: vendor.services || []
-      }
-    });
-  } catch (error) {
-    logger.error('Error fetching vendor assignments:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch vendor assignments'
-    });
-  }
-});
+// Protected Routes - require vendor authentication
+router.use(vendorAuthMiddleware);
+
+
 
 // Update vendor profile (including images)
 router.put("/:vendorId/profile", upload.fields([{ name: 'image', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]), updateProfile);

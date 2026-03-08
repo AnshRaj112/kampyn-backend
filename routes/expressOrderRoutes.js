@@ -5,8 +5,12 @@ const {
   handleViewVendor,
   handleConfirm,
 } = require("../controllers/order/expressOrderController");
+const { authMiddleware } = require("../middleware/auth/authMiddleware");
 
 const router = express.Router();
+
+// All express order routes require authentication
+router.use(authMiddleware);
 
 // 1) Initiate express order
 //    POST /express-order/initiate

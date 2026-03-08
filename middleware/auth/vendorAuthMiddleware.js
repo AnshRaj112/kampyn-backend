@@ -9,13 +9,13 @@ const logger = require("../../utils/pinoLogger");
  */
 const vendorAuthMiddleware = async (req, res, next) => {
   try {
-    // Get token from cookie, Authorization header, or query param (for SSE streams)
     let token =
+      req.headers.authorization?.split(" ")[1] ||
       req.cookies?.token ||
-      req.headers.authorization?.replace('Bearer ', '') ||
       req.query?.token;
 
     if (!token) {
+      logger.warn({ path: req.originalUrl, method: req.method }, "Vendor access denied: No token provided");
       return res.status(401).json({
         success: false,
         message: "Access denied. No token provided."
@@ -23,12 +23,27 @@ const vendorAuthMiddleware = async (req, res, next) => {
     }
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (verifyError) {
+      logger.warn({
+        error: verifyError.message,
+        path: req.originalUrl,
+        tokenPreview: token.substring(0, 10) + "..."
+      }, "Vendor token verification failed");
+
+      return res.status(401).json({
+        success: false,
+        message: verifyError.name === 'TokenExpiredError' ? "Token expired" : "Invalid token"
+      });
+    }
+
     // Check if vendor exists
     const vendor = await Vendor.findById(decoded.userId).select("-password").populate('services');
-    
+
     if (!vendor) {
+      logger.warn({ userId: decoded.userId }, "Vendor access denied: Vendor not found");
       return res.status(401).json({
         success: false,
         message: "Access denied. Invalid vendor account."
@@ -38,6 +53,7 @@ const vendorAuthMiddleware = async (req, res, next) => {
     // Check if vendor should be logged out due to inactivity
     const { shouldLogout } = await checkUserActivity(decoded.userId, 'vendor');
     if (shouldLogout) {
+      logger.warn({ userId: decoded.userId }, "Vendor session expired due to inactivity");
       return res.status(401).json({
         success: false,
         message: "Session expired due to inactivity. Please log in again."
@@ -47,7 +63,7 @@ const vendorAuthMiddleware = async (req, res, next) => {
     // Update last activity
     await updateUserActivity(decoded.userId, 'vendor');
 
-    // Add vendor info to request (support both _id and vendorId for compatibility)
+    // Add vendor info to request
     req.vendor = {
       _id: vendor._id,
       vendorId: vendor._id,
@@ -59,16 +75,15 @@ const vendorAuthMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    logger.error({ error: error.message, errorName: error.name }, "Vendor auth middleware error");
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        message: "Token expired. Please log in again."
-      });
-    }
-    return res.status(401).json({
+    logger.error({
+      error: error.message,
+      stack: error.stack,
+      path: req.originalUrl
+    }, "Unexpected error in vendorAuthMiddleware");
+
+    return res.status(500).json({
       success: false,
-      message: "Invalid or expired token."
+      message: "Internal server error during authentication."
     });
   }
 };

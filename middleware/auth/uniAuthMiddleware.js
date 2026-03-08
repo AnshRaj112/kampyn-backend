@@ -10,7 +10,15 @@ const logger = require("../../utils/pinoLogger");
 const uniAuthMiddleware = async (req, res, next) => {
   try {
     // Get token from cookie or Authorization header
-    let token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
+    let token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
+
+    logger.debug({
+      path: req.originalUrl,
+      method: req.method,
+      hasAuthHeader: !!req.headers.authorization,
+      hasCookie: !!req.cookies?.token,
+      hasToken: !!token
+    }, "uniAuthMiddleware - Incoming request");
 
     if (!token) {
       return res.status(401).json({
@@ -21,10 +29,10 @@ const uniAuthMiddleware = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Check if university exists
     const university = await Uni.findById(decoded.userId).select("-password");
-    
+
     if (!university) {
       return res.status(401).json({
         success: false,
@@ -72,14 +80,14 @@ const uniAuthMiddleware = async (req, res, next) => {
     next();
   } catch (error) {
     logger.error({ error: error.message, errorName: error.name }, "University auth middleware error");
-    
+
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
         success: false,
         message: "Access denied. Invalid token."
       });
     }
-    
+
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,
