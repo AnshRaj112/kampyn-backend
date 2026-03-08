@@ -49,8 +49,26 @@ router.get('/:uniId/profile', async (req, res) => {
   }
 });
 
-// Update university charges (no authentication required)
-router.put('/charges/:uniId', async (req, res) => {
+// Protect remaining routes with uniAuthMiddleware
+router.use(uniAuthMiddleware);
+
+/**
+ * Authorization middleware to ensure a university can only modify its own data.
+ */
+const authorizeUni = (req, res, next) => {
+  const { uniId } = req.params;
+  if (!req.uni || !req.uni._id || req.uni._id.toString() !== uniId) {
+    logger.warn({ authorizedUni: req.uni?._id, targetUni: uniId }, "Unauthorized university access attempt");
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. You are only authorized to modify your own university data."
+    });
+  }
+  next();
+};
+
+// Update university charges (Now Protected)
+router.put('/charges/:uniId', authorizeUni, async (req, res) => {
   try {
     const { uniId } = req.params;
     const { packingCharge, deliveryCharge } = req.body;
@@ -90,12 +108,14 @@ router.put('/charges/:uniId', async (req, res) => {
   }
 });
 
-// Protect remaining routes with uniAuthMiddleware
-router.use(uniAuthMiddleware);
-
 router.post('/upload-image', async (req, res) => {
   const { universityId, imageUrl } = req.body;
   if (!universityId || !imageUrl) return res.status(400).json({ message: "Missing data" });
+
+  // Authorization check
+  if (req.uni._id.toString() !== universityId) {
+    return res.status(403).json({ success: false, message: "Unauthorized: Invalid university ID" });
+  }
 
   try {
     // Save imageUrl to the university's record (adjust as per your schema)
@@ -111,7 +131,7 @@ router.get('/api/cloudinary/cloud-name', (req, res) => {
 });
 
 // Get assigned features and services for a university
-router.get('/universities/:uniId/assignments', async (req, res) => {
+router.get('/universities/:uniId/assignments', authorizeUni, async (req, res) => {
   try {
     const { uniId } = req.params;
     const uni = await Uni.findById(uniId)
@@ -134,7 +154,7 @@ router.get('/universities/:uniId/assignments', async (req, res) => {
 });
 
 // Update assigned features for a university
-router.patch('/universities/:uniId/features', async (req, res) => {
+router.patch('/universities/:uniId/features', authorizeUni, async (req, res) => {
   try {
     const { uniId } = req.params;
     const { features } = req.body; // array of feature IDs
@@ -165,7 +185,7 @@ router.patch('/universities/:uniId/features', async (req, res) => {
 });
 
 // Update assigned services for a university
-router.patch('/universities/:uniId/services', async (req, res) => {
+router.patch('/universities/:uniId/services', authorizeUni, async (req, res) => {
   try {
     const { uniId } = req.params;
     const { services } = req.body; // array of service IDs
@@ -195,7 +215,7 @@ router.patch('/universities/:uniId/services', async (req, res) => {
 });
 
 // Get all available services for a vendor (from university's features) with assignment status
-router.get('/universities/:uniId/vendors/:vendorId/services', async (req, res) => {
+router.get('/universities/:uniId/vendors/:vendorId/services', authorizeUni, async (req, res) => {
   try {
     const { uniId, vendorId } = req.params;
 
@@ -245,7 +265,7 @@ router.get('/universities/:uniId/vendors/:vendorId/services', async (req, res) =
 });
 
 // Get all services available for a university (from its features)
-router.get('/universities/:uniId/allowed-services', async (req, res) => {
+router.get('/universities/:uniId/allowed-services', authorizeUni, async (req, res) => {
   try {
     const { uniId } = req.params;
 
@@ -278,7 +298,7 @@ router.get('/universities/:uniId/allowed-services', async (req, res) => {
 });
 
 // Update assigned services for a specific vendor
-router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res) => {
+router.patch('/universities/:uniId/vendors/:vendorId/services', authorizeUni, async (req, res) => {
   try {
     const { uniId, vendorId } = req.params;
     const { services } = req.body; // array of service IDs
@@ -327,7 +347,7 @@ router.patch('/universities/:uniId/vendors/:vendorId/services', async (req, res)
 });
 
 // Update university profile (including images)
-router.put('/:uniId/profile', upload.fields([{ name: 'retailImage', maxCount: 1 }, { name: 'produceImage', maxCount: 1 }]), async (req, res) => {
+router.put('/:uniId/profile', authorizeUni, upload.fields([{ name: 'retailImage', maxCount: 1 }, { name: 'produceImage', maxCount: 1 }]), async (req, res) => {
   try {
     const { uniId } = req.params;
     const { packingCharge, deliveryCharge } = req.body;
@@ -386,7 +406,7 @@ router.put('/:uniId/profile', upload.fields([{ name: 'retailImage', maxCount: 1 
 });
 
 // Update or Add Category Image (Kind Image)
-router.put('/:uniId/category-images', upload.single('image'), async (req, res) => {
+router.put('/:uniId/category-images', authorizeUni, upload.single('image'), async (req, res) => {
   try {
     const { uniId } = req.params;
     const { name } = req.body; // Category Name (e.g., "Pizza")

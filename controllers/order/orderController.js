@@ -11,6 +11,8 @@ const Produce = require("../../models/item/Produce");
 const mongoose = require("mongoose");
 const { atomicCache } = require("../../utils/cacheUtils");
 const logger = require("../../utils/pinoLogger");
+const { hashPassword, validateVendorAccess, validateUserAccess } = require("../../utils/authUtils");
+const crypto = require("crypto");
 
 // Import the shared atomic cancellation function
 const { cancelOrderAtomically } = require("../../utils/orderUtils");
@@ -30,6 +32,11 @@ exports.placeOrderHandler = async (req, res) => {
   try {
     const { userId } = req.params;
     const { orderType, collectorName, collectorPhone, address } = req.body;
+
+    // BOLA Check: Ensure user is only placing orders for themselves
+    if (!validateUserAccess(req, userId)) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You can only place orders for your own account." });
+    }
 
     // Basic validation: ensure those fields exist
     if (!orderType || !collectorName || !collectorPhone) {
@@ -240,6 +247,11 @@ exports.startDelivery = async (req, res) => {
 exports.getPastOrders = async (req, res) => {
   try {
     const { userId } = req.params;
+
+    // BOLA Check: Ensure user is only accessing their own past orders
+    if (!validateUserAccess(req, userId)) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You can only access your own order history." });
+    }
     const { collegeId } = req.query; // Optional college filter
 
     logger.debug({ userId, collegeId: collegeId || 'none' }, 'Fetching past orders for user');
@@ -430,9 +442,18 @@ exports.getPastOrders = async (req, res) => {
 exports.getOrderById = async (req, res) => {
   try {
     const { orderId } = req.params;
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ error: "Order not found" });
 
-    if (!orderId) {
-      return res.status(400).json({ message: "Order ID is required." });
+    // BOLA Check: Users can only see their own orders. Vendors/Uni check handled by validateVendorAccess if needed.
+    // For now, let's ensure the user owning the order or an admin is the one requesting.
+    if (!validateUserAccess(req, order.userId)) {
+      // If it's not the user, maybe it's the vendor? 
+      // We can use validateVendorAccess here too if we want to be thorough.
+      const isAuthorizedVendor = await validateVendorAccess(req, order.vendorId);
+      if (!isAuthorizedVendor) {
+        return res.status(403).json({ success: false, message: "Unauthorized: You do not have permission to view this order." });
+      }
     }
 
     logger.debug({ orderId }, 'Fetching order details for orderId');
@@ -481,6 +502,11 @@ exports.getOrderById = async (req, res) => {
 exports.cleanupDeliveredOrders = async (req, res) => {
   try {
     const { userId } = req.params;
+
+    // BOLA Check: Ensure user is only cleaning up their own orders
+    if (!validateUserAccess(req, userId)) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You can only manage your own orders." });
+    }
 
     logger.info({ userId }, 'Cleaning up delivered orders for user');
 
@@ -537,6 +563,11 @@ exports.cleanupDeliveredOrders = async (req, res) => {
 exports.getUserActiveOrders = async (req, res) => {
   try {
     const { userId } = req.params;
+
+    // BOLA Check: Ensure user is only accessing their own active orders
+    if (!validateUserAccess(req, userId)) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You can only access your own active orders." });
+    }
     const { collegeId } = req.query; // Optional college filter
 
     logger.debug({ userId, collegeId: collegeId || 'none' }, 'Fetching active orders for user');
@@ -839,7 +870,7 @@ exports.createGuestOrder = async (req, res) => {
         fullName: collectorName,
         phone: collectorPhone,
         email: `guest_${Date.now()}@kiitbites.com`, // Temporary email
-        password: "guest_password", // Temporary password
+        password: await hashPassword(crypto.randomBytes(16).toString("hex")), // Generate random secure password
         type: "user-standard",
         isVerified: true,
         uniID: vendor.uniID,
@@ -910,6 +941,11 @@ exports.getActiveOrdersByVendor = async (req, res) => {
   try {
     const { vendorId } = req.params;
     if (!vendorId) return res.status(400).json({ error: "Missing vendorId" });
+
+    // BOLA Check: Ensure vendor/uni is authorized to access this vendor's orders
+    if (!(await validateVendorAccess(req, vendorId))) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to view orders for this vendor." });
+    }
 
     // Use the utility function that properly populates item details
     const orders = await orderUtils.getOrdersWithDetails(vendorId);
@@ -1018,7 +1054,7 @@ exports.cancelOrder = async (req, res) => {
 exports.cancelOrderManual = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { userId } = req.body; // User ID for verification
+    const userId = req.user.userId; // Securely get userId from token
 
     logger.info({ orderId, userId }, 'Manual cancellation requested for order');
 
@@ -1126,6 +1162,11 @@ exports.readyOrder = async (req, res) => {
 exports.getVendorAnalytics = async (req, res) => {
   try {
     const { vendorId } = req.params;
+
+    // BOLA Check: Ensure vendor/uni is authorized to access this vendor's analytics
+    if (!(await validateVendorAccess(req, vendorId))) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to view analytics for this vendor." });
+    }
     // Parse the date safely as a local date regardless of UTC offset
     let parsedDate = new Date();
     if (req.query.date) {

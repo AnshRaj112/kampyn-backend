@@ -7,6 +7,7 @@ const Vendor = require("../../models/account/Vendor");
 const orderUtils = require("../../utils/orderUtils");
 const mongoose = require("mongoose");
 const logger = require("../../utils/pinoLogger");
+const { validateVendorAccess, validateUserAccess } = require("../../utils/authUtils");
 
 /**
  * Helper function: Cancel all pending vendor approval orders for a user
@@ -73,7 +74,7 @@ async function cancelAllPendingOrdersForUser(userId) {
  */
 exports.submitOrderForApproval = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user.userId; // Securely get from token
     const { orderType, collectorName, collectorPhone, address } = req.body;
 
     // Basic validation
@@ -112,18 +113,18 @@ exports.submitOrderForApproval = async (req, res) => {
     });
   } catch (err) {
     logger.error("Error in submitOrderForApproval:", err);
-    
+
     if (err.code === 11000) {
-      return res.status(409).json({ 
-        success: false, 
+      return res.status(409).json({
+        success: false,
         message: "Order number already exists. Please try again.",
         errorType: "DUPLICATE_ORDER_NUMBER"
       });
     }
-    
-    return res.status(400).json({ 
-      success: false, 
-      message: err && err.message ? err.message : 'Unknown error occurred' 
+
+    return res.status(400).json({
+      success: false,
+      message: err && err.message ? err.message : 'Unknown error occurred'
     });
   }
 };
@@ -137,19 +138,24 @@ exports.getOrderApprovalStatus = async (req, res) => {
     const { orderId } = req.params;
 
     if (!orderId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Order ID is required." 
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required."
       });
     }
 
     const order = await Order.findById(orderId).lean();
-    
+
     if (!order) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Order not found." 
+      return res.status(404).json({
+        success: false,
+        message: "Order not found."
       });
+    }
+
+    // BOLA Check: Ensure user is only accessing their own order status
+    if (!validateUserAccess(req, order.userId)) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You do not have permission to view this order status." });
     }
 
     return res.json({
@@ -161,9 +167,9 @@ exports.getOrderApprovalStatus = async (req, res) => {
     });
   } catch (err) {
     logger.error("Error in getOrderApprovalStatus:", err);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Server error." 
+    return res.status(500).json({
+      success: false,
+      message: "Server error."
     });
   }
 };
@@ -175,18 +181,17 @@ exports.getOrderApprovalStatus = async (req, res) => {
 exports.acceptOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { vendorId } = req.body; // Vendor ID for verification
-
-    if (!orderId || !vendorId) {
+    // vendorId check is now handled via validateVendorAccess below
+    if (!orderId) {
       return res.status(400).json({
         success: false,
-        message: "Order ID and Vendor ID are required.",
+        message: "Order ID is required.",
       });
     }
 
     // Find order and verify vendor
     const order = await Order.findById(orderId);
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -194,11 +199,9 @@ exports.acceptOrder = async (req, res) => {
       });
     }
 
-    if (order.vendorId.toString() !== vendorId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to accept this order.",
-      });
+    // BOLA Check: Ensure vendor/uni is authorized to accept this order
+    if (!(await validateVendorAccess(req, order.vendorId))) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to accept orders for this vendor." });
     }
 
     // Only pendingVendorApproval orders can be accepted
@@ -217,7 +220,7 @@ exports.acceptOrder = async (req, res) => {
     // CHANGED: Now clears cart when order is accepted by vendor (previously cart was cleared during payment)
     await User.updateOne(
       { _id: order.userId },
-      { 
+      {
         $addToSet: { activeOrders: order._id },
         $set: { cart: [], vendorId: null } // Clear cart after order acceptance
       }
@@ -237,9 +240,9 @@ exports.acceptOrder = async (req, res) => {
     });
   } catch (err) {
     logger.error("Error in acceptOrder:", err);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Server error." 
+    return res.status(500).json({
+      success: false,
+      message: "Server error."
     });
   }
 };
@@ -251,18 +254,18 @@ exports.acceptOrder = async (req, res) => {
 exports.denyOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { vendorId, denialReason } = req.body;
+    const { denialReason } = req.body;
 
-    if (!orderId || !vendorId) {
+    if (!orderId) {
       return res.status(400).json({
         success: false,
-        message: "Order ID and Vendor ID are required.",
+        message: "Order ID is required.",
       });
     }
 
     // Find order and verify vendor
     const order = await Order.findById(orderId);
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -270,11 +273,9 @@ exports.denyOrder = async (req, res) => {
       });
     }
 
-    if (order.vendorId.toString() !== vendorId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to deny this order.",
-      });
+    // BOLA Check: Ensure vendor/uni is authorized to deny this order
+    if (!(await validateVendorAccess(req, order.vendorId))) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to deny orders for this vendor." });
     }
 
     // Only pendingVendorApproval orders can be denied
@@ -308,9 +309,9 @@ exports.denyOrder = async (req, res) => {
     });
   } catch (err) {
     logger.error("Error in denyOrder:", err);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Server error." 
+    return res.status(500).json({
+      success: false,
+      message: "Server error."
     });
   }
 };
@@ -322,18 +323,18 @@ exports.denyOrder = async (req, res) => {
 exports.cancelPendingOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { userId } = req.body;
+    const userId = req.user.userId; // Securely get from token
 
-    if (!orderId || !userId) {
+    if (!orderId) {
       return res.status(400).json({
         success: false,
-        message: "Order ID and User ID are required.",
+        message: "Order ID is required.",
       });
     }
 
     // Find order and verify ownership
     const order = await Order.findById(orderId);
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -393,9 +394,9 @@ exports.cancelPendingOrder = async (req, res) => {
     });
   } catch (err) {
     logger.error("Error in cancelPendingOrder:", err);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      message: "Server error." 
+      message: "Server error."
     });
   }
 };
@@ -407,14 +408,9 @@ exports.cancelPendingOrder = async (req, res) => {
  */
 exports.cancelAllPendingOrders = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user.userId; // Securely get from token
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User ID is required.",
-      });
-    }
+    // No explicit validation needed as userId is from token
 
     const result = await cancelAllPendingOrdersForUser(userId);
 
@@ -425,9 +421,9 @@ exports.cancelAllPendingOrders = async (req, res) => {
     });
   } catch (err) {
     logger.error("Error in cancelAllPendingOrders:", err);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Server error." 
+    return res.status(500).json({
+      success: false,
+      message: "Server error."
     });
   }
 };
@@ -445,6 +441,11 @@ exports.getPendingApprovalOrders = async (req, res) => {
         success: false,
         message: "Vendor ID is required.",
       });
+    }
+
+    // BOLA Check: Ensure vendor/uni is authorized to access this vendor's pending orders
+    if (!(await validateVendorAccess(req, vendorId))) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to view pending orders for this vendor." });
     }
 
     // Verify vendor exists
@@ -471,9 +472,9 @@ exports.getPendingApprovalOrders = async (req, res) => {
     });
   } catch (err) {
     logger.error("Error in getPendingApprovalOrders:", err);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Server error." 
+    return res.status(500).json({
+      success: false,
+      message: "Server error."
     });
   }
 };

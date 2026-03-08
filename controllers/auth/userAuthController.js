@@ -6,22 +6,12 @@ const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
-const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
+const { checkUserActivity, updateUserActivity, hashPassword } = require("../../utils/authUtils");
 const logger = require("../../utils/pinoLogger");
 
 // Utility: Generate OTP
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
 
-// Utility: Hash Password
-// Aggressively optimized settings for sub-200ms response time while maintaining security
-const hashPassword = async (password) => {
-  return await argon2.hash(password, {
-    type: argon2.argon2id,
-    memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 12288, // Reduced to 12MB for faster hashing (still secure)
-    timeCost: Number(process.env.ARGON2_TIME) || 2, // Minimum value is 2 (argon2 requirement)
-    parallelism: Number(process.env.ARGON2_PAR) || 2 // Increased parallelism for better performance
-  });
-};
 
 // Cookie Token Set
 const setTokenCookie = (res, token) => {
@@ -36,9 +26,9 @@ const setTokenCookie = (res, token) => {
 // **1. User Signup**exports.signup = async (req, res) => {
 exports.signup = async (req, res) => {
   try {
-    // Reduced logging for performance - only log in development
+    // Log the event without sensitive data
     if (process.env.NODE_ENV === 'development') {
-      logger.info({ body: req.body }, "Signup Request Received");
+      logger.info({ email: req.body.email }, "Signup Request Received");
     }
 
     const { fullName, email, phone, password, gender, uniID } =
@@ -108,7 +98,7 @@ exports.signup = async (req, res) => {
 // **2. OTP Verification**
 exports.verifyOtp = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "OTP Verification Request");
+    logger.info({ email: req.body.email }, "OTP Verification Request");
 
     const { email, otp } = req.body;
     const emailLower = email.toLowerCase();
@@ -192,8 +182,18 @@ exports.verifyOtp = async (req, res) => {
     setTokenCookie(res, token);
 
     res.status(200).json({
+      success: true,
       message: "OTP verified successfully",
       token,
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        gender: user.gender,
+        isVerified: user.isVerified,
+        uniID: user.uniID
+      }
     });
   } catch (error) {
     logger.error({ error: error.message }, "OTP Verification Error");
@@ -257,7 +257,7 @@ exports.login = async (req, res) => {
   try {
     // Reduce logging overhead - only log in development
     if (process.env.NODE_ENV === 'development') {
-      logger.info({ body: req.body }, "Login Request");
+      logger.info({ identifier: req.body.identifier }, "Login Request");
     }
 
     const { identifier, password } = req.body;
@@ -273,7 +273,7 @@ exports.login = async (req, res) => {
       $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
     })
       .lean()
-      .select('_id password isVerified uniID email');
+      .select('_id password isVerified uniID email fullName phone gender');
 
     if (!user) {
       return res.status(400).json({ message: "User not found" });
@@ -327,7 +327,20 @@ exports.login = async (req, res) => {
 
     setTokenCookie(res, token);
 
-    res.json({ message: "Login successful", token });
+    res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        gender: user.gender,
+        isVerified: user.isVerified,
+        uniID: user.uniID
+      }
+    });
   } catch (error) {
     logger.error({ error: error.message }, "Login Error");
     res.status(500).json({ message: "Internal Server Error" });
@@ -337,7 +350,7 @@ exports.login = async (req, res) => {
 // **4. Forgot Password**
 exports.forgotPassword = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Forgot Password Request");
+    logger.info({ identifier: req.body.identifier }, "Forgot Password Request");
 
     const { identifier } = req.body;
 
@@ -377,7 +390,7 @@ exports.forgotPassword = async (req, res) => {
 // **5. Reset Password**
 exports.resetPassword = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Reset Password Request");
+    logger.info({ email: req.body.email }, "Reset Password Request");
 
     const { email, password } = req.body;
     // Ensure email is a string to prevent NoSQL injection
@@ -418,7 +431,20 @@ exports.googleAuth = async (req, res) => {
     });
     logger.info({ email }, "Google login successful");
 
-    res.json({ message: "Google login successful", token });
+    res.json({
+      success: true,
+      message: "Google login successful",
+      token,
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        gender: user.gender,
+        isVerified: user.isVerified,
+        uniID: user.uniID
+      }
+    });
   } catch (error) {
     logger.error({ error: error.message }, "Google Login Error");
     res.status(500).json({ message: "Internal Server Error" });
@@ -458,7 +484,20 @@ exports.googleSignup = async (req, res) => {
       expiresIn: "7d",
     });
 
-    res.status(201).json({ message: "Google signup successful", token });
+    res.status(201).json({
+      success: true,
+      message: "Google signup successful",
+      token,
+      user: {
+        _id: newUser._id,
+        fullName: newUser.fullName,
+        email: newUser.email,
+        phone: newUser.phone,
+        gender: newUser.gender,
+        isVerified: newUser.isVerified,
+        uniID: newUser.uniID
+      }
+    });
   } catch (error) {
     logger.error({ error: error.message }, "Google Signup Error");
     res.status(500).json({ message: "Internal Server Error" });
@@ -474,9 +513,11 @@ exports.logout = (req, res) => {
 
 // ** 9. Middleware: Verify JWT Token**
 exports.verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  // Get token from cookie or Authorization header
+  const token = req.headers.authorization?.split(" ")[1] || req.cookies?.token;
 
   if (!token) {
+    logger.warn({ url: req.originalUrl, method: req.method }, "verifyToken: No token provided");
     return res.status(401).json({ message: "Unauthorized: No token provided" });
   }
 
@@ -484,19 +525,24 @@ exports.verifyToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Check if user should be logged out due to inactivity
-    const { shouldLogout } = await checkUserActivity(decoded.userId, 'user');
+    const { shouldLogout, user } = await checkUserActivity(decoded.userId, 'user');
+
     if (shouldLogout) {
-      return res.status(401).json({
-        message: "Session expired due to inactivity. Please log in again."
-      });
+      const message = user ? "Session expired due to inactivity. Please log in again." : "User not found or account inactive.";
+      logger.warn({ userId: decoded.userId, userFound: !!user }, `verifyToken: ${message}`);
+      return res.status(401).json({ message });
     }
 
     // Update last activity
     await updateUserActivity(decoded.userId, 'user');
 
+    // Attach both decoded payload and fetched user info for convenience
     req.user = decoded;
+    req.fullUser = user;
+
     next();
   } catch (error) {
+    logger.error({ error: error.message, name: error.name }, "verifyToken: Verification failed");
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: "Token expired. Please log in again." });
     }
@@ -551,41 +597,17 @@ exports.checkSession = (req, res) => {
 // **12. Get User**
 exports.getUser = async (req, res) => {
   try {
-    logger.info("Get User Request");
-
-    // Get token from either cookie or Authorization header
-    const token =
-      req.cookies?.token || req.headers.authorization?.split(" ")[1];
-
-    if (!token) {
-      logger.info("No token provided");
-      return res.status(401).json({ message: "No token provided" });
-    }
-
-    // Verify the token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    logger.info({ userId: decoded.userId }, "Token verified");
-
-    // Get user data
-    const user = await Account.findById(decoded.userId).select(
-      "-password -__v"
-    );
+    // If verifyToken middleware succeeded, we already have the user or at least the decoded payload
+    const user = req.fullUser || await Account.findById(req.user.userId).select("-password -__v");
 
     if (!user) {
-      logger.info("User not found");
+      logger.warn({ userId: req.user?.userId }, "getUser: User not found in database");
       return res.status(404).json({ message: "User not found" });
     }
 
-    logger.info("User data retrieved successfully");
     res.json(user);
   } catch (error) {
     logger.error({ error: error.message }, "Get User Error");
-    if (error.name === "JsonWebTokenError") {
-      return res.status(403).json({ message: "Invalid token" });
-    }
-    if (error.name === "TokenExpiredError") {
-      return res.status(403).json({ message: "Token expired" });
-    }
     res.status(500).json({ message: "Internal Server Error" });
   }
 };

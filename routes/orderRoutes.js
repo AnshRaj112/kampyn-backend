@@ -13,26 +13,27 @@ router.post("/guest", orderController.createGuestOrder);
 // Store order details for mobile payment flow (must come before /:userId route)
 router.post("/store-details", orderController.storeOrderDetails);
 
+
 // Place an order (creates Order in DB + returns Razorpay options)
-router.post("/:userId", orderController.placeOrderHandler);
+router.post("/:userId", authMiddleware, orderController.placeOrderHandler);
 
 // 4. get past orders for a user
-router.get("/past/:userId", orderController.getPastOrders);
+router.get("/past/:userId", authMiddleware, orderController.getPastOrders);
 
 // 5. get active orders for a user
-router.get("/user-active/:userId", orderController.getUserActiveOrders);
+router.get("/user-active/:userId", authMiddleware, orderController.getUserActiveOrders);
 
 // 7. cleanup delivered orders that are still in active orders
-router.post("/cleanup-delivered/:userId", orderController.cleanupDeliveredOrders);
+router.post("/cleanup-delivered/:userId", authMiddleware, orderController.cleanupDeliveredOrders);
 
 // 8. cancel a pending order and release locks
 router.post("/:orderId/cancel", orderController.cancelOrder);
 
 // 9. manually cancel a pending order (for users)
-router.post("/:orderId/cancel-manual", orderController.cancelOrderManual);
+router.post("/:orderId/cancel-manual", authMiddleware, orderController.cancelOrderManual);
 
 // Get a specific order by ID (must be last to avoid conflicts with other :orderId routes)
-router.get("/:orderId", orderController.getOrderById);
+router.get("/:orderId", authMiddleware, orderController.getOrderById);
 
 
 // Vendor analytics endpoint

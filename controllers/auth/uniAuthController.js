@@ -35,7 +35,7 @@ const setTokenCookie = (res, token) => {
 // **1. User Signup**exports.signup = async (req, res) => {
 exports.signup = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Signup Request Received");
+    logger.info({ email: req.body.email }, "Signup Request Received");
 
     const { fullName, email, phone, password, gstNumber } = req.body;
 
@@ -118,7 +118,7 @@ exports.signup = async (req, res) => {
 // **2. OTP Verification**
 exports.verifyOtp = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "OTP Verification Request");
+    logger.info({ email: req.body.email }, "OTP Verification Request");
 
     const { email, otp } = req.body;
     const otpRecord = await Otp.findOne({ email: { $eq: email }, otp: { $eq: otp } });
@@ -150,8 +150,17 @@ exports.verifyOtp = async (req, res) => {
     setTokenCookie(res, token);
 
     res.status(200).json({
+      success: true,
       message: "OTP verified successfully",
       token,
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        gstNumber: user.gstNumber,
+        isVerified: user.isVerified
+      }
     });
   } catch (error) {
     logger.error({ error: error.message }, "OTP Verification Error");
@@ -204,7 +213,7 @@ exports.resendOtp = async (req, res) => {
 };
 exports.login = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Login Request");
+    logger.info({ identifier: req.body.identifier }, "Login Request");
 
     const { identifier, password } = req.body;
 
@@ -257,7 +266,19 @@ exports.login = async (req, res) => {
 
     setTokenCookie(res, token);
 
-    res.json({ message: "Login successful", token });
+    res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        gstNumber: user.gstNumber,
+        isVerified: user.isVerified
+      }
+    });
   } catch (error) {
     logger.error({ error: error.message }, "Login Error");
     res.status(500).json({ message: "Internal Server Error" });
@@ -267,7 +288,7 @@ exports.login = async (req, res) => {
 // **4. Forgot Password**
 exports.forgotPassword = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Forgot Password Request");
+    logger.info({ identifier: req.body.identifier }, "Forgot Password Request");
 
     const { identifier } = req.body;
 
@@ -307,7 +328,7 @@ exports.forgotPassword = async (req, res) => {
 // **5. Reset Password**
 exports.resetPassword = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Reset Password Request");
+    logger.info({ email: req.body.email }, "Reset Password Request");
 
     const { email, password } = req.body;
     if (typeof email !== 'string') {
@@ -330,7 +351,7 @@ exports.resetPassword = async (req, res) => {
 // **6. Google Login**
 exports.googleAuth = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Google Login Request");
+    logger.info({ email: req.body.email }, "Google Login Request");
 
     const { email } = req.body;
     let user = await User.findOne({ email });
@@ -357,7 +378,7 @@ exports.googleAuth = async (req, res) => {
 // **7. Google Signup**
 exports.googleSignup = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Google Signup Request");
+    logger.info({ email: req.body.email }, "Google Signup Request");
 
     const { email, googleId, fullName } = req.body;
 
@@ -403,9 +424,11 @@ exports.logout = (req, res) => {
 
 // ** 9. Middleware: Verify JWT Token**
 exports.verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  // Get token from cookie or Authorization header
+  const token = req.headers.authorization?.split(" ")[1] || req.cookies?.token;
 
   if (!token) {
+    logger.warn({ url: req.originalUrl, method: req.method }, "uni:verifyToken: No token provided");
     return res.status(401).json({ message: "Unauthorized: No token provided" });
   }
 
@@ -413,19 +436,22 @@ exports.verifyToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Check if university should be logged out due to inactivity
-    const { shouldLogout } = await checkUserActivity(decoded.userId, 'uni');
+    const { shouldLogout, user } = await checkUserActivity(decoded.userId, 'uni');
+
     if (shouldLogout) {
-      return res.status(401).json({
-        message: "Session expired due to inactivity. Please log in again."
-      });
+      const message = user ? "Session expired due to inactivity. Please log in again." : "University not found or account inactive.";
+      logger.warn({ userId: decoded.userId, userFound: !!user }, `uni:verifyToken: ${message}`);
+      return res.status(401).json({ message });
     }
 
     // Update last activity
     await updateUserActivity(decoded.userId, 'uni');
 
     req.user = decoded;
+    req.fullUni = user; // Attach full uni object
     next();
   } catch (error) {
+    logger.error({ error: error.message, name: error.name }, "uni:verifyToken: Verification failed");
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: "Token expired. Please log in again." });
     }
@@ -480,17 +506,9 @@ exports.checkSession = (req, res) => {
 // **12. Get User**
 exports.getUser = async (req, res) => {
   try {
-    logger.info({ userId: req.user?.userId || req.uni?.userId }, "Get User Request");
-
-    // The user object is already attached to the request by the middleware (either verifyToken or uniAuthMiddleware)
-    // However, to ensure we have the most up-to-date data with populations, we re-fetch:
-    const userId = req.user?.userId || req.uni?._id || req.uni?.userId;
-
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized: No user ID found in request" });
-    }
-
-    const user = await Account.findById(userId)
+    // If verifyToken middleware succeeded, we already have the user or at least the decoded payload
+    const userId = req.user?.userId || req.user?._id;
+    const user = req.fullUni || await Account.findById(userId)
       .select("-password -__v")
       .populate({
         path: 'vendors.vendorId',
@@ -498,12 +516,13 @@ exports.getUser = async (req, res) => {
       });
 
     if (!user) {
+      logger.warn({ userId }, "uni:getUser: User not found in database");
       return res.status(404).json({ message: "User not found" });
     }
 
     res.json(user);
   } catch (error) {
-    logger.error({ error: error.message }, "Get User Error");
+    logger.error({ error: error.message }, "Uni: Get User Error");
     res.status(500).json({ message: "Internal Server Error" });
   }
 };

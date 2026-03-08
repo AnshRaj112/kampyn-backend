@@ -3,6 +3,22 @@ const Vendor = require('../models/account/Vendor');
 const Uni = require('../models/account/Uni');
 const Admin = require('../models/account/Admin');
 const logger = require('./pinoLogger');
+const argon2 = require('argon2');
+
+/**
+ * Hash Password
+ * Aggressively optimized settings for sub-200ms response time while maintaining security
+ * @param {string} password - Plain text password
+ * @returns {Promise<string>} - Hashed password
+ */
+async function hashPassword(password) {
+  return await argon2.hash(password, {
+    type: argon2.argon2id,
+    memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 12288,
+    timeCost: Number(process.env.ARGON2_TIME) || 2,
+    parallelism: Number(process.env.ARGON2_PAR) || 2
+  });
+}
 
 /**
  * Check if user should be logged out based on last activity
@@ -33,21 +49,26 @@ async function checkUserActivity(userId, userType) {
     }
 
     if (!user) {
+      logger.warn({ userId, userType }, 'checkUserActivity: User not found in database');
       return { shouldLogout: true, user: null };
     }
 
     // Check if last activity is missing or was more than 7 days ago
     // If lastActivity is missing, we initialize it now to prevent premature logout
     if (!user.lastActivity) {
+      logger.info({ userId, userType }, 'checkUserActivity: lastActivity missing, initializing');
       await updateUserActivity(userId, userType);
       return { shouldLogout: false, user };
     }
 
     const shouldLogout = user.lastActivity < sevenDaysAgo;
+    if (shouldLogout) {
+      logger.warn({ userId, userType, lastActivity: user.lastActivity }, 'checkUserActivity: Session expired due to inactivity');
+    }
 
     return { shouldLogout, user };
   } catch (error) {
-    logger.error({ error: error.message, userId, userType }, 'Error checking user activity');
+    logger.error({ error: error.message, userId, userType, stack: error.stack }, 'Error checking user activity');
     return { shouldLogout: true, user: null };
   }
 }
@@ -85,7 +106,59 @@ async function updateUserActivity(userId, userType) {
   }
 }
 
+/**
+ * BOLA Check: Validate if the requester (vendor or university) can access a specific vendor's data
+ * @param {Object} req - Express request object
+ * @param {string} targetVendorId - The vendor ID being accessed
+ * @returns {Promise<boolean>} - True if access is allowed
+ */
+async function validateVendorAccess(req, targetVendorId) {
+  if (!targetVendorId) return false;
+
+  // 1. If requester is a vendor, they can only access their own data
+  if (req.vendor) {
+    return req.vendor._id.toString() === targetVendorId.toString();
+  }
+
+  // 2. If requester is a university, they can access data for vendors belonging to their uni
+  if (req.uni) {
+    // We need to verify if targetVendorId belongs to req.uni._id
+    // This requires a quick DB lookup to be secure
+    const vendor = await Vendor.findById(targetVendorId).select('uniID');
+    if (!vendor || !vendor.uniID) return false;
+
+    return vendor.uniID.toString() === req.uni._id.toString();
+  }
+
+  return false;
+}
+
+/**
+ * BOLA Check: Validate if the requester (user) can access a specific user's data
+ * @param {Object} req - Express request object
+ * @param {string} targetUserId - The user ID being accessed
+ * @returns {boolean} - True if access is allowed
+ */
+function validateUserAccess(req, targetUserId) {
+  if (!targetUserId || !req.user) return false;
+
+  // Users can only access their own data
+  if (req.user.userId.toString() === targetUserId.toString()) {
+    return true;
+  }
+
+  // Admins can access anyone's data
+  if (req.user.userType === 'admin') {
+    return true;
+  }
+
+  return false;
+}
+
 module.exports = {
   checkUserActivity,
-  updateUserActivity
+  updateUserActivity,
+  hashPassword,
+  validateVendorAccess,
+  validateUserAccess
 };

@@ -5,6 +5,7 @@ const Payment = require("../../models/order/Payment");
 const User = require("../../models/account/User");
 const Vendor = require("../../models/account/Vendor");
 const orderUtils = require("../../utils/orderUtils");
+const { checkUserActivity, updateUserActivity, hashPassword } = require("../../utils/authUtils");
 const logger = require("../../utils/pinoLogger");
 // const invoiceUtils = require("../utils/invoiceUtils");
 
@@ -92,7 +93,7 @@ exports.createVendorRazorpayOrder = async (req, res) => {
 
     // Generate Razorpay order
     const receipt = `vendor-${Date.now()}-${vendorId.slice(-6)}`;
-    
+
     const razorpayOrder = await razorpay.orders.create({
       amount: amountInPaise,
       currency: "INR",
@@ -197,7 +198,7 @@ exports.verifyVendorPayment = async (req, res) => {
     let userId = null;
     let isNewUser = false;
     const existingUser = await User.findOne({ phone: collectorPhone });
-    
+
     if (existingUser) {
       userId = existingUser._id;
     } else {
@@ -206,12 +207,12 @@ exports.verifyVendorPayment = async (req, res) => {
         fullName: collectorName,
         phone: collectorPhone,
         email: `guest_${Date.now()}@kiitbites.com`, // Temporary email
-        password: "guest_password", // Temporary password
+        password: await hashPassword(crypto.randomBytes(16).toString("hex")), // Generate random secure password
         type: "user-standard",
         isVerified: true,
         uniID: vendor.uniID,
       });
-      
+
       const savedGuestUser = await guestUser.save();
       userId = savedGuestUser._id;
       isNewUser = true;

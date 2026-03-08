@@ -5,13 +5,20 @@ const logger = require("../../utils/pinoLogger");
 
 exports.authMiddleware = async (req, res, next) => {
   try {
+    // Check for token in Authorization header OR in cookies
     const authHeader = req.headers.authorization;
+    let token = null;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+    } else if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+
+    if (!token) {
       return res.status(401).json({ message: "Authorization token missing" });
     }
 
-    const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Get user to determine type and check activity
@@ -29,8 +36,8 @@ exports.authMiddleware = async (req, res, next) => {
     // Check if user should be logged out due to inactivity
     const { shouldLogout } = await checkUserActivity(decoded.userId, userType);
     if (shouldLogout) {
-      return res.status(401).json({ 
-        message: "Session expired due to inactivity. Please log in again." 
+      return res.status(401).json({
+        message: "Session expired due to inactivity. Please log in again."
       });
     }
 

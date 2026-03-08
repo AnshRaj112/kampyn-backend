@@ -34,7 +34,7 @@ const setTokenCookie = (res, token) => {
 // **1. User Signup**exports.signup = async (req, res) => {
 exports.signup = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Signup Request Received");
+    logger.info({ email: req.body.email }, "Signup Request Received");
 
     const { fullName, email, phone, password } =
       req.body;
@@ -97,7 +97,7 @@ exports.signup = async (req, res) => {
 // **2. OTP Verification**
 exports.verifyOtp = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "OTP Verification Request");
+    logger.info({ email: req.body.email }, "OTP Verification Request");
 
     const { email, otp } = req.body;
     const otpRecord = await Otp.findOne({ email, otp });
@@ -129,8 +129,16 @@ exports.verifyOtp = async (req, res) => {
     setTokenCookie(res, token);
 
     res.status(200).json({
+      success: true,
       message: "OTP verified successfully",
       token,
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        isVerified: user.isVerified
+      }
     });
   } catch (error) {
     logger.error({ error: error.message }, "OTP Verification Error");
@@ -141,7 +149,7 @@ exports.verifyOtp = async (req, res) => {
 // **3. Login**
 exports.login = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Login Request");
+    logger.info({ identifier: req.body.identifier }, "Login Request");
 
     const { identifier, password } = req.body;
 
@@ -187,7 +195,18 @@ exports.login = async (req, res) => {
 
     setTokenCookie(res, token);
 
-    res.json({ message: "Login successful", token });
+    res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        isVerified: user.isVerified
+      }
+    });
   } catch (error) {
     logger.error({ error: error.message }, "Login Error");
     res.status(500).json({ message: "Internal Server Error" });
@@ -197,7 +216,7 @@ exports.login = async (req, res) => {
 // **4. Forgot Password**
 exports.forgotPassword = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Forgot Password Request");
+    logger.info({ identifier: req.body.identifier }, "Forgot Password Request");
 
     const { identifier } = req.body;
 
@@ -237,7 +256,7 @@ exports.forgotPassword = async (req, res) => {
 // **5. Reset Password**
 exports.resetPassword = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Reset Password Request");
+    logger.info({ email: req.body.email }, "Reset Password Request");
 
     const { email, password } = req.body;
     const hashedPassword = await hashPassword(password);
@@ -256,7 +275,7 @@ exports.resetPassword = async (req, res) => {
 // **6. Google Login**
 exports.googleAuth = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Google Login Request");
+    logger.info({ email: req.body.email }, "Google Login Request");
 
     const { email } = req.body;
     let user = await User.findOne({ email });
@@ -283,7 +302,7 @@ exports.googleAuth = async (req, res) => {
 // **7. Google Signup**
 exports.googleSignup = async (req, res) => {
   try {
-    logger.info({ body: req.body }, "Google Signup Request");
+    logger.info({ email: req.body.email }, "Google Signup Request");
 
     const { email, googleId, fullName } = req.body;
 
@@ -329,9 +348,11 @@ exports.logout = (req, res) => {
 
 // ** 9. Middleware: Verify JWT Token**
 exports.verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  // Get token from cookie or Authorization header
+  const token = req.headers.authorization?.split(" ")[1] || req.cookies?.adminToken || req.cookies?.token;
 
   if (!token) {
+    logger.warn({ url: req.originalUrl, method: req.method }, "admin:verifyToken: No token provided");
     return res.status(401).json({ message: "Unauthorized: No token provided" });
   }
 
@@ -339,19 +360,23 @@ exports.verifyToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Check if admin should be logged out due to inactivity
-    const { shouldLogout } = await checkUserActivity(decoded.adminId, 'admin');
+    const userId = decoded.userId || decoded.adminId; // Support both for safety
+    const { shouldLogout, user } = await checkUserActivity(userId, 'admin');
+
     if (shouldLogout) {
-      return res.status(401).json({
-        message: "Session expired due to inactivity. Please log in again."
-      });
+      const message = user ? "Session expired due to inactivity. Please log in again." : "Admin not found or account inactive.";
+      logger.warn({ userId, userFound: !!user }, `admin:verifyToken: ${message}`);
+      return res.status(401).json({ message });
     }
 
     // Update last activity
-    await updateUserActivity(decoded.adminId, 'admin');
+    await updateUserActivity(userId, 'admin');
 
     req.user = decoded;
+    req.admin = user; // Attach full admin object
     next();
   } catch (error) {
+    logger.error({ error: error.message, name: error.name }, "admin:verifyToken: Verification failed");
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: "Token expired. Please log in again." });
     }
@@ -406,44 +431,23 @@ exports.checkSession = (req, res) => {
 // **12. Get User**
 exports.getUser = async (req, res) => {
   try {
-    logger.info("Get User Request");
-
-    // Get token from either cookie or Authorization header
-    const token =
-      req.cookies?.token || req.headers.authorization?.split(" ")[1];
-
-    if (!token) {
-      logger.info("No token provided");
-      return res.status(401).json({ message: "No token provided" });
-    }
-
-    // Verify the token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    logger.info({ userId: decoded.userId }, "Token verified");
-
-    // Get user data with populated vendors
-    const user = await Account.findById(decoded.userId)
+    // If verifyToken middleware succeeded, we already have the user or at least the decoded payload
+    const userId = req.user?.userId || req.user?.id;
+    const user = req.admin || await Account.findById(userId)
       .select("-password -__v")
       .populate({
         path: 'vendors.vendorId',
-        select: 'fullName email phone location' // Select only the fields you want to see
+        select: 'fullName email phone location'
       });
 
     if (!user) {
-      logger.info("User not found");
+      logger.warn({ userId }, "admin:getUser: User not found in database");
       return res.status(404).json({ message: "User not found" });
     }
 
-    logger.info("User data retrieved successfully");
     res.json(user);
   } catch (error) {
-    logger.error({ error: error.message }, "Get User Error");
-    if (error.name === "JsonWebTokenError") {
-      return res.status(403).json({ message: "Invalid token" });
-    }
-    if (error.name === "TokenExpiredError") {
-      return res.status(403).json({ message: "Token expired" });
-    }
+    logger.error({ error: error.message }, "Admin: Get User Error");
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
