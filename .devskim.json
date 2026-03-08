@@ -1,0 +1,27 @@
+{
+  "exclude": [
+    "node_modules/**",
+    ".git/**",
+    ".github/**",
+    ".next/**",
+    "dist/**",
+    "build/**",
+    "coverage/**",
+    "out/**",
+    "public/**",
+    "logs/**",
+    "tmp/**",
+    "temp/**",
+    ".cache/**",
+    ".turbo/**",
+    ".vercel/**",
+    "vendor/**",
+    "**/*.min.js",
+    "**/*.bundle.js",
+    "**/*.map",
+    "**/*.lock",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml"
+  ]
+}
