@@ -7,8 +7,10 @@ const Uni = require("../models/account/Uni");
 const Vendor = require("../models/account/Vendor");
 const { adminLimiter, strictLimiter, sharedStore } = require("../middleware/rateLimit");
 const logger = require("../utils/pinoLogger");
+const { adminAuthMiddleware } = require("../middleware/auth/adminAuthMiddleware");
 
-// Authentication removed - anyone can access admin routes for now
+// Apply admin authentication to ALL admin routes
+router.use(adminAuthMiddleware);
 
 /**
  * GET /admin/locks/stats
@@ -21,7 +23,7 @@ router.get("/locks/stats", async (req, res) => {
     res.json({
       success: true,
       data: stats,
-      requestedBy: 'anonymous' // Changed from req.admin.email
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("Error getting lock statistics:", error);
@@ -44,7 +46,7 @@ router.get("/locks/detailed-stats", (req, res) => {
     res.json({
       success: true,
       data: detailedStats,
-      requestedBy: 'anonymous' // Changed from req.admin.email
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("Error getting detailed lock statistics:", error);
@@ -69,7 +71,7 @@ router.post("/locks/release/:orderId", async (req, res) => {
     res.json({
       success: true,
       data: result,
-      requestedBy: 'anonymous', // Changed from req.admin.email
+      requestedBy: req.admin.email,
       timestamp: new Date()
     });
   } catch (error) {
@@ -94,7 +96,7 @@ router.post("/locks/cleanup", async (req, res) => {
     res.json({
       success: true,
       data: result,
-      requestedBy: 'anonymous', // Changed from req.admin.email
+      requestedBy: req.admin.email,
       timestamp: new Date()
     });
   } catch (error) {
@@ -119,7 +121,7 @@ router.post("/locks/clear-all", async (req, res) => {
     res.json({
       success: true,
       data: result,
-      requestedBy: 'anonymous', // Changed from req.admin.email
+      requestedBy: req.admin.email,
       timestamp: new Date()
     });
   } catch (error) {
@@ -145,7 +147,7 @@ router.get("/locks/items/:itemId", async (req, res) => {
     res.json({
       success: true,
       data: locks,
-      requestedBy: 'anonymous', // Changed from req.admin.email
+      requestedBy: req.admin.email,
       timestamp: new Date()
     });
   } catch (error) {
@@ -179,7 +181,7 @@ router.get("/system/health", async (req, res) => {
     res.json({
       success: true,
       data: healthInfo,
-      requestedBy: 'anonymous' // Changed from req.admin.email
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("Error getting system health:", error);
@@ -212,7 +214,7 @@ router.get("/rate-limits/blocked-ips", adminLimiter, async (req, res) => {
       data: blockedIPs,
       total: blockedIPs.length,
       limit: limit,
-      requestedBy: 'anonymous',
+      requestedBy: req.admin.email,
       timestamp: new Date()
     });
   } catch (error) {
@@ -244,7 +246,7 @@ router.post("/rate-limits/release/:ip", strictLimiter, async (req, res) => {
       success: true,
       message: `Rate limit released for IP ${ip}`,
       ip: ip,
-      requestedBy: 'anonymous',
+      requestedBy: req.admin.email,
       timestamp: new Date()
     });
   } catch (error) {
@@ -273,7 +275,7 @@ router.post("/rate-limits/clear-all", strictLimiter, async (req, res) => {
     res.json({
       success: true,
       message: "All rate limits have been cleared",
-      requestedBy: 'anonymous',
+      requestedBy: req.admin.email,
       timestamp: new Date()
     });
   } catch (error) {
@@ -309,7 +311,7 @@ router.get("/invoices", adminLimiter, async (req, res) => {
       success: true,
       data: result.invoices,
       pagination: result.pagination,
-      requestedBy: 'anonymous' // Changed from req.admin.email
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("Error getting admin invoices:", error);
@@ -333,7 +335,7 @@ router.get("/invoices/stats", adminLimiter, async (req, res) => {
     res.json({
       success: true,
       data: stats,
-      requestedBy: 'anonymous' // Changed from req.admin.email
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("Error getting invoice stats:", error);
@@ -366,7 +368,7 @@ router.post("/invoices/bulk-download", async (req, res) => {
     res.json({
       success: true,
       data: result,
-      requestedBy: 'anonymous' // Changed from req.admin.email
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("Error getting invoices for bulk download:", error);
@@ -399,7 +401,7 @@ router.post("/invoices/generate-order-invoices", async (req, res) => {
     res.json({
       success: true,
       data: result,
-      requestedBy: 'anonymous' // Changed from req.admin.email
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("Error generating order invoices:", error);
@@ -463,7 +465,7 @@ router.get("/universities", adminLimiter, async (req, res) => {
       success: true,
       data: universitiesWithVendorCounts,
       total: universitiesWithVendorCounts.length,
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error fetching universities:", error);
@@ -551,7 +553,7 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
     res.json({
       success: true,
       data: universityDetails,
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error fetching university details:", error);
@@ -605,7 +607,7 @@ router.patch("/universities/:uniId/availability", async (req, res) => {
         fullName: university.fullName,
         isAvailable: university.isAvailable
       },
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error updating university availability:", error);
@@ -669,7 +671,7 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
         email: university.email,
         platformFee: university.platformFee
       },
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error updating platform fee:", error);
@@ -745,7 +747,7 @@ router.put("/universities/bulk-platform-fees", async (req, res) => {
       message: "Platform fees updated successfully",
       updatedCount: result.modifiedCount,
       totalRequested: updates.length,
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error bulk updating platform fees:", error);
@@ -789,7 +791,7 @@ router.get("/universities/:uniId/platform-fee", async (req, res) => {
         email: university.email,
         platformFee: university.platformFee
       },
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error fetching platform fee:", error);
@@ -853,7 +855,7 @@ router.get("/help-messages", adminLimiter, async (req, res) => {
         unread: unreadCount,
         read: readCount
       },
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error fetching help messages:", error);
@@ -899,7 +901,7 @@ router.put("/help-messages/:messageId/read", strictLimiter, async (req, res) => 
         _id: message._id,
         isRead: message.isRead
       },
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error marking message as read:", error);
@@ -945,7 +947,7 @@ router.put("/help-messages/:messageId/unread", strictLimiter, async (req, res) =
         _id: message._id,
         isRead: message.isRead
       },
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error marking message as unread:", error);
@@ -983,7 +985,7 @@ router.get("/help-messages/:messageId", strictLimiter, async (req, res) => {
     res.json({
       success: true,
       message: message,
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error fetching help message:", error);
@@ -1021,7 +1023,7 @@ router.delete("/help-messages/:messageId", strictLimiter, async (req, res) => {
     res.json({
       success: true,
       message: "Message deleted successfully",
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error deleting help message:", error);
@@ -1141,7 +1143,7 @@ router.get("/monitoring/stats", adminLimiter, async (req, res) => {
         })) : [],
         idlePeriods
       },
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error getting monitoring stats:", error);
@@ -1178,7 +1180,7 @@ router.get("/monitoring/api-hits", adminLimiter, async (req, res) => {
       success: true,
       data: hits,
       count: hits.length,
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error getting API hits:", error);
@@ -1323,7 +1325,7 @@ router.get("/monitoring/detailed-analytics", adminLimiter, async (req, res) => {
           total: hits.filter(h => h.isAuthEndpoint).length
         }
       },
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error getting detailed analytics:", error);
@@ -1371,7 +1373,7 @@ router.get("/monitoring/daily-stats", adminLimiter, async (req, res) => {
         hitsByStatusCode: convertMapToObject(s.hitsByStatusCode)
       })) : [],
       count: Array.isArray(stats) ? stats.length : 0,
-      requestedBy: 'anonymous'
+      requestedBy: req.admin.email
     });
   } catch (error) {
     logger.error("❌ Admin: Error getting daily stats:", error);
