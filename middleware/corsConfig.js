@@ -40,11 +40,11 @@ function getCorsConfig() {
     const allowedOrigins = getAllowedOrigins();
 
     return {
-        // Origin validation function
+        // Origin validation function (cors passes origin string, not req)
         origin: function (origin, callback) {
-            // Allow requests with no origin (mobile apps, Postman, etc.)
+            // Allow requests with no origin (mobile apps, Postman, server-to-server) in development only.
+            // In production, no-origin requests are allowed only for NO_ORIGIN_ALLOWED_PATHS by skipping CORS for those paths in the app.
             if (!origin) {
-                // In production, strictly enforce origin to prevent attacks via tools, unless explicitly allowed
                 if (process.env.NODE_ENV === 'production') {
                     console.warn(`CORS blocked request with no origin`);
                     return callback(new Error(`CORS not allowed for requests without origin in production`));

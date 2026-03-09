@@ -95,8 +95,14 @@ app.use(applyPermissionsPolicy);
 // 4. Additional security headers - Cache control, etc.
 app.use(additionalSecurityHeaders);
 
-// 5. CORS - Must come before routes
-app.use(cors(getCorsConfig()));
+// 5. CORS - Must come before routes (skip for health checks so probes without Origin are allowed)
+const corsConfig = getCorsConfig();
+app.use((req, res, next) => {
+    if (req.path === '/api/health' || req.path === '/health') {
+        return next();
+    }
+    return cors(corsConfig)(req, res, next);
+});
 
 // 6. Body parsers - Parse incoming requests
 app.use(express.json({ limit: '10mb' })); // Limit payload size
