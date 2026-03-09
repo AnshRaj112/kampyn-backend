@@ -146,12 +146,19 @@ const csrfExcludedPaths = [
 ];
 const csrfExcludedMethods = ['GET', 'HEAD', 'OPTIONS'];
 
+// Skip CSRF when request has Bearer token (token-based auth is not vulnerable to CSRF in the same way)
+function hasBearerToken(req) {
+  const auth = req.headers.authorization;
+  return auth && typeof auth === 'string' && auth.startsWith('Bearer ') && auth.length > 10;
+}
+
 app.use((req, res, next) => {
   if (
     csrfExcludedPaths.includes(req.path) ||
     csrfExcludedMethods.includes(req.method) ||
     req.path.startsWith('/api/university/universities/') ||
-    req.path.startsWith('/api/admin/auth/login')
+    req.path.startsWith('/api/admin/auth/login') ||
+    hasBearerToken(req)
   ) {
     return next();
   }
