@@ -19,10 +19,6 @@ const {
 const { getCorsConfig } = require('./middleware/corsConfig');
 const { apiLimiter } = require('./middleware/rateLimit');
 
-// Import CSRF protection middleware (currently disabled)
-const lusca = require('lusca');
-const { csrfProtection, csrfTokenEndpoint, refreshCSRFToken } = require('./middleware/csrfMiddleware');
-
 // Import database connections
 const {
   connectDB,
@@ -114,57 +110,6 @@ app.use(cookieParser());
 // 8. Global rate limiting - Protect against DDoS
 app.use(apiLimiter);
 
-// 🔒 CSRF Protection
-const csrfExcludedPaths = [
-  '/api/health',
-  '/api/user/auth/login',
-  '/api/user/auth/register',
-  '/api/user/auth/signup',
-  '/api/user/auth/otpverification',
-  '/api/user/auth/forgotpassword',
-  '/api/user/auth/resetpassword',
-  '/api/uni/auth/login',
-  '/api/uni/auth/register',
-  '/api/uni/auth/signup',
-  '/api/uni/auth/otpverification',
-  '/api/uni/auth/forgotpassword',
-  '/api/uni/auth/resetpassword',
-  '/api/vendor/auth/login',
-  '/api/vendor/auth/register',
-  '/api/vendor/auth/signup',
-  '/api/vendor/auth/otpverification',
-  '/api/vendor/auth/forgotpassword',
-  '/api/vendor/auth/resetpassword',
-  '/api/admin/auth/login',
-  '/contact',
-  '/razorpay/webhook',
-  '/api/csrf/token',
-  '/api/csrf/refresh',
-  '/api/admin/services',
-  '/api/university/universities',
-  '/api/health'
-];
-const csrfExcludedMethods = ['GET', 'HEAD', 'OPTIONS'];
-
-// Skip CSRF when request has Bearer token (token-based auth is not vulnerable to CSRF in the same way)
-function hasBearerToken(req) {
-  const auth = req.headers.authorization;
-  return auth && typeof auth === 'string' && auth.startsWith('Bearer ') && auth.length > 10;
-}
-
-app.use((req, res, next) => {
-  if (
-    csrfExcludedPaths.includes(req.path) ||
-    csrfExcludedMethods.includes(req.method) ||
-    req.path.startsWith('/api/university/universities/') ||
-    req.path.startsWith('/api/admin/auth/login') ||
-    hasBearerToken(req)
-  ) {
-    return next();
-  }
-  return csrfProtection()(req, res, next);
-});
-
 // ✅ Load environment variables
 const PORT = process.env.PORT || 5001;
 
@@ -183,10 +128,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// 🔒 CSRF Token endpoints
-app.get("/api/csrf/token", csrfTokenEndpoint);
-app.post("/api/csrf/refresh", refreshCSRFToken);
-
+// 🔒 CSRF Token endpoints - removed (CSRF disabled)
 // ✅ Serve static files for uploads (fallback for when Cloudinary fails)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
