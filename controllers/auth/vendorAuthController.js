@@ -10,6 +10,7 @@ const sendOtpEmail = require("../../utils/sendOtp");
 const { checkUserActivity, updateUserActivity, hashPassword } = require("../../utils/authUtils");
 const { populateVendorWithUniversityItems } = require("../../utils/vendorUtils");
 const logger = require("../../utils/pinoLogger");
+const { getCookieOptions, clearCookie } = require("../../middleware/cookieConfig");
 
 // Utility: Generate OTP
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
@@ -17,12 +18,7 @@ const generateOtp = () => crypto.randomInt(100000, 999999).toString();
 
 // Cookie Token Set
 const setTokenCookie = (res, token) => {
-  res.cookie("vendorToken", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // Secure in production
-    sameSite: "Strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
-  });
+  res.cookie("vendorToken", token, getCookieOptions());
 };
 
 // **1. User Signup**
@@ -513,8 +509,8 @@ exports.googleSignup = async (req, res) => {
 // **8. Logout**
 exports.logout = (req, res) => {
   logger.info({ userId: req.user?.userId || "Unknown User" }, "User Logged Out");
-  res.clearCookie("vendorToken");
-  res.clearCookie("token");
+  clearCookie(res, "vendorToken");
+  clearCookie(res, "token");
   res.json({ message: "Logged out successfully" });
 };
 
@@ -575,12 +571,7 @@ exports.refreshToken = (req, res) => {
     );
 
     // Store the new token in HTTP-only cookies for persistence
-    res.cookie("vendorToken", newToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie("vendorToken", newToken, getCookieOptions());
 
     res.json({ message: "Token refreshed", token: newToken });
   } catch (error) {

@@ -15,13 +15,13 @@ function getCookieOptions() {
         // HTTP Only: Prevent XSS attacks by making cookie inaccessible to JavaScript
         httpOnly: true,
 
-        // Secure: Send cookie only over HTTPS (production only)
+        // Secure: Send cookie only over HTTPS (required for SameSite: None)
         secure: isProduction,
 
         // SameSite: CSRF protection
-        // 'lax' allows cookies on top-level navigation (better UX than 'strict')
-        // 'none' requires secure=true and is needed for cross-site requests
-        sameSite: isProduction ? 'strict' : 'lax',
+        // 'lax' is good for development.
+        // 'none' is required for cross-site requests (e.g. Render deployments)
+        sameSite: isProduction ? 'None' : 'Lax',
 
         // Max age: 7 days
         maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -71,7 +71,7 @@ function clearCookie(res, cookieName) {
     res.clearCookie(cookieName, {
         httpOnly: true,
         secure: isProduction,
-        sameSite: isProduction ? 'strict' : 'lax',
+        sameSite: isProduction ? 'None' : 'Lax',
         path: '/',
     });
 }

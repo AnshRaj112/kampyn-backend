@@ -8,6 +8,7 @@ const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
 const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
 const logger = require("../../utils/pinoLogger");
+const { getCookieOptions, clearCookie } = require("../../middleware/cookieConfig");
 
 // Utility: Generate OTP
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
@@ -24,12 +25,7 @@ const hashPassword = async (password) => {
 
 // Cookie Token Set
 const setTokenCookie = (res, token) => {
-  res.cookie("uniToken", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // Secure in production
-    sameSite: "Strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
-  });
+  res.cookie("uniToken", token, getCookieOptions());
 };
 
 // **1. User Signup**exports.signup = async (req, res) => {
@@ -418,8 +414,8 @@ exports.googleSignup = async (req, res) => {
 // **8. Logout**
 exports.logout = (req, res) => {
   logger.info({ userId: req.user?.userId || "Unknown User" }, "User Logged Out");
-  res.clearCookie("uniToken");
-  res.clearCookie("token");
+  clearCookie(res, "uniToken");
+  clearCookie(res, "token");
   res.json({ message: "Logged out successfully" });
 };
 
@@ -481,12 +477,7 @@ exports.refreshToken = (req, res) => {
     );
 
     // Store the new token in HTTP-only cookies for persistence
-    res.cookie("uniToken", newToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie("uniToken", newToken, getCookieOptions());
 
     res.json({ message: "Token refreshed", token: newToken });
   } catch (error) {

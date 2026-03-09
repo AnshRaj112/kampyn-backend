@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { getCookieOptions } = require('./cookieConfig');
 
 /**
  * CSRF Protection Middleware
@@ -121,7 +122,7 @@ function generateAndSetCSRFToken(req, res, next) {
   // Generate new CSRF token
   const csrfToken = generateCSRFToken();
   const sessionToken = generateCSRFToken();
-  
+
   // Store token with expiry
   tokenStore.set(sessionToken, {
     token: csrfToken,
@@ -130,15 +131,13 @@ function generateAndSetCSRFToken(req, res, next) {
 
   // Set session token in cookie
   res.cookie('csrf-token', sessionToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    ...getCookieOptions(),
     maxAge: 60 * 60 * 1000 // 1 hour
   });
 
   // Add CSRF token to response
   res.locals.csrfToken = csrfToken;
-  
+
   next();
 }
 
@@ -151,7 +150,7 @@ function csrfTokenEndpoint(req, res) {
   // Generate new CSRF token
   const csrfToken = generateCSRFToken();
   const sessionToken = generateCSRFToken();
-  
+
   // Store token with expiry
   tokenStore.set(sessionToken, {
     token: csrfToken,
@@ -160,9 +159,7 @@ function csrfTokenEndpoint(req, res) {
 
   // Set session token in cookie
   res.cookie('csrf-token', sessionToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    ...getCookieOptions(),
     maxAge: 60 * 60 * 1000 // 1 hour
   });
 
@@ -179,7 +176,7 @@ function csrfTokenEndpoint(req, res) {
  */
 function refreshCSRFToken(req, res) {
   const sessionToken = req.cookies['csrf-token'];
-  
+
   if (!sessionToken) {
     return res.status(400).json({
       error: 'No session token found',
@@ -189,7 +186,7 @@ function refreshCSRFToken(req, res) {
 
   // Generate new CSRF token
   const newCsrfToken = generateCSRFToken();
-  
+
   // Update token in store
   const tokenData = tokenStore.get(sessionToken);
   if (tokenData) {

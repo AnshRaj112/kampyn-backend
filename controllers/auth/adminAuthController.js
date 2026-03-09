@@ -7,6 +7,7 @@ const sendOtpEmail = require("../../utils/sendOtp");
 const Admin = require("../../models/account/Admin");
 const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
 const logger = require("../../utils/pinoLogger");
+const { getCookieOptions, clearCookie } = require("../../middleware/cookieConfig");
 
 // Utility: Generate OTP
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
@@ -23,12 +24,7 @@ const hashPassword = async (password) => {
 
 // Cookie Token Set
 const setTokenCookie = (res, token) => {
-  res.cookie("adminToken", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // Secure in production
-    sameSite: "Strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
-  });
+  res.cookie("adminToken", token, getCookieOptions());
 };
 
 // **1. User Signup**exports.signup = async (req, res) => {
@@ -342,8 +338,8 @@ exports.googleSignup = async (req, res) => {
 // **8. Logout**
 exports.logout = (req, res) => {
   logger.info({ userId: req.user?.userId || "Unknown User" }, "User Logged Out");
-  res.clearCookie("adminToken");
-  res.clearCookie("token");
+  clearCookie(res, "adminToken");
+  clearCookie(res, "token");
   res.json({ message: "Logged out successfully" });
 };
 
@@ -406,12 +402,7 @@ exports.refreshToken = (req, res) => {
     );
 
     // Store the new token in HTTP-only cookies for persistence
-    res.cookie("adminToken", newToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie("adminToken", newToken, getCookieOptions());
 
     res.json({ message: "Token refreshed", token: newToken });
   } catch (error) {
@@ -496,12 +487,7 @@ exports.adminLogin = async (req, res) => {
     await updateUserActivity(admin._id, 'admin');
 
     // Set token in HTTP-only cookie
-    res.cookie("adminToken", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+    res.cookie("adminToken", token, getCookieOptions());
 
     // Return admin profile (without sensitive data)
     const adminProfile = admin.toPublicJSON();
@@ -546,11 +532,7 @@ exports.adminLogin = async (req, res) => {
 exports.adminLogout = async (req, res) => {
   try {
     // Clear the admin token cookie
-    res.clearCookie("adminToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict"
-    });
+    clearCookie(res, "adminToken");
 
     res.status(200).json({
       success: true,
@@ -739,10 +721,8 @@ exports.refreshToken = async (req, res) => {
 
     // Set new token in HTTP-only cookie
     res.cookie("adminToken", newToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      ...getCookieOptions(),
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours override
     });
 
     res.status(200).json({
