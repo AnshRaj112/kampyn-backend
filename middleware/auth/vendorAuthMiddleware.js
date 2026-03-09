@@ -11,6 +11,7 @@ const vendorAuthMiddleware = async (req, res, next) => {
   try {
     let token =
       req.headers.authorization?.split(" ")[1] ||
+      req.cookies?.vendorToken ||
       req.cookies?.token ||
       req.query?.token;
 

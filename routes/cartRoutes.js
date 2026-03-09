@@ -5,11 +5,11 @@ const { authMiddleware } = require("../middleware/auth/authMiddleware");
 
 // Cart routes (Authentication handled via cookies/logic if needed, but not globally enforced here)
 
-router.post("/add/:userId", cartController.addToCart);
-router.get("/:userId", cartController.getCart);
-router.post("/add-one/:userId", cartController.increaseOne);
-router.post("/remove-one/:userId", cartController.decreaseOne);
-router.post("/remove-item/:userId", cartController.removeItem);
-router.get("/extras/:userId", cartController.getExtras);
+router.post("/add/:userId", authMiddleware, cartController.addToCart);
+router.get("/:userId", authMiddleware, cartController.getCart);
+router.post("/add-one/:userId", authMiddleware, cartController.increaseOne);
+router.post("/remove-one/:userId", authMiddleware, cartController.decreaseOne);
+router.post("/remove-item/:userId", authMiddleware, cartController.removeItem);
+router.get("/extras/:userId", authMiddleware, cartController.getExtras);
 
 module.exports = router;

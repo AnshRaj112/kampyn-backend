@@ -11,8 +11,8 @@ exports.authMiddleware = async (req, res, next) => {
 
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.split(" ")[1];
-    } else if (req.cookies && req.cookies.token) {
-      token = req.cookies.token;
+    } else if (req.cookies) {
+      token = req.cookies.token || req.cookies.vendorToken || req.cookies.uniToken;
     }
 
     if (!token) {

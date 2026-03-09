@@ -27,7 +27,7 @@ router.get("/user-active/:userId", authMiddleware, orderController.getUserActive
 router.post("/cleanup-delivered/:userId", authMiddleware, orderController.cleanupDeliveredOrders);
 
 // 8. cancel a pending order and release locks
-router.post("/:orderId/cancel", orderController.cancelOrder);
+router.post("/:orderId/cancel", authMiddleware, orderController.cancelOrder);
 
 // 9. manually cancel a pending order (for users)
 router.post("/:orderId/cancel-manual", authMiddleware, orderController.cancelOrderManual);

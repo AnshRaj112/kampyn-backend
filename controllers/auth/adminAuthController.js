@@ -23,7 +23,7 @@ const hashPassword = async (password) => {
 
 // Cookie Token Set
 const setTokenCookie = (res, token) => {
-  res.cookie("token", token, {
+  res.cookie("adminToken", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production", // Secure in production
     sameSite: "Strict",
@@ -342,6 +342,7 @@ exports.googleSignup = async (req, res) => {
 // **8. Logout**
 exports.logout = (req, res) => {
   logger.info({ userId: req.user?.userId || "Unknown User" }, "User Logged Out");
+  res.clearCookie("adminToken");
   res.clearCookie("token");
   res.json({ message: "Logged out successfully" });
 };
@@ -405,7 +406,7 @@ exports.refreshToken = (req, res) => {
     );
 
     // Store the new token in HTTP-only cookies for persistence
-    res.cookie("token", newToken, {
+    res.cookie("adminToken", newToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",

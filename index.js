@@ -108,50 +108,49 @@ app.use(cookieParser());
 // 8. Global rate limiting - Protect against DDoS
 app.use(apiLimiter);
 
-// 🔒 CSRF Protection - DISABLED
-// CSRF protection has been disabled for development/testing purposes
+// 🔒 CSRF Protection
+const csrfExcludedPaths = [
+  '/api/health',
+  '/api/user/auth/login',
+  '/api/user/auth/register',
+  '/api/user/auth/signup',
+  '/api/user/auth/otpverification',
+  '/api/user/auth/forgotpassword',
+  '/api/user/auth/resetpassword',
+  '/api/uni/auth/login',
+  '/api/uni/auth/register',
+  '/api/uni/auth/signup',
+  '/api/uni/auth/otpverification',
+  '/api/uni/auth/forgotpassword',
+  '/api/uni/auth/resetpassword',
+  '/api/vendor/auth/login',
+  '/api/vendor/auth/register',
+  '/api/vendor/auth/signup',
+  '/api/vendor/auth/otpverification',
+  '/api/vendor/auth/forgotpassword',
+  '/api/vendor/auth/resetpassword',
+  '/api/admin/auth/login',
+  '/contact',
+  '/razorpay/webhook',
+  '/api/csrf/token',
+  '/api/csrf/refresh',
+  '/api/admin/services',
+  '/api/university/universities',
+  '/api/health'
+];
+const csrfExcludedMethods = ['GET', 'HEAD', 'OPTIONS'];
 
-// const csrfExcludedPaths = [
-//   '/api/health',
-//   '/api/user/auth/login',
-//   '/api/user/auth/register',
-//   '/api/user/auth/signup',
-//   '/api/user/auth/otpverification',
-//   '/api/user/auth/forgotpassword',
-//   '/api/user/auth/resetpassword',
-//   '/api/uni/auth/login',
-//   '/api/uni/auth/register',
-//   '/api/uni/auth/signup',
-//   '/api/uni/auth/otpverification',
-//   '/api/uni/auth/forgotpassword',
-//   '/api/uni/auth/resetpassword',
-//   '/api/vendor/auth/login',
-//   '/api/vendor/auth/register',
-//   '/api/vendor/auth/signup',
-//   '/api/vendor/auth/otpverification',
-//   '/api/vendor/auth/forgotpassword',
-//   '/api/vendor/auth/resetpassword',
-//   '/api/admin/auth/login',
-//   '/contact',
-//   '/razorpay/webhook',
-//   '/api/csrf/token',
-//   '/api/csrf/refresh',
-//   '/api/admin/services',
-//   '/api/university/universities'
-// ];
-// const csrfExcludedMethods = ['GET', 'HEAD', 'OPTIONS'];
-
-// app.use((req, res, next) => {
-//   if (
-//     csrfExcludedPaths.includes(req.path) ||
-//     csrfExcludedMethods.includes(req.method) ||
-//     req.path.startsWith('/api/university/universities/') ||
-//     req.path.startsWith('/api/admin/')
-//   ) {
-//     return next();
-//   }
-//   return csrfProtection()(req, res, next);
-// });
+app.use((req, res, next) => {
+  if (
+    csrfExcludedPaths.includes(req.path) ||
+    csrfExcludedMethods.includes(req.method) ||
+    req.path.startsWith('/api/university/universities/') ||
+    req.path.startsWith('/api/admin/auth/login')
+  ) {
+    return next();
+  }
+  return csrfProtection()(req, res, next);
+});
 
 // ✅ Load environment variables
 const PORT = process.env.PORT || 5001;
@@ -171,9 +170,9 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// 🔒 CSRF Token endpoints - DISABLED
-// app.get("/api/csrf/token", csrfTokenEndpoint);
-// app.post("/api/csrf/refresh", refreshCSRFToken);
+// 🔒 CSRF Token endpoints
+app.get("/api/csrf/token", csrfTokenEndpoint);
+app.post("/api/csrf/refresh", refreshCSRFToken);
 
 // ✅ Serve static files for uploads (fallback for when Cloudinary fails)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -226,7 +225,12 @@ app.get("/api/health", (req, res) => {
 // ✅ Global error handling
 app.use((err, req, res, next) => {
   logger.error({ err, url: req.url, method: req.method }, "Server Error");
-  res.status(500).json({ message: "Internal Server Error" });
+  const response = { message: "Internal Server Error" };
+  if (process.env.NODE_ENV === "development") {
+    response.error = err.message;
+    response.stack = err.stack;
+  }
+  res.status(500).json(response);
 });
 
 // Export app for testing

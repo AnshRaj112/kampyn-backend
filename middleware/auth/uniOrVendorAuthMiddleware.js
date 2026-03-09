@@ -10,7 +10,7 @@ const logger = require("../../utils/pinoLogger");
  */
 const uniOrVendorAuthMiddleware = async (req, res, next) => {
     try {
-        let token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
+        let token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.uniToken || req.cookies?.vendorToken || req.cookies?.token;
 
         if (!token) {
             return res.status(401).json({

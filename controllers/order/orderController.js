@@ -136,6 +136,11 @@ exports.getActiveOrders = async (req, res) => {
   try {
     const { vendorId, orderType } = req.params;
 
+    // BOLA Check: Ensure vendor/uni is authorized to access this vendor's active orders
+    if (!(await validateVendorAccess(req, vendorId))) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to view orders for this vendor." });
+    }
+
     // 1) Fetch vendor name
     const vendor = await Vendor.findById(vendorId, "fullName").lean();
     if (!vendor) {
@@ -164,6 +169,15 @@ exports.completeOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
 
+    // Fetch order to check ownership
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found." });
+
+    // BOLA Check: Only the vendor assigned to this order (or an admin) can complete it
+    if (!(await validateVendorAccess(req, order.vendorId))) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You cannot complete orders for another vendor." });
+    }
+
     const result = await Order.findOneAndUpdate(
       { _id: orderId, status: { $in: ["inProgress", "ready"] } }, // allow both in-progress and ready orders
       { $set: { status: "completed" } }, // update status to completed
@@ -181,7 +195,7 @@ exports.completeOrder = async (req, res) => {
 
     return res.json({ message: "Order marked as completed." });
   } catch (err) {
-    logger.error({ error: err.message }, "Error in getActiveOrders");
+    logger.error({ error: err.message }, "Error in completeOrder");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -192,6 +206,15 @@ exports.completeOrder = async (req, res) => {
 exports.deliverOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
+
+    // Fetch order to check ownership
+    const orderToInspect = await Order.findById(orderId);
+    if (!orderToInspect) return res.status(404).json({ message: "Order not found." });
+
+    // BOLA Check: Only the vendor assigned to this order can mark it as delivered
+    if (!(await validateVendorAccess(req, orderToInspect.vendorId))) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You cannot deliver orders for another vendor." });
+    }
 
     // 1) flip status - handle completed, onTheWay, ready, and inProgress statuses
     const order = await Order.findOneAndUpdate(
@@ -215,7 +238,7 @@ exports.deliverOrder = async (req, res) => {
 
     return res.json({ message: "Order delivered and user records updated." });
   } catch (err) {
-    logger.error({ error: err.message }, "Error in getActiveOrders");
+    logger.error({ error: err.message }, "Error in deliverOrder");
     return res.status(500).json({ message: "Server error." });
   }
 };
@@ -226,6 +249,15 @@ exports.deliverOrder = async (req, res) => {
 exports.startDelivery = async (req, res) => {
   const { orderId } = req.params;
   try {
+    // Fetch order to check ownership
+    const orderToInspect = await Order.findById(orderId);
+    if (!orderToInspect) return res.status(404).json({ success: false, message: "Order not found." });
+
+    // BOLA Check: Only the vendor assigned to this order can start delivery
+    if (!(await validateVendorAccess(req, orderToInspect.vendorId))) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You cannot start delivery for another vendor's order." });
+    }
+
     const order = await Order.findOneAndUpdate(
       { _id: orderId, status: { $in: ["completed", "ready"] } }, // allow both completed and ready orders
       { status: "onTheWay" },
@@ -235,7 +267,7 @@ exports.startDelivery = async (req, res) => {
       return res.status(404).json({ success: false, message: "No completed or ready order found." });
     res.json({ success: true, data: order });
   } catch (err) {
-    logger.error({ error: err.message }, "Error in getPastOrders");
+    logger.error({ error: err.message }, "Error in startDelivery");
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -746,6 +778,11 @@ exports.getVendorPastOrders = async (req, res) => {
   try {
     const { vendorId } = req.params;
 
+    // BOLA Check: Ensure vendor/uni is authorized to access this vendor's past orders
+    if (!(await validateVendorAccess(req, vendorId))) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to view past orders for this vendor." });
+    }
+
     logger.debug({ vendorId }, 'Fetching past orders for vendor');
 
     // 1) Fetch vendor name
@@ -779,6 +816,11 @@ exports.getVendorPastOrders = async (req, res) => {
 exports.getDeliveryOrders = async (req, res) => {
   try {
     const { vendorId } = req.params;
+
+    // BOLA Check: Ensure vendor/uni is authorized to access this vendor's delivery orders
+    if (!(await validateVendorAccess(req, vendorId))) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to view delivery orders for this vendor." });
+    }
 
     logger.debug({ vendorId }, 'Fetching delivery orders for vendor');
 
@@ -1140,6 +1182,16 @@ exports.cancelOrderManual = async (req, res) => {
 exports.readyOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
+
+    // Fetch order to check ownership
+    const orderToInspect = await Order.findById(orderId);
+    if (!orderToInspect) return res.status(404).json({ message: "Order not found." });
+
+    // BOLA Check: Only the vendor assigned to this order can mark it as ready
+    if (!(await validateVendorAccess(req, orderToInspect.vendorId))) {
+      return res.status(403).json({ success: false, message: "Unauthorized: You cannot mark another vendor's order as ready." });
+    }
+
     const result = await Order.findOneAndUpdate(
       { _id: orderId, status: "inProgress" },
       { $set: { status: "ready" } },
@@ -1150,7 +1202,7 @@ exports.readyOrder = async (req, res) => {
     }
     return res.json({ message: "Order marked as ready." });
   } catch (err) {
-    logger.error({ error: err.message }, "Error in getActiveOrders");
+    logger.error({ error: err.message }, "Error in readyOrder");
     return res.status(500).json({ message: "Server error." });
   }
 };

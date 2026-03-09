@@ -44,6 +44,11 @@ function getCorsConfig() {
         origin: function (origin, callback) {
             // Allow requests with no origin (mobile apps, Postman, etc.)
             if (!origin) {
+                // In production, strictly enforce origin to prevent attacks via tools, unless explicitly allowed
+                if (process.env.NODE_ENV === 'production') {
+                    console.warn(`CORS blocked request with no origin`);
+                    return callback(new Error(`CORS not allowed for requests without origin in production`));
+                }
                 return callback(null, true);
             }
 
