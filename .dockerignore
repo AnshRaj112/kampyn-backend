@@ -1,0 +1,40 @@
+# Dependency directories
+node_modules/
+
+# Git
+.git
+.gitignore
+.github
+
+# Environment Variables
+.env
+.env.*
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Tests & Docs
+test/
+docs/
+
+# Tooling configuration
+.husky
+.devskim.json
+
+# npm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

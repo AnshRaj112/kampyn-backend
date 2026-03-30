@@ -94,10 +94,10 @@ app.use(additionalSecurityHeaders);
 // 5. CORS - Must come before routes (skip for health checks so probes without Origin are allowed)
 const corsConfig = getCorsConfig();
 app.use((req, res, next) => {
-    if (req.path === '/api/health' || req.path === '/health') {
-        return next();
-    }
-    return cors(corsConfig)(req, res, next);
+  if (req.path === '/api/health' || req.path === '/health') {
+    return next();
+  }
+  return cors(corsConfig)(req, res, next);
 });
 
 // 6. Body parsers - Parse incoming requests
@@ -196,7 +196,7 @@ async function startServer() {
   try {
     await connectDB();
 
-    app.listen(PORT, async () => {
+    app.listen(PORT, '0.0.0.0', async () => {
       logger.info({ port: PORT }, "Server running");
 
       const dbStatus = {

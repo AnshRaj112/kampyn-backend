@@ -1,5 +1,21 @@
+# Environments
 .env
+.env.*
 
+# Dependencies
 node_modules/
 
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Docker
+docker-compose.override.yml
+
+# Scrips/Admin
 scripts/create-super-admin.js
