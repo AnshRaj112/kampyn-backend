@@ -104,7 +104,7 @@ const skipHealthChecks = (req) => {
 // Auth rate limiter - stricter for authentication endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isProduction ? 5 : 10, // Stricter in production
+  max: 1000,
   message: {
     success: false,
     message: "Too many authentication attempts from this IP, please try again later"
@@ -120,7 +120,7 @@ const authLimiter = rateLimit({
 // General API rate limiter - more lenient for regular API calls
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isProduction ? 200 : 250, // More lenient in development
+  max: 1000,
   message: {
     success: false,
     message: "Too many requests from this IP, please try again later"
@@ -140,7 +140,7 @@ const apiLimiter = rateLimit({
 // Admin rate limiter - moderate for admin operations
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50,
+  max: 1000,
   message: {
     success: false,
     message: "Too many admin requests from this IP, please try again later"
@@ -153,7 +153,7 @@ const adminLimiter = rateLimit({
 // Strict rate limiter for database-intensive operations
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  max: 1000,
   message: {
     success: false,
     message: "Too many database requests from this IP, please try again later"
@@ -166,7 +166,7 @@ const strictLimiter = rateLimit({
 // Payment rate limiter - very strict for payment operations
 const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
+  max: 1000,
   message: {
     success: false,
     message: "Too many payment requests from this IP, please try again later"
@@ -208,7 +208,7 @@ function createPerApiLimiter(options = {}) {
 // Per-API Auth Limiter - for authentication endpoints
 // Each auth endpoint (login, signup, etc.) gets separate counter per IP
 const perApiAuthLimiter = createPerApiLimiter({
-  max: isProduction ? 5 : 10,
+  max: 1000,
   message: {
     success: false,
     message: "Too many attempts on this endpoint, please try again later"
@@ -218,7 +218,7 @@ const perApiAuthLimiter = createPerApiLimiter({
 // Per-API Strict Limiter - for sensitive operations
 // Each sensitive endpoint gets separate counter per IP
 const perApiStrictLimiter = createPerApiLimiter({
-  max: 10,
+  max: 1000,
   message: {
     success: false,
     message: "Too many requests to this endpoint, please try again later"
@@ -228,7 +228,7 @@ const perApiStrictLimiter = createPerApiLimiter({
 // Per-API General Limiter - for general API endpoints
 // Each general endpoint gets separate counter per IP
 const perApiGeneralLimiter = createPerApiLimiter({
-  max: isProduction ? 100 : 200,
+  max: 1000,
   message: {
     success: false,
     message: "Too many requests to this endpoint, please try again later"
