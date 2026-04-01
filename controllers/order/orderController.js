@@ -1002,6 +1002,16 @@ exports.createGuestOrder = async (req, res) => {
       });
     }
 
+    // Notify vendor dashboard to refresh active orders
+    try {
+      sendVendorNotification(vendorId, "active-order-update", {
+        orderId: newOrder._id,
+        status: "inProgress"
+      });
+    } catch (e) {
+      logger.warn({ err: e.message }, "Failed to send vendor notification for guest order");
+    }
+    
     return res.status(201).json({
       success: true,
       orderId: newOrder._id,

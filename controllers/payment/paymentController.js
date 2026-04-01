@@ -6,6 +6,7 @@ const orderUtils = require("../../utils/orderUtils");
 const paymentUtils = require("../../utils/paymentUtils");
 const { atomicCache } = require("../../utils/cacheUtils");
 const invoiceUtils = require("../../utils/invoiceUtils");
+const { sendVendorNotification } = require("../../services/vendorNotificationHub");
 const logger = require("../../utils/pinoLogger");
 
 /**
@@ -87,6 +88,16 @@ async function verifyPaymentHandler(req, res, next) {
 
     // 6. Run post-payment logic (inventory updates, user.cart → pastOrders, vendor.activeOrders, etc.)
     await orderUtils.postPaymentProcessing(order);
+
+    // 7. Notify vendor dashboard to refresh active orders
+    try {
+      sendVendorNotification(vendorId, "active-order-update", {
+        orderId: order._id,
+        status: "inProgress"
+      });
+    } catch (e) {
+      logger.warn({ err: e.message }, "Failed to send vendor notification for new order");
+    }
 
     // 🔓 RELEASE LOCKS: After successful payment, release all item locks
     const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, userId);
