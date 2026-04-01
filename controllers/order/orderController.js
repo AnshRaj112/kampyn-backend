@@ -13,6 +13,7 @@ const { atomicCache } = require("../../utils/cacheUtils");
 const logger = require("../../utils/pinoLogger");
 const { hashPassword, validateVendorAccess, validateUserAccess } = require("../../utils/authUtils");
 const crypto = require("crypto");
+const { sendVendorNotification } = require("../../services/vendorNotificationHub");
 
 // Import the shared atomic cancellation function
 const { cancelOrderAtomically } = require("../../utils/orderUtils");
@@ -193,6 +194,16 @@ exports.completeOrder = async (req, res) => {
     // Orders stay in activeOrders until delivered
     // Only move to pastOrders when status becomes "delivered"
 
+    // Notify vendor dashboard to refresh active orders
+    try {
+      sendVendorNotification(order.vendorId, "active-order-update", {
+        orderId: orderId,
+        status: "completed"
+      });
+    } catch (e) {
+      logger.warn({ err: e.message }, "Failed to send vendor notification for completed order");
+    }
+
     return res.json({ message: "Order marked as completed." });
   } catch (err) {
     logger.error({ error: err.message }, "Error in completeOrder");
@@ -236,6 +247,29 @@ exports.deliverOrder = async (req, res) => {
       }
     );
 
+    // Notify vendor dashboard to refresh active and past orders
+    try {
+      sendVendorNotification(order.vendorId, "active-order-update", {
+        orderId: orderId,
+        status: "delivered",
+        action: "removed"
+      });
+      sendVendorNotification(order.vendorId, "past-order-update", {
+        orderId: orderId,
+        status: "delivered"
+      });
+      // If it was a delivery order, refresh delivery list too
+      if (order.orderType === "delivery") {
+        sendVendorNotification(order.vendorId, "delivery-order-update", {
+          orderId: orderId,
+          status: "delivered",
+          action: "removed"
+        });
+      }
+    } catch (e) {
+      logger.warn({ err: e.message }, "Failed to send vendor notification for delivered order");
+    }
+
     return res.json({ message: "Order delivered and user records updated." });
   } catch (err) {
     logger.error({ error: err.message }, "Error in deliverOrder");
@@ -265,6 +299,22 @@ exports.startDelivery = async (req, res) => {
     );
     if (!order)
       return res.status(404).json({ success: false, message: "No completed or ready order found." });
+
+    // Notify vendor dashboard to refresh active and delivery orders
+    try {
+      sendVendorNotification(order.vendorId, "active-order-update", {
+        orderId: orderId,
+        status: "onTheWay",
+        action: "removed" // Usually removed from active list and moved to delivery list
+      });
+      sendVendorNotification(order.vendorId, "delivery-order-update", {
+        orderId: orderId,
+        status: "onTheWay"
+      });
+    } catch (e) {
+      logger.warn({ err: e.message }, "Failed to send vendor notification for started delivery");
+    }
+
     res.json({ success: true, data: order });
   } catch (err) {
     logger.error({ error: err.message }, "Error in startDelivery");
@@ -1200,6 +1250,17 @@ exports.readyOrder = async (req, res) => {
     if (!result) {
       return res.status(400).json({ message: "No active in-progress order found to mark as ready." });
     }
+
+    // Notify vendor dashboard to refresh active orders
+    try {
+      sendVendorNotification(result.vendorId, "active-order-update", {
+        orderId: orderId,
+        status: "ready"
+      });
+    } catch (e) {
+      logger.warn({ err: e.message }, "Failed to send vendor notification for ready order");
+    }
+
     return res.json({ message: "Order marked as ready." });
   } catch (err) {
     logger.error({ error: err.message }, "Error in readyOrder");

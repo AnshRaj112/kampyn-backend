@@ -16,7 +16,12 @@ const vendorAuthMiddleware = async (req, res, next) => {
       req.query?.token;
 
     if (!token) {
-      logger.warn({ path: req.originalUrl, method: req.method }, "Vendor access denied: No token provided");
+      logger.warn({ 
+        path: req.originalUrl, 
+        method: req.method,
+        queryTokenPresent: !!req.query?.token,
+        cookieTokenPresent: !!(req.cookies?.vendorToken || req.cookies?.token)
+      }, "Vendor access denied: No token provided");
       return res.status(401).json({
         success: false,
         message: "Access denied. No token provided."

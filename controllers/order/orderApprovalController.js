@@ -8,6 +8,7 @@ const orderUtils = require("../../utils/orderUtils");
 const mongoose = require("mongoose");
 const logger = require("../../utils/pinoLogger");
 const { validateVendorAccess, validateUserAccess } = require("../../utils/authUtils");
+const { sendVendorNotification } = require("../../services/vendorNotificationHub");
 
 /**
  * Helper function: Cancel all pending vendor approval orders for a user
@@ -232,6 +233,21 @@ exports.acceptOrder = async (req, res) => {
       { $addToSet: { activeOrders: order._id } }
     );
 
+    // Notify vendor dashboard to refresh active orders
+    try {
+      sendVendorNotification(order.vendorId, "active-order-update", {
+        orderId: order._id,
+        status: "inProgress"
+      });
+      // Also notify to refresh pending list since this order is no longer pending
+      sendVendorNotification(order.vendorId, "pending-order-update", {
+        orderId: order._id,
+        action: "accepted"
+      });
+    } catch (e) {
+      logger.warn({ err: e.message }, "Failed to send vendor notification for accepted order");
+    }
+
     return res.json({
       success: true,
       message: "Order accepted successfully.",
@@ -298,6 +314,16 @@ exports.denyOrder = async (req, res) => {
     } catch (lockError) {
       logger.error("Error releasing locks:", lockError);
       // Continue even if lock release fails
+    }
+
+    // Notify vendor dashboard to refresh pending list
+    try {
+      sendVendorNotification(order.vendorId, "pending-order-update", {
+        orderId: order._id,
+        action: "denied"
+      });
+    } catch (e) {
+      logger.warn({ err: e.message }, "Failed to send vendor notification for denied order");
     }
 
     return res.json({
