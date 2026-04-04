@@ -30,7 +30,7 @@
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "lusca": "^1.7.0",
-    "minimatch": "10.2.3",
+    "minimatch": "10.2.5",
     "mongoose": "^8.12.1",
     "multer": "2.1.1",
     "node-fetch": "3.3.2",
@@ -55,12 +55,16 @@
   "overrides": {
     "debug": "4.3.4",
     "glob": "^10.5.0",
-    "minimatch": "10.2.3"
+    "minimatch": "10.2.5",
+    "picomatch": "4.0.4",
+    "yaml": "2.8.3"
   },
   "resolutions": {
-    "minimatch": "10.2.3",
+    "minimatch": "10.2.5",
     "debug": "4.3.4",
-    "glob": "^10.5.0"
+    "glob": "^10.5.0",
+    "picomatch": "4.0.4",
+    "yaml": "2.8.3"
   },
   "peerDependenciesMeta": {
     "supports-color": {
