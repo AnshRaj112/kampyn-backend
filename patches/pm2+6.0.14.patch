@@ -1,0 +1,35 @@
+diff --git a/node_modules/pm2/lib/tools/Config.js b/node_modules/pm2/lib/tools/Config.js
+index a3da91c..9b741d2 100644
+--- a/node_modules/pm2/lib/tools/Config.js
++++ b/node_modules/pm2/lib/tools/Config.js
+@@ -151,6 +151,11 @@ Config._valid = function(key, value, sch){
+   var sch = sch || this.schema[key],
+       scht = typeof sch.type == 'string' ? [sch.type] : sch.type;
+ 
++  // Mitigation for CVE-2025-5891 (ReDoS)
++  if (typeof value === 'string' && value.length > 1024) {
++    return null;
++  }
++
+   // Required value.
+   var undef = typeof value == 'undefined';
+   if(this._error(sch.require && undef, 'require', key)){
+@@ -182,9 +187,15 @@ Config._valid = function(key, value, sch){
+   }
+ 
+   // Verify RegExp if exists.
+-  if (this._error(type == '[object String]' && sch.regex && !(new RegExp(sch.regex)).test(value),
+-      'regex', key, sch.desc || ('should match ' + sch.regex))) {
+-    return null;
++  if (type == '[object String]' && sch.regex) {
++    try {
++      if (this._error(!(new RegExp(sch.regex)).test(value),
++          'regex', key, sch.desc || ('should match ' + sch.regex))) {
++        return null;
++      }
++    } catch (e) {
++      return null;
++    }
+   }
+ 
+   // Verify maximum / minimum of Number value.

@@ -11,7 +11,8 @@
     "migrate-orders": "node scripts/migrate-orders.js",
     "test-locks": "node scripts/test-locking-system.js",
     "create-admin": "node scripts/create-super-admin.js",
-    "validate-cicd": "node scripts/setup-cicd.js"
+    "validate-cicd": "node scripts/setup-cicd.js",
+    "postinstall": "patch-package"
   },
   "keywords": [],
   "author": "",
@@ -46,6 +47,7 @@
     "husky": "^9.0.11",
     "lint-staged": "^15.2.2",
     "nodemon": "3.1.11",
+    "patch-package": "8.0.1",
     "supertest": "7.2.2"
   },
   "engines": {
