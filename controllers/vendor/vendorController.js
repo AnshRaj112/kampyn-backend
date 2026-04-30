@@ -18,8 +18,8 @@ exports.getVendorsByUni = async (req, res) => {
     }
 
     // Get all vendors for this university
-    const vendors = await Vendor.find({ uniID: uniId })
-      .select("_id fullName retailInventory produceInventory image coverImage")
+    const vendors = await Vendor.find({ uniID: uniId, sellerType: "SELLER" })
+      .select("_id fullName retailInventory produceInventory image coverImage sellerType")
       .lean();
 
     // Create a map of vendor availability

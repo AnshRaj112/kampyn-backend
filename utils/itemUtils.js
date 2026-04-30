@@ -178,6 +178,7 @@ async function getVendorsByItemId(itemKind, itemId) {
   // 1. Find vendors whose inventory array contains this itemId
   //    Only select the minimal fields we need: fullName, uniID, and that inventory array field.
   const vendors = await Vendor.find({
+    sellerType: "SELLER",
     [matchField]: { $elemMatch: { itemId: oid } },
   })
     .select(`fullName uniID ${matchField}`)
