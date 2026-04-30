@@ -36,7 +36,9 @@ router.get('/charges/:uniId', async (req, res) => {
 router.get('/:uniId/profile', async (req, res) => {
   try {
     const { uniId } = req.params;
-    const university = await Uni.findById(uniId).select('fullName email phone retailImage produceImage categoryImages packingCharge deliveryCharge');
+    const university = await Uni.findById(uniId)
+      .select('fullName email phone retailImage produceImage categoryImages packingCharge deliveryCharge features')
+      .populate('features', 'name');
 
     if (!university) {
       return res.status(404).json({ message: "University not found" });
