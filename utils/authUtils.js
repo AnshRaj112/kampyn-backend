@@ -2,6 +2,7 @@ const User = require('../models/account/User');
 const Vendor = require('../models/account/Vendor');
 const Uni = require('../models/account/Uni');
 const Admin = require('../models/account/Admin');
+const GuestHouse = require('../models/account/GuestHouse');
 const logger = require('./pinoLogger');
 const argon2 = require('argon2');
 
@@ -43,6 +44,9 @@ async function checkUserActivity(userId, userType) {
         break;
       case 'admin':
         user = await Admin.findById(userId);
+        break;
+      case 'guestHouse':
+        user = await GuestHouse.findById(userId);
         break;
       default:
         return { shouldLogout: true, user: null };
@@ -96,6 +100,9 @@ async function updateUserActivity(userId, userType) {
         break;
       case 'admin':
         updateResult = await Admin.findByIdAndUpdate(userId, { lastActivity: now });
+        break;
+      case 'guestHouse':
+        updateResult = await GuestHouse.findByIdAndUpdate(userId, { lastActivity: now });
         break;
     }
 
