@@ -5,6 +5,9 @@ const { atomicCache } = require("../utils/cacheUtils");
 const invoiceController = require("../controllers/invoice/invoiceController");
 const Uni = require("../models/account/Uni");
 const Vendor = require("../models/account/Vendor");
+const GuestHouse = require("../models/account/GuestHouse");
+const Feature = require("../models/account/Feature");
+const Service = require("../models/account/Service");
 const { adminLimiter, strictLimiter, sharedStore } = require("../middleware/rateLimit");
 const logger = require("../utils/pinoLogger");
 const { adminAuthMiddleware } = require("../middleware/auth/adminAuthMiddleware");
@@ -561,6 +564,172 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
       success: false,
       message: "Failed to fetch university details",
       error: error.message
+    });
+  }
+});
+
+/**
+ * GET /admin/universities/:uniId/guest-houses
+ * Get all guest houses for a specific university
+ */
+router.get("/universities/:uniId/guest-houses", adminLimiter, async (req, res) => {
+  try {
+    const { uniId } = req.params;
+
+    const university = await Uni.findById(uniId).select("_id");
+    if (!university) {
+      return res.status(404).json({
+        success: false,
+        message: "University not found",
+      });
+    }
+
+    const guestHouses = await GuestHouse.find({ uniId })
+      .select("_id name email contactNumber location isActive services")
+      .populate({ path: "services", populate: { path: "feature" } })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({
+      success: true,
+      data: guestHouses,
+      total: guestHouses.length,
+      requestedBy: req.admin.email,
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error fetching guest houses:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch guest houses",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /admin/universities/:uniId/guest-houses/:guestHouseId/services
+ * Get guest-house feature services with assignment status for a guest house
+ */
+router.get("/universities/:uniId/guest-houses/:guestHouseId/services", adminLimiter, async (req, res) => {
+  try {
+    const { uniId, guestHouseId } = req.params;
+
+    const [university, guestHouse] = await Promise.all([
+      Uni.findById(uniId).populate("features").lean(),
+      GuestHouse.findOne({ _id: guestHouseId, uniId }).lean(),
+    ]);
+
+    if (!university) {
+      return res.status(404).json({ success: false, message: "University not found" });
+    }
+    if (!guestHouse) {
+      return res.status(404).json({ success: false, message: "Guest house not found for this university" });
+    }
+
+    const guestHouseFeatures = await Feature.find({
+      _id: { $in: (university.features || []).map((feature) => feature._id) },
+      name: { $regex: /guest[\s-]*house/i },
+      isActive: true,
+    }).select("_id name").lean();
+
+    const guestHouseFeatureIds = guestHouseFeatures.map((feature) => feature._id);
+
+    const allowedServices = await Service.find({
+      feature: { $in: guestHouseFeatureIds },
+      isActive: true,
+    }).populate("feature").lean();
+
+    const assignedServiceIds = (guestHouse.services || []).map((serviceId) => serviceId.toString());
+
+    const servicesWithStatus = allowedServices.map((service) => ({
+      ...service,
+      isAssigned: assignedServiceIds.includes(service._id.toString()),
+    }));
+
+    return res.json({
+      success: true,
+      data: {
+        features: guestHouseFeatures,
+        services: servicesWithStatus,
+      },
+      requestedBy: req.admin.email,
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error fetching guest house services:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch guest house services",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * PATCH /admin/universities/:uniId/guest-houses/:guestHouseId/services
+ * Update assigned guest-house feature services for a guest house
+ */
+router.patch("/universities/:uniId/guest-houses/:guestHouseId/services", adminLimiter, async (req, res) => {
+  try {
+    const { uniId, guestHouseId } = req.params;
+    const { services } = req.body;
+
+    if (!Array.isArray(services)) {
+      return res.status(400).json({
+        success: false,
+        message: "services must be an array of service IDs",
+      });
+    }
+
+    const [university, guestHouse] = await Promise.all([
+      Uni.findById(uniId).populate("features").lean(),
+      GuestHouse.findOne({ _id: guestHouseId, uniId }),
+    ]);
+
+    if (!university) {
+      return res.status(404).json({ success: false, message: "University not found" });
+    }
+    if (!guestHouse) {
+      return res.status(404).json({ success: false, message: "Guest house not found for this university" });
+    }
+
+    const guestHouseFeatures = await Feature.find({
+      _id: { $in: (university.features || []).map((feature) => feature._id) },
+      name: { $regex: /guest[\s-]*house/i },
+      isActive: true,
+    }).select("_id").lean();
+
+    const validServices = await Service.find({
+      _id: { $in: services },
+      feature: { $in: guestHouseFeatures.map((feature) => feature._id) },
+      isActive: true,
+    }).select("_id");
+
+    if (validServices.length !== services.length) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more services are not part of guest-house features for this university",
+      });
+    }
+
+    guestHouse.services = services;
+    await guestHouse.save();
+
+    const updatedGuestHouse = await GuestHouse.findById(guestHouseId)
+      .select("_id services")
+      .populate({ path: "services", populate: { path: "feature" } });
+
+    return res.json({
+      success: true,
+      message: "Guest house services updated",
+      data: updatedGuestHouse?.services || [],
+      requestedBy: req.admin.email,
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error updating guest house services:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update guest house services",
+      error: error.message,
     });
   }
 });
