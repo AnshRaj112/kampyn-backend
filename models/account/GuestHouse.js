@@ -73,6 +73,14 @@ const guestHouseSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    coverImage: {
+      type: String,
+      default: "",
+    },
+    additionalImages: {
+      type: [String],
+      default: [],
+    },
     images: {
       type: [String],
       default: [],

@@ -68,6 +68,7 @@ const grievanceRoutes = require("./routes/grievanceRoutes");
 const recipeRoutes = require("./routes/recipeRoutes");
 const guestHouseRoutes = require("./routes/guestHouseRoutes");
 const guestHouseRoomRoutes = require("./routes/guestHouseRoomRoutes");
+const guestHouseBookingRoutes = require("./routes/guestHouseBookingRoutes");
 const adminGuestHouseRoutes = require("./routes/adminGuestHouseRoutes");
 // NEW: Order approval workflow routes (new file) - handles vendor accept/deny order requests
 const orderApprovalRoutes = require("./routes/orderApprovalRoutes");
@@ -175,6 +176,7 @@ app.use("/api", grievanceRoutes);
 app.use("/api/recipes", recipeRoutes);
 app.use("/api/guest-house", guestHouseRoutes);
 app.use("/api/guest-house-rooms", guestHouseRoomRoutes);
+app.use("/api/guest-house-bookings", guestHouseBookingRoutes);
 app.use("/api/admin/guest-houses", adminGuestHouseRoutes);
 app.use("/api/menu-sort", menuSortRoutes);
 app.use("/api/vendor/notifications", vendorNotificationRoutes);

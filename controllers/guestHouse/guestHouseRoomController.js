@@ -22,18 +22,25 @@ exports.createGuestHouseRoom = async (req, res) => {
       return res.status(401).json({ success: false, message: "Unauthorized: university context missing" });
     }
 
-    const { guestHouseId, roomName, roomCount, services } = req.body;
-    if (!guestHouseId || !roomName || roomCount === undefined) {
+    const { guestHouseId, roomName, roomCount, price, services } = req.body;
+    if (!guestHouseId || !roomName || roomCount === undefined || price === undefined) {
       return res.status(400).json({
         success: false,
-        message: "guestHouseId, roomName and roomCount are required",
+        message: "guestHouseId, roomName, roomCount and price are required",
       });
     }
     const parsedRoomCount = Number(roomCount);
+    const parsedPrice = Number(price);
     if (!Number.isFinite(parsedRoomCount) || parsedRoomCount < 1) {
       return res.status(400).json({
         success: false,
         message: "roomCount must be a number greater than 0",
+      });
+    }
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "price must be a valid non-negative number",
       });
     }
 
@@ -82,6 +89,7 @@ exports.createGuestHouseRoom = async (req, res) => {
       guestHouseId,
       roomName: String(roomName).trim(),
       roomCount: parsedRoomCount,
+      price: parsedPrice,
       coverImage: coverImageUrl,
       detailedImages: detailedImageUrls,
       services: normalizedServices,
@@ -149,7 +157,7 @@ exports.listGuestHouseRoomsForUsers = async (req, res) => {
     }
 
     const rooms = await GuestHouseRoom.find({ guestHouseId, isActive: true })
-      .select("roomName roomCount coverImage detailedImages services isActive")
+      .select("roomName roomCount price coverImage detailedImages services isActive")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -175,7 +183,7 @@ exports.updateGuestHouseRoom = async (req, res) => {
     }
 
     const { roomId } = req.params;
-    const { roomName, roomCount, services, isActive, replaceDetailedImages } = req.body;
+    const { guestHouseId, roomName, roomCount, price, services, isActive, replaceDetailedImages } = req.body;
 
     const room = await GuestHouseRoom.findOne({ _id: roomId, uniId });
     if (!room) {
@@ -185,44 +193,66 @@ exports.updateGuestHouseRoom = async (req, res) => {
       });
     }
 
-    if (roomName !== undefined) room.roomName = String(roomName).trim();
-    if (roomCount !== undefined) {
-      const parsedRoomCount = Number(roomCount);
-      if (!Number.isFinite(parsedRoomCount) || parsedRoomCount < 1) {
-        return res.status(400).json({
-          success: false,
-          message: "roomCount must be a number greater than 0",
-        });
-      }
-
-      const existingAggregation = await GuestHouseRoom.aggregate([
-        { $match: { guestHouseId: room.guestHouseId } },
-        { $group: { _id: "$guestHouseId", totalAssignedRooms: { $sum: "$roomCount" } } },
-      ]);
-      const currentAssignedRooms = existingAggregation[0]?.totalAssignedRooms || 0;
-      const adjustedAssignedRooms = currentAssignedRooms - (room.roomCount || 0) + parsedRoomCount;
-      const guestHouse = await GuestHouse.findById(room.guestHouseId).select("totalRooms");
-      if (!guestHouse) {
-        return res.status(404).json({
-          success: false,
-          message: "Parent guest house not found",
-        });
-      }
-      if (adjustedAssignedRooms > guestHouse.totalRooms) {
-        return res.status(400).json({
-          success: false,
-          message: `Room count exceeds guest house capacity. Currently assigned (excluding this row): ${currentAssignedRooms - (room.roomCount || 0)}, requested for this room: ${parsedRoomCount}, capacity: ${guestHouse.totalRooms}`,
-        });
-      }
-
-      room.roomCount = parsedRoomCount;
+    const targetGuestHouseId = guestHouseId || room.guestHouseId?.toString();
+    const targetGuestHouse = await GuestHouse.findOne({ _id: targetGuestHouseId, uniId }).select("_id totalRooms");
+    if (!targetGuestHouse) {
+      return res.status(404).json({
+        success: false,
+        message: "Parent guest house not found",
+      });
     }
+
+    if (roomName !== undefined) room.roomName = String(roomName).trim();
+
+    const nextRoomCount = roomCount !== undefined ? Number(roomCount) : Number(room.roomCount || 0);
+    if (!Number.isFinite(nextRoomCount) || nextRoomCount < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "roomCount must be a number greater than 0",
+      });
+    }
+
+    const existingAggregation = await GuestHouseRoom.aggregate([
+      {
+        $match: {
+          guestHouseId: targetGuestHouse._id,
+          _id: { $ne: room._id },
+        },
+      },
+      { $group: { _id: "$guestHouseId", totalAssignedRooms: { $sum: "$roomCount" } } },
+    ]);
+    const currentAssignedRoomsExcludingThis = existingAggregation[0]?.totalAssignedRooms || 0;
+    const adjustedAssignedRooms = currentAssignedRoomsExcludingThis + nextRoomCount;
+    if (adjustedAssignedRooms > targetGuestHouse.totalRooms) {
+      return res.status(400).json({
+        success: false,
+        message: `Room count exceeds guest house capacity. Assigned (excluding this row): ${currentAssignedRoomsExcludingThis}, requested for this room: ${nextRoomCount}, capacity: ${targetGuestHouse.totalRooms}`,
+      });
+    }
+
+    room.guestHouseId = targetGuestHouse._id;
+    room.roomCount = nextRoomCount;
     if (services !== undefined) {
       room.services = Array.isArray(services)
         ? services.map((item) => String(item).trim()).filter(Boolean)
         : typeof services === "string"
           ? services.split(",").map((item) => item.trim()).filter(Boolean)
           : [];
+    }
+    if (price !== undefined) {
+      const parsedPrice = Number(price);
+      if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "price must be a valid non-negative number",
+        });
+      }
+      room.price = parsedPrice;
+    } else if (room.price === undefined || room.price === null) {
+      return res.status(400).json({
+        success: false,
+        message: "price is required for this room",
+      });
     }
     if (isActive !== undefined) {
       room.isActive = String(isActive) === "true" || isActive === true;

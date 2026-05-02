@@ -16,8 +16,24 @@ router.get("/public/:uniId", listGuestHousesForUsers);
 router.use(uniAuthMiddleware);
 
 router.get("/", listGuestHousesByUniversity);
-router.post("/", upload.array("images", 10), createGuestHouse);
-router.put("/:guestHouseId", upload.array("images", 10), updateGuestHouse);
+router.post(
+  "/",
+  upload.fields([
+    { name: "coverImage", maxCount: 1 },
+    { name: "additionalImages", maxCount: 10 },
+    { name: "images", maxCount: 10 }, // legacy support
+  ]),
+  createGuestHouse
+);
+router.put(
+  "/:guestHouseId",
+  upload.fields([
+    { name: "coverImage", maxCount: 1 },
+    { name: "additionalImages", maxCount: 10 },
+    { name: "images", maxCount: 10 }, // legacy support
+  ]),
+  updateGuestHouse
+);
 router.delete("/:guestHouseId", deleteGuestHouse);
 
 module.exports = router;

@@ -23,6 +23,20 @@ const uploadImagesToCloudinary = async (files = []) => {
   return Promise.all(uploads);
 };
 
+const resolveGuestHouseImagesFromRequest = (req) => {
+  const fieldFiles = req.files && !Array.isArray(req.files) ? req.files : null;
+  const arrayFiles = Array.isArray(req.files) ? req.files : [];
+
+  if (fieldFiles) {
+    const coverFile = fieldFiles.coverImage?.[0] || null;
+    const additionalFiles = Array.isArray(fieldFiles.additionalImages) ? fieldFiles.additionalImages : [];
+    return { coverFile, additionalFiles };
+  }
+
+  const [coverFile, ...additionalFiles] = arrayFiles;
+  return { coverFile: coverFile || null, additionalFiles };
+};
+
 exports.createGuestHouse = async (req, res) => {
   try {
     const uniId = req.uni?._id;
@@ -52,10 +66,11 @@ exports.createGuestHouse = async (req, res) => {
         message: "name, totalRooms, contactNumber, location, email and password are required",
       });
     }
-    if (!Array.isArray(req.files) || req.files.length === 0) {
+    const { coverFile, additionalFiles } = resolveGuestHouseImagesFromRequest(req);
+    if (!coverFile) {
       return res.status(400).json({
         success: false,
-        message: "At least one guest house image is required",
+        message: "Guest house cover image is required",
       });
     }
 
@@ -83,7 +98,12 @@ exports.createGuestHouse = async (req, res) => {
       : typeof amenities === "string"
         ? amenities.split(",").map((item) => item.trim()).filter(Boolean)
         : [];
-    const uploadedImages = await uploadImagesToCloudinary(req.files || []);
+    const [uploadedCoverImage, uploadedAdditionalImages] = await Promise.all([
+      uploadImagesToCloudinary([coverFile]),
+      uploadImagesToCloudinary(additionalFiles || []),
+    ]);
+    const coverImage = uploadedCoverImage[0] || "";
+    const additionalImages = uploadedAdditionalImages;
 
     const guestHouse = await GuestHouse.create({
       uniId,
@@ -97,7 +117,9 @@ exports.createGuestHouse = async (req, res) => {
       password: hashedPassword,
       description: description ? String(description).trim() : "",
       amenities: normalizedAmenities,
-      images: uploadedImages,
+      coverImage,
+      additionalImages,
+      images: [coverImage, ...additionalImages].filter(Boolean),
       isActive: true,
       isVerified: false,
     });
@@ -145,14 +167,28 @@ exports.listGuestHousesByUniversity = async (req, res) => {
       .select("-password -__v")
       .sort({ createdAt: -1 })
       .lean();
+    const normalizedGuestHouses = guestHouses.map((item) => {
+      const fallbackImages = Array.isArray(item.images) ? item.images : [];
+      const normalizedCoverImage = item.coverImage || fallbackImages[0] || "";
+      const normalizedAdditionalImages =
+        Array.isArray(item.additionalImages) && item.additionalImages.length > 0
+          ? item.additionalImages
+          : fallbackImages.slice(1);
+      return {
+        ...item,
+        coverImage: normalizedCoverImage,
+        additionalImages: normalizedAdditionalImages,
+        images: [normalizedCoverImage, ...normalizedAdditionalImages].filter(Boolean),
+      };
+    });
 
-    const totalGuestHouses = guestHouses.length;
-    const totalRooms = guestHouses.reduce((sum, item) => sum + (item.totalRooms || 0), 0);
-    const activeGuestHouses = guestHouses.filter((item) => item.isActive).length;
+    const totalGuestHouses = normalizedGuestHouses.length;
+    const totalRooms = normalizedGuestHouses.reduce((sum, item) => sum + (item.totalRooms || 0), 0);
+    const activeGuestHouses = normalizedGuestHouses.filter((item) => item.isActive).length;
 
     return res.json({
       success: true,
-      data: guestHouses,
+      data: normalizedGuestHouses,
       summary: {
         totalGuestHouses,
         totalRooms,
@@ -179,14 +215,28 @@ exports.listGuestHousesForUsers = async (req, res) => {
     }
 
     const guestHouses = await GuestHouse.find({ uniId, isActive: true })
-      .select("name totalRooms contactNumber location managerName managerEmail description amenities images isActive createdAt")
+      .select("name totalRooms contactNumber location managerName managerEmail description amenities coverImage additionalImages images isActive createdAt")
       .sort({ createdAt: -1 })
       .lean();
+    const normalizedGuestHouses = guestHouses.map((item) => {
+      const fallbackImages = Array.isArray(item.images) ? item.images : [];
+      const normalizedCoverImage = item.coverImage || fallbackImages[0] || "";
+      const normalizedAdditionalImages =
+        Array.isArray(item.additionalImages) && item.additionalImages.length > 0
+          ? item.additionalImages
+          : fallbackImages.slice(1);
+      return {
+        ...item,
+        coverImage: normalizedCoverImage,
+        additionalImages: normalizedAdditionalImages,
+        images: [normalizedCoverImage, ...normalizedAdditionalImages].filter(Boolean),
+      };
+    });
 
     return res.json({
       success: true,
-      data: guestHouses,
-      total: guestHouses.length,
+      data: normalizedGuestHouses,
+      total: normalizedGuestHouses.length,
     });
   } catch (error) {
     logger.error({ error: error.message }, "Failed to fetch user-side guest houses");
@@ -227,6 +277,7 @@ exports.updateGuestHouse = async (req, res) => {
       amenities,
       isActive,
       replaceImages,
+      replaceAdditionalImages,
     } = req.body;
 
     if (name !== undefined) guestHouse.name = String(name).trim();
@@ -255,11 +306,29 @@ exports.updateGuestHouse = async (req, res) => {
           : [];
     }
 
-    const uploadedImages = await uploadImagesToCloudinary(req.files || []);
-    if (uploadedImages.length > 0) {
-      const shouldReplace = String(replaceImages) === "true";
-      guestHouse.images = shouldReplace ? uploadedImages : [...guestHouse.images, ...uploadedImages];
+    const { coverFile, additionalFiles } = resolveGuestHouseImagesFromRequest(req);
+    const [uploadedCoverImage, uploadedAdditionalImages] = await Promise.all([
+      coverFile ? uploadImagesToCloudinary([coverFile]) : Promise.resolve([]),
+      uploadImagesToCloudinary(additionalFiles || []),
+    ]);
+
+    if (uploadedCoverImage.length > 0) {
+      guestHouse.coverImage = uploadedCoverImage[0];
     }
+
+    if (uploadedAdditionalImages.length > 0) {
+      const shouldReplaceAdditionalImages =
+        String(replaceAdditionalImages) === "true" || String(replaceImages) === "true";
+      guestHouse.additionalImages = shouldReplaceAdditionalImages
+        ? uploadedAdditionalImages
+        : [...(guestHouse.additionalImages || []), ...uploadedAdditionalImages];
+    }
+
+    // Keep legacy `images` in sync for backward compatibility.
+    guestHouse.images = [
+      guestHouse.coverImage,
+      ...(guestHouse.additionalImages || []),
+    ].filter(Boolean);
 
     await guestHouse.save();
     const safeGuestHouse = guestHouse.toObject();
