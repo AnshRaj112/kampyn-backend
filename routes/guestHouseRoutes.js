@@ -8,6 +8,12 @@ const {
   updateGuestHouse,
   deleteGuestHouse,
 } = require("../controllers/guestHouse/guestHouseController");
+const {
+  listPhysicalRoomsForGuestHouse,
+  createPhysicalRoomForGuestHouse,
+  updatePhysicalRoom,
+  deletePhysicalRoom,
+} = require("../controllers/guestHouse/guestHousePhysicalRoomController");
 
 const router = express.Router();
 
@@ -25,6 +31,12 @@ router.post(
   ]),
   createGuestHouse
 );
+
+router.get("/:guestHouseId/physical-rooms", listPhysicalRoomsForGuestHouse);
+router.post("/:guestHouseId/physical-rooms", createPhysicalRoomForGuestHouse);
+router.patch("/physical-rooms/:physicalRoomId", updatePhysicalRoom);
+router.delete("/physical-rooms/:physicalRoomId", deletePhysicalRoom);
+
 router.put(
   "/:guestHouseId",
   upload.fields([

@@ -2,6 +2,10 @@ const cloudinary = require("../../config/cloudinary");
 const logger = require("../../utils/pinoLogger");
 const GuestHouse = require("../../models/account/GuestHouse");
 const GuestHouseRoom = require("../../models/account/GuestHouseRoom");
+const GuestHouseRoomBooking = require("../../models/account/GuestHouseRoomBooking");
+const GuestHousePhysicalRoom = require("../../models/account/GuestHousePhysicalRoom");
+
+const ACTIVE_BOOKING_STATUSES = ["pending", "confirmed"];
 
 const uploadSingleFile = async (file, folder) => {
   const b64 = Buffer.from(file.buffer).toString("base64");
@@ -217,6 +221,7 @@ exports.updateGuestHouseRoom = async (req, res) => {
         $match: {
           guestHouseId: targetGuestHouse._id,
           _id: { $ne: room._id },
+          isActive: true,
         },
       },
       { $group: { _id: "$guestHouseId", totalAssignedRooms: { $sum: "$roomCount" } } },
@@ -295,6 +300,57 @@ exports.updateGuestHouseRoom = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update room details",
+    });
+  }
+};
+
+/**
+ * DELETE /api/guest-house-rooms/:roomId
+ * Removes room type when no active bookings reference it; otherwise soft-deactivates room type + physical units.
+ */
+exports.deleteGuestHouseRoom = async (req, res) => {
+  try {
+    const uniId = req.uni?._id;
+    if (!uniId) {
+      return res.status(401).json({ success: false, message: "Unauthorized: university context missing" });
+    }
+
+    const { roomId } = req.params;
+    const room = await GuestHouseRoom.findOne({ _id: roomId, uniId });
+    if (!room) {
+      return res.status(404).json({ success: false, message: "Room not found" });
+    }
+
+    const blockingBookings = await GuestHouseRoomBooking.countDocuments({
+      roomId: room._id,
+      status: { $in: ACTIVE_BOOKING_STATUSES },
+    });
+
+    if (blockingBookings > 0) {
+      room.isActive = false;
+      await room.save();
+      await GuestHousePhysicalRoom.updateMany({ roomTypeId: room._id }, { $set: { isActive: false } });
+      return res.json({
+        success: true,
+        message:
+          "This room type has existing bookings — it was deactivated instead of deleted. It will no longer appear for new bookings.",
+        mode: "deactivated",
+      });
+    }
+
+    await GuestHousePhysicalRoom.deleteMany({ roomTypeId: room._id });
+    await GuestHouseRoom.deleteOne({ _id: room._id });
+
+    return res.json({
+      success: true,
+      message: "Room type and mapped physical units removed.",
+      mode: "deleted",
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "Failed to delete guest house room");
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete room details",
     });
   }
 };

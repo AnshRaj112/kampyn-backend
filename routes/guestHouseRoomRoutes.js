@@ -6,6 +6,7 @@ const {
   listGuestHouseRooms,
   listGuestHouseRoomsForUsers,
   updateGuestHouseRoom,
+  deleteGuestHouseRoom,
 } = require("../controllers/guestHouse/guestHouseRoomController");
 
 const router = express.Router();
@@ -31,6 +32,7 @@ router.put(
   ]),
   updateGuestHouseRoom
 );
+router.delete("/:roomId", deleteGuestHouseRoom);
 
 module.exports = router;
 
