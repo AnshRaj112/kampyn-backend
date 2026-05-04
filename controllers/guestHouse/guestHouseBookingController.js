@@ -650,9 +650,14 @@ exports.getPhysicalInventoryOverviewForManager = async (req, res) => {
       if (busy) busyTonight += 1;
       else freeTonight += 1;
       floorsMap[u.floor] = (floorsMap[u.floor] || 0) + 1;
-      const tid = u.roomTypeId?._id?.toString() || "";
+      const tid = u.roomTypeId?._id?.toString() || "__unassigned__";
+      const roomName = u.roomTypeId?.roomName || "Unassigned";
       if (!typeMap[tid]) {
-        typeMap[tid] = { roomTypeId: tid, roomName: u.roomTypeId?.roomName || "—", count: 0 };
+        typeMap[tid] = {
+          roomTypeId: tid === "__unassigned__" ? null : tid,
+          roomName,
+          count: 0,
+        };
       }
       typeMap[tid].count += 1;
       return {

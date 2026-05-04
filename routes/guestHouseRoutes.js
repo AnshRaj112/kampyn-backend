@@ -8,11 +8,11 @@ const {
   updateGuestHouse,
   deleteGuestHouse,
 } = require("../controllers/guestHouse/guestHouseController");
+const { ensureFloorPlanRoomPresetsForUni } = require("../controllers/guestHouse/guestHouseRoomController");
 const {
   listPhysicalRoomsForGuestHouse,
-  createPhysicalRoomForGuestHouse,
-  updatePhysicalRoom,
-  deletePhysicalRoom,
+  updatePhysicalRoomPlanForUni,
+  generatePhysicalRoomLayoutForUni,
 } = require("../controllers/guestHouse/guestHousePhysicalRoomController");
 
 const router = express.Router();
@@ -33,9 +33,9 @@ router.post(
 );
 
 router.get("/:guestHouseId/physical-rooms", listPhysicalRoomsForGuestHouse);
-router.post("/:guestHouseId/physical-rooms", createPhysicalRoomForGuestHouse);
-router.patch("/physical-rooms/:physicalRoomId", updatePhysicalRoom);
-router.delete("/physical-rooms/:physicalRoomId", deletePhysicalRoom);
+router.post("/:guestHouseId/floor-plan/ensure-presets", ensureFloorPlanRoomPresetsForUni);
+router.post("/:guestHouseId/physical-rooms/layout", generatePhysicalRoomLayoutForUni);
+router.patch("/:guestHouseId/physical-rooms/:physicalRoomId", updatePhysicalRoomPlanForUni);
 
 router.put(
   "/:guestHouseId",

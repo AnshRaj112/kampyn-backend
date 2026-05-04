@@ -16,11 +16,11 @@ const guestHousePhysicalRoomSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    /** GuestHouseRoom _id — category this unit belongs to (e.g. Deluxe). */
+    /** GuestHouseRoom _id — category (e.g. double bed); null until configured on floor plan. */
     roomTypeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "GuestHouseRoom",
-      required: true,
+      default: null,
       index: true,
     },
     floor: {
@@ -40,6 +40,19 @@ const guestHousePhysicalRoomSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    /** Staff-only notes (maintenance, VIP, etc.) */
+    notes: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 500,
+    },
+    housekeepingStatus: {
+      type: String,
+      enum: ["ready", "dirty", "maintenance", "blocked"],
+      default: "ready",
+      index: true,
     },
   },
   { timestamps: true }

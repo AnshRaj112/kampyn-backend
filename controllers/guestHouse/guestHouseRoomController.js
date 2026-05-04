@@ -355,3 +355,117 @@ exports.deleteGuestHouseRoom = async (req, res) => {
   }
 };
 
+const FLOOR_PLAN_PLACEHOLDER_COVER = "https://placehold.co/1200x800/e2e8f0/1e293b/png?text=Guest+room";
+const FLOOR_PLAN_PLACEHOLDER_DETAIL = ["https://placehold.co/1200x800/e2e8f0/1e293b/png?text=Detail"];
+
+/**
+ * Uni — create minimal sellable room types for Floor Plan painting (placeholder images; edit in Add room details).
+ */
+exports.ensureFloorPlanRoomPresetsForUni = async (req, res) => {
+  try {
+    const uniId = req.uni?._id;
+    const { guestHouseId } = req.params;
+    if (!uniId) {
+      return res.status(401).json({ success: false, message: "Unauthorized: university context missing" });
+    }
+
+    const guestHouse = await GuestHouse.findOne({ _id: guestHouseId, uniId }).select("_id totalRooms uniId").lean();
+    if (!guestHouse) {
+      return res.status(404).json({ success: false, message: "Guest house not found" });
+    }
+
+    let categories = req.body?.bedroomCategories;
+    if (Array.isArray(categories)) {
+      categories = [
+        ...new Set(
+          categories
+            .map((c) => String(c || "").trim())
+            .filter((c) => c.length > 0 && c.length <= 80)
+        ),
+      ];
+    } else {
+      categories = null;
+    }
+
+    const EM = "\u2014";
+    const PRESETS = [];
+    if (!categories || categories.length === 0) {
+      PRESETS.push({ roomName: "Single bedroom", roomCount: 1, price: 0 });
+      PRESETS.push({ roomName: "Double bedroom", roomCount: 1, price: 0 });
+    } else {
+      for (const cat of categories) {
+        PRESETS.push({ roomName: `${cat} ${EM} Single bedroom`, roomCount: 1, price: 0 });
+        PRESETS.push({ roomName: `${cat} ${EM} Double bedroom`, roomCount: 1, price: 0 });
+      }
+    }
+
+    const existingAgg = await GuestHouseRoom.aggregate([
+      { $match: { guestHouseId: guestHouse._id } },
+      { $group: { _id: "$guestHouseId", totalAssignedRooms: { $sum: "$roomCount" } } },
+    ]);
+    let currentAssigned = existingAgg[0]?.totalAssignedRooms || 0;
+
+    const created = [];
+    const skipped = [];
+
+    for (const preset of PRESETS) {
+      const exists = await GuestHouseRoom.findOne({
+        guestHouseId,
+        roomName: new RegExp(`^${String(preset.roomName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+      })
+        .select("_id roomName")
+        .lean();
+
+      if (exists) {
+        skipped.push({ roomName: exists.roomName, reason: "already exists" });
+        continue;
+      }
+
+      if (currentAssigned + preset.roomCount > guestHouse.totalRooms) {
+        skipped.push({
+          roomName: preset.roomName,
+          reason: `capacity: guest house allows ${guestHouse.totalRooms} total room units across types; increase total rooms or reduce other types`,
+        });
+        continue;
+      }
+
+      try {
+        const room = await GuestHouseRoom.create({
+          uniId: guestHouse.uniId,
+          guestHouseId,
+          roomName: preset.roomName,
+          roomCount: preset.roomCount,
+          price: preset.price,
+          coverImage: FLOOR_PLAN_PLACEHOLDER_COVER,
+          detailedImages: FLOOR_PLAN_PLACEHOLDER_DETAIL,
+          services: [],
+          isActive: true,
+        });
+        created.push({ _id: room._id, roomName: room.roomName });
+        currentAssigned += preset.roomCount;
+      } catch (err) {
+        if (err && err.code === 11000) {
+          skipped.push({ roomName: preset.roomName, reason: "duplicate name" });
+        } else {
+          logger.error({ error: err.message }, "ensureFloorPlanRoomPresetsForUni preset create failed");
+          skipped.push({ roomName: preset.roomName, reason: err.message || "create failed" });
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      message:
+        created.length > 0
+          ? `Created ${created.length} type(s). Pick a bedroom category, then Single or Double, and tap rooms.`
+          : skipped.every((s) => s.reason === "already exists")
+            ? "Bedroom types for this request are already present."
+            : "No new types created — see skipped list.",
+      data: { created, skipped },
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "ensureFloorPlanRoomPresetsForUni failed");
+    return res.status(500).json({ success: false, message: "Failed to ensure floor plan presets" });
+  }
+};
+
