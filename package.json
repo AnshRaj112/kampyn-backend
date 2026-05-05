@@ -41,7 +41,7 @@
     "pm2": "6.0.14",
     "razorpay": "^2.9.6",
     "sanitize-filename": "^1.6.3",
-    "uuid": "13.0.0",
+    "uuid": "14.0.0",
     "patch-package": "8.0.1"
   },
   "devDependencies": {
