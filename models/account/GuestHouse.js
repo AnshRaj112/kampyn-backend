@@ -92,6 +92,22 @@ const guestHouseSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    guestExperienceSettings: {
+      inRoomFoodEnabled: {
+        type: Boolean,
+        default: false,
+      },
+      inRoomFoodMenuNote: {
+        type: String,
+        trim: true,
+        maxlength: 240,
+        default: "",
+      },
+      allowServiceRequests: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
   { timestamps: true }
 );

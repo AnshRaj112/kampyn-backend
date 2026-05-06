@@ -58,6 +58,7 @@ exports.createGuestHouse = async (req, res) => {
       password,
       description,
       amenities,
+      guestExperienceSettings,
     } = req.body;
 
     if (!name || !totalRooms || !contactNumber || !location || !email || !password) {
@@ -122,6 +123,17 @@ exports.createGuestHouse = async (req, res) => {
       images: [coverImage, ...additionalImages].filter(Boolean),
       isActive: true,
       isVerified: false,
+      guestExperienceSettings: {
+        inRoomFoodEnabled:
+          guestExperienceSettings?.inRoomFoodEnabled === true ||
+          String(guestExperienceSettings?.inRoomFoodEnabled) === "true",
+        inRoomFoodMenuNote: String(guestExperienceSettings?.inRoomFoodMenuNote || "").trim().slice(0, 240),
+        allowServiceRequests:
+          guestExperienceSettings?.allowServiceRequests === undefined
+            ? true
+            : guestExperienceSettings?.allowServiceRequests === true ||
+              String(guestExperienceSettings?.allowServiceRequests) === "true",
+      },
     });
 
     const otp = generateOtp();
@@ -215,7 +227,7 @@ exports.listGuestHousesForUsers = async (req, res) => {
     }
 
     const guestHouses = await GuestHouse.find({ uniId, isActive: true })
-      .select("name totalRooms contactNumber location managerName managerEmail description amenities coverImage additionalImages images isActive createdAt")
+      .select("name totalRooms contactNumber location managerName managerEmail description amenities coverImage additionalImages images isActive guestExperienceSettings createdAt")
       .sort({ createdAt: -1 })
       .lean();
     const normalizedGuestHouses = guestHouses.map((item) => {
@@ -278,6 +290,9 @@ exports.updateGuestHouse = async (req, res) => {
       isActive,
       replaceImages,
       replaceAdditionalImages,
+      inRoomFoodEnabled,
+      inRoomFoodMenuNote,
+      allowServiceRequests,
     } = req.body;
 
     if (name !== undefined) guestHouse.name = String(name).trim();
@@ -304,6 +319,21 @@ exports.updateGuestHouse = async (req, res) => {
         : typeof amenities === "string"
           ? amenities.split(",").map((item) => item.trim()).filter(Boolean)
           : [];
+    }
+    if (inRoomFoodEnabled !== undefined || inRoomFoodMenuNote !== undefined || allowServiceRequests !== undefined) {
+      const current = guestHouse.guestExperienceSettings || {};
+      guestHouse.guestExperienceSettings = {
+        ...current,
+        ...(inRoomFoodEnabled !== undefined
+          ? { inRoomFoodEnabled: String(inRoomFoodEnabled) === "true" || inRoomFoodEnabled === true }
+          : {}),
+        ...(inRoomFoodMenuNote !== undefined
+          ? { inRoomFoodMenuNote: String(inRoomFoodMenuNote || "").trim().slice(0, 240) }
+          : {}),
+        ...(allowServiceRequests !== undefined
+          ? { allowServiceRequests: String(allowServiceRequests) === "true" || allowServiceRequests === true }
+          : {}),
+      };
     }
 
     const { coverFile, additionalFiles } = resolveGuestHouseImagesFromRequest(req);

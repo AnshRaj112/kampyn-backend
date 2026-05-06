@@ -3,6 +3,9 @@ const Razorpay = require("razorpay");
 const GuestHouseRoom = require("../../models/account/GuestHouseRoom");
 const GuestHousePhysicalRoom = require("../../models/account/GuestHousePhysicalRoom");
 const GuestHouseRoomBooking = require("../../models/account/GuestHouseRoomBooking");
+const GuestHouseRoomRateRule = require("../../models/account/GuestHouseRoomRateRule");
+const GuestHouseOpsLog = require("../../models/account/GuestHouseOpsLog");
+const GuestHouse = require("../../models/account/GuestHouse");
 const logger = require("../../utils/pinoLogger");
 const razorpayConfig = require("../../config/razorpay");
 const paymentUtils = require("../../utils/paymentUtils");
@@ -51,6 +54,12 @@ const diffNights = (checkInDate, checkOutDate) => {
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 };
 
+const startOfUtcDay = (dateValue) => {
+  const d = new Date(dateValue || Date.now());
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+};
+
 const getBookedRoomCountForDateRange = async (roomId, checkInDate, checkOutDate, excludeBookingId = null) => {
   const match = {
     roomId,
@@ -83,6 +92,32 @@ const validateGuestCounts = (adultsCount, kidsCount) => {
     return { ok: false, message: "At least one guest (adult or child) is required" };
   }
   return { ok: true, adults, kids };
+};
+
+const resolveRoomYieldRule = async (roomId, checkInDate, checkOutDate) => {
+  const rules = await GuestHouseRoomRateRule.find({
+    roomId,
+    isActive: true,
+    startDate: { $lt: checkOutDate },
+    endDate: { $gt: checkInDate },
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const blackoutRule = rules.find((rule) => rule.isBlackout);
+  if (blackoutRule) {
+    return { isBlackout: true, rule: blackoutRule };
+  }
+
+  const nights = diffNights(checkInDate, checkOutDate);
+  const eligiblePricingRule = rules.find(
+    (rule) =>
+      !rule.isBlackout &&
+      (rule.overridePricePerNight !== null && rule.overridePricePerNight !== undefined) &&
+      nights >= Number(rule.minNights || 1)
+  );
+
+  return { isBlackout: false, rule: eligiblePricingRule || null };
 };
 
 const buildBookingPayload = async (body) => {
@@ -153,7 +188,15 @@ const buildBookingPayload = async (body) => {
   }
 
   const nights = diffNights(parsedCheckInDate, parsedCheckOutDate);
-  const pricePerNight = Number(room.price || 0);
+  const yieldRuleResolution = await resolveRoomYieldRule(room._id, parsedCheckInDate, parsedCheckOutDate);
+  if (yieldRuleResolution.isBlackout) {
+    return { error: { status: 409, message: "Selected dates are blacked out for this room type" } };
+  }
+  const pricePerNight = Number(
+    yieldRuleResolution.rule?.overridePricePerNight !== undefined && yieldRuleResolution.rule?.overridePricePerNight !== null
+      ? yieldRuleResolution.rule.overridePricePerNight
+      : room.price || 0
+  );
   const totalPrice = pricePerNight * requestedRooms * nights;
 
   return {
@@ -165,6 +208,14 @@ const buildBookingPayload = async (body) => {
       requestedRooms,
       pricePerNight,
       totalPrice,
+      appliedRateRule: yieldRuleResolution.rule
+        ? {
+            _id: yieldRuleResolution.rule._id,
+            overridePricePerNight: yieldRuleResolution.rule.overridePricePerNight,
+            minNights: yieldRuleResolution.rule.minNights,
+            notes: yieldRuleResolution.rule.notes || "",
+          }
+        : null,
       adultsCount: counts.adults,
       kidsCount: counts.kids,
       guestName: String(guestName).trim(),
@@ -212,7 +263,13 @@ exports.getRoomAvailability = async (req, res) => {
     const bookedRooms = await getBookedRoomCountForDateRange(room._id, parsedCheckInDate, parsedCheckOutDate);
     const availableRooms = Math.max(0, (room.roomCount || 0) - bookedRooms);
     const nights = diffNights(parsedCheckInDate, parsedCheckOutDate);
-    const pricePerNight = Number(room.price || 0);
+    const yieldRuleResolution = await resolveRoomYieldRule(room._id, parsedCheckInDate, parsedCheckOutDate);
+    const isBlackout = yieldRuleResolution.isBlackout;
+    const pricePerNight = Number(
+      yieldRuleResolution.rule?.overridePricePerNight !== undefined && yieldRuleResolution.rule?.overridePricePerNight !== null
+        ? yieldRuleResolution.rule.overridePricePerNight
+        : room.price || 0
+    );
     const totalPrice = pricePerNight * requestedRooms * nights;
 
     return res.json({
@@ -228,7 +285,16 @@ exports.getRoomAvailability = async (req, res) => {
         availableRooms,
         roomsRequested: requestedRooms,
         guests: guestsSummary,
-        canBook: requestedRooms <= availableRooms,
+        canBook: !isBlackout && requestedRooms <= availableRooms,
+        isBlackout,
+        appliedRateRule: yieldRuleResolution.rule
+          ? {
+              _id: yieldRuleResolution.rule._id,
+              overridePricePerNight: yieldRuleResolution.rule.overridePricePerNight,
+              minNights: yieldRuleResolution.rule.minNights,
+              notes: yieldRuleResolution.rule.notes || "",
+            }
+          : null,
         pricePerNight,
         totalPrice,
       },
@@ -393,10 +459,30 @@ exports.verifyGuestHousePayment = async (req, res) => {
       guestEmail,
       guestPhone,
       status: "confirmed",
+      lifecycleStatus: "booked",
       paymentStatus: "paid",
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
     });
+
+    try {
+      await GuestHouseOpsLog.create({
+        uniId: room.uniId,
+        guestHouseId: room.guestHouseId,
+        actorRole: "user",
+        actorId: String(booking.guestPhone || ""),
+        actionType: "booking_lifecycle",
+        entityType: "GuestHouseRoomBooking",
+        entityId: String(booking._id),
+        message: "Booking created and paid",
+        meta: {
+          lifecycleStatus: booking.lifecycleStatus,
+          totalPrice: booking.totalPrice,
+        },
+      });
+    } catch (e) {
+      logger.warn({ error: e?.message }, "Failed to log booking creation");
+    }
 
     pendingGuestHousePayments.delete(razorpay_order_id);
 
@@ -448,10 +534,10 @@ exports.lookupGuestHouseBooking = async (req, res) => {
 
     const booking = await GuestHouseRoomBooking.findById(bookingId)
       .select(
-        "guestName guestPhone checkInDate checkOutDate nights roomsBooked adultsCount kidsCount totalPrice status paymentStatus assignedRoomNumbers roomId guestHouseId"
+        "guestName guestPhone checkInDate checkOutDate nights roomsBooked adultsCount kidsCount totalPrice status lifecycleStatus actualCheckInAt actualCheckOutAt paymentStatus assignedRoomNumbers roomId guestHouseId"
       )
       .populate({ path: "roomId", select: "roomName" })
-      .populate({ path: "guestHouseId", select: "name location contactNumber" })
+      .populate({ path: "guestHouseId", select: "name location contactNumber guestExperienceSettings" })
       .lean();
 
     if (!booking || booking.paymentStatus !== "paid" || booking.status === "cancelled") {
@@ -470,6 +556,7 @@ exports.lookupGuestHouseBooking = async (req, res) => {
         guestHouseName: booking.guestHouseId?.name,
         guestHouseLocation: booking.guestHouseId?.location,
         guestHousePhone: booking.guestHouseId?.contactNumber,
+        guestExperienceSettings: booking.guestHouseId?.guestExperienceSettings || {},
         roomTypeName: booking.roomId?.roomName,
         checkInDate: booking.checkInDate,
         checkOutDate: booking.checkOutDate,
@@ -478,12 +565,53 @@ exports.lookupGuestHouseBooking = async (req, res) => {
         adultsCount: booking.adultsCount,
         kidsCount: booking.kidsCount,
         totalPrice: booking.totalPrice,
+        lifecycleStatus: booking.lifecycleStatus || "booked",
+        actualCheckInAt: booking.actualCheckInAt || null,
+        actualCheckOutAt: booking.actualCheckOutAt || null,
         assignedRoomNumbers: booking.assignedRoomNumbers || "",
       },
     });
   } catch (error) {
     logger.error({ error: error.message }, "Guest booking lookup failed");
     return res.status(500).json({ success: false, message: "Lookup failed" });
+  }
+};
+
+exports.listPublicBookingsByContact = async (req, res) => {
+  try {
+    const guestPhone = String(req.query.guestPhone || "").trim();
+    if (!guestPhone) return res.status(400).json({ success: false, message: "guestPhone is required" });
+
+    const rows = await GuestHouseRoomBooking.find({
+      paymentStatus: "paid",
+      status: { $ne: "cancelled" },
+    })
+      .select("guestName guestPhone checkInDate checkOutDate lifecycleStatus assignedRoomNumbers totalPrice roomId guestHouseId createdAt")
+      .populate({ path: "roomId", select: "roomName" })
+      .populate({ path: "guestHouseId", select: "name location" })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+
+    const filtered = rows.filter((row) => phonesMatchForLookup(row.guestPhone, guestPhone));
+    return res.json({
+      success: true,
+      data: filtered.map((row) => ({
+        bookingId: row._id,
+        guestName: row.guestName,
+        guestHouseName: row.guestHouseId?.name,
+        guestHouseLocation: row.guestHouseId?.location,
+        roomTypeName: row.roomId?.roomName || "Room",
+        checkInDate: row.checkInDate,
+        checkOutDate: row.checkOutDate,
+        lifecycleStatus: row.lifecycleStatus || "booked",
+        assignedRoomNumbers: row.assignedRoomNumbers || "",
+        totalPrice: row.totalPrice,
+      })),
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "listPublicBookingsByContact failed");
+    return res.status(500).json({ success: false, message: "Failed to load bookings" });
   }
 };
 
@@ -761,5 +889,233 @@ exports.getAssignableUnitsForBooking = async (req, res) => {
   } catch (error) {
     logger.error({ error: error.message }, "getAssignableUnitsForBooking failed");
     return res.status(500).json({ success: false, message: "Failed to load assignable units" });
+  }
+};
+
+/**
+ * PATCH /manager/bookings/:bookingId/lifecycle
+ * Body: { lifecycleStatus: "booked" | "checked_in" | "checked_out" | "no_show" }
+ */
+exports.updateBookingLifecycleForManager = async (req, res) => {
+  try {
+    const guestHouseId = req.user?.userId;
+    const { bookingId } = req.params;
+    const lifecycleStatus = String(req.body?.lifecycleStatus || "");
+    const allowed = ["booked", "checked_in", "checked_out", "no_show"];
+
+    if (!guestHouseId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({ success: false, message: "Invalid booking id" });
+    }
+    if (!allowed.includes(lifecycleStatus)) {
+      return res.status(400).json({ success: false, message: `lifecycleStatus must be one of: ${allowed.join(", ")}` });
+    }
+
+    const booking = await GuestHouseRoomBooking.findOne({ _id: bookingId, guestHouseId });
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    booking.lifecycleStatus = lifecycleStatus;
+    if (lifecycleStatus === "checked_in") {
+      booking.actualCheckInAt = new Date();
+      if (booking.actualCheckOutAt) booking.actualCheckOutAt = null;
+    } else if (lifecycleStatus === "checked_out") {
+      if (!booking.actualCheckInAt) booking.actualCheckInAt = new Date();
+      booking.actualCheckOutAt = new Date();
+    } else if (lifecycleStatus === "booked") {
+      booking.actualCheckInAt = null;
+      booking.actualCheckOutAt = null;
+    }
+
+    await booking.save();
+
+    try {
+      await GuestHouseOpsLog.create({
+        uniId: booking.uniId,
+        guestHouseId,
+        actorRole: "guestHouse",
+        actorId: String(guestHouseId),
+        actionType: "booking_lifecycle",
+        entityType: "GuestHouseRoomBooking",
+        entityId: String(booking._id),
+        message: `Lifecycle changed to ${lifecycleStatus}`,
+        meta: {
+          lifecycleStatus: booking.lifecycleStatus,
+        },
+      });
+    } catch (e) {
+      logger.warn({ error: e?.message }, "Failed to log lifecycle update");
+    }
+    return res.json({
+      success: true,
+      message: "Booking lifecycle updated",
+      data: {
+        bookingId: booking._id,
+        lifecycleStatus: booking.lifecycleStatus,
+        actualCheckInAt: booking.actualCheckInAt || null,
+        actualCheckOutAt: booking.actualCheckOutAt || null,
+      },
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "updateBookingLifecycleForManager failed");
+    return res.status(500).json({ success: false, message: "Failed to update booking lifecycle" });
+  }
+};
+
+async function buildOpsOverviewForGuestHouse(guestHouseId, housekeepingSlaMinutes = 180) {
+  const todayStart = startOfUtcDay(new Date());
+  const tomorrowStart = new Date(todayStart.getTime());
+  tomorrowStart.setUTCDate(tomorrowStart.getUTCDate() + 1);
+
+  const arrivalsToday = await GuestHouseRoomBooking.countDocuments({
+    guestHouseId,
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+    checkInDate: { $gte: todayStart, $lt: tomorrowStart },
+  });
+  const departuresToday = await GuestHouseRoomBooking.countDocuments({
+    guestHouseId,
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+    checkOutDate: { $gt: todayStart, $lte: tomorrowStart },
+  });
+  const checkedInToday = await GuestHouseRoomBooking.countDocuments({
+    guestHouseId,
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+    checkInDate: { $gte: todayStart, $lt: tomorrowStart },
+    lifecycleStatus: "checked_in",
+  });
+  const checkedOutToday = await GuestHouseRoomBooking.countDocuments({
+    guestHouseId,
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+    checkOutDate: { $gt: todayStart, $lte: tomorrowStart },
+    lifecycleStatus: "checked_out",
+  });
+  const inHouseNow = await GuestHouseRoomBooking.countDocuments({
+    guestHouseId,
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+    lifecycleStatus: "checked_in",
+  });
+  const noShowToday = await GuestHouseRoomBooking.countDocuments({
+    guestHouseId,
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+    checkInDate: { $gte: todayStart, $lt: tomorrowStart },
+    lifecycleStatus: "no_show",
+  });
+
+  const threshold = new Date(Date.now() - Number(housekeepingSlaMinutes || 180) * 60 * 1000);
+  const dirtyOverdue = await GuestHousePhysicalRoom.countDocuments({
+    guestHouseId,
+    isActive: true,
+    housekeepingStatus: "dirty",
+    updatedAt: { $lte: threshold },
+  });
+  const maintenanceBlocked = await GuestHousePhysicalRoom.countDocuments({
+    guestHouseId,
+    isActive: true,
+    housekeepingStatus: { $in: ["maintenance", "blocked"] },
+  });
+
+  return {
+    today: {
+      arrivals: arrivalsToday,
+      departures: departuresToday,
+      checkedIn: checkedInToday,
+      checkedOut: checkedOutToday,
+      pendingCheckIn: Math.max(0, arrivalsToday - checkedInToday - noShowToday),
+      pendingCheckOut: Math.max(0, departuresToday - checkedOutToday),
+      noShow: noShowToday,
+    },
+    live: {
+      inHouseNow,
+      dirtyOverdue,
+      maintenanceBlocked,
+    },
+    sla: {
+      housekeepingSlaMinutes: Number(housekeepingSlaMinutes || 180),
+    },
+  };
+}
+
+exports.getOpsOverviewForManager = async (req, res) => {
+  try {
+    const guestHouseId = req.user?.userId;
+    if (!guestHouseId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    const sla = Math.min(Math.max(Number(req.query.housekeepingSlaMinutes) || 180, 30), 720);
+    const data = await buildOpsOverviewForGuestHouse(guestHouseId, sla);
+    return res.json({ success: true, data });
+  } catch (error) {
+    logger.error({ error: error.message }, "getOpsOverviewForManager failed");
+    return res.status(500).json({ success: false, message: "Failed to load ops overview" });
+  }
+};
+
+exports.getOpsOverviewForUni = async (req, res) => {
+  try {
+    const uniId = req.uni?._id;
+    const { guestHouseId } = req.params;
+    if (!uniId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    const exists = await GuestHouse.findOne({ _id: guestHouseId, uniId }).select("_id").lean();
+    if (!exists) {
+      return res.status(404).json({ success: false, message: "Guest house not found" });
+    }
+    const sla = Math.min(Math.max(Number(req.query.housekeepingSlaMinutes) || 180, 30), 720);
+    const data = await buildOpsOverviewForGuestHouse(guestHouseId, sla);
+    return res.json({ success: true, data });
+  } catch (error) {
+    logger.error({ error: error.message }, "getOpsOverviewForUni failed");
+    return res.status(500).json({ success: false, message: "Failed to load ops overview" });
+  }
+};
+
+exports.getManagerProfileSettings = async (req, res) => {
+  try {
+    const guestHouseId = req.user?.userId;
+    if (!guestHouseId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    const guestHouse = await GuestHouse.findById(guestHouseId)
+      .select("name email contactNumber location guestExperienceSettings")
+      .lean();
+    if (!guestHouse) return res.status(404).json({ success: false, message: "Guest house not found" });
+    return res.json({ success: true, data: guestHouse });
+  } catch (error) {
+    logger.error({ error: error.message }, "getManagerProfileSettings failed");
+    return res.status(500).json({ success: false, message: "Failed to load profile settings" });
+  }
+};
+
+exports.updateManagerProfileSettings = async (req, res) => {
+  try {
+    const guestHouseId = req.user?.userId;
+    if (!guestHouseId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const patch = {};
+    if (req.body?.inRoomFoodEnabled !== undefined) {
+      patch["guestExperienceSettings.inRoomFoodEnabled"] =
+        req.body.inRoomFoodEnabled === true || String(req.body.inRoomFoodEnabled) === "true";
+    }
+    if (req.body?.inRoomFoodMenuNote !== undefined) {
+      patch["guestExperienceSettings.inRoomFoodMenuNote"] = String(req.body.inRoomFoodMenuNote || "").trim().slice(0, 240);
+    }
+    if (req.body?.allowServiceRequests !== undefined) {
+      patch["guestExperienceSettings.allowServiceRequests"] =
+        req.body.allowServiceRequests === true || String(req.body.allowServiceRequests) === "true";
+    }
+    if (Object.keys(patch).length === 0) {
+      return res.status(400).json({ success: false, message: "No updatable fields provided" });
+    }
+
+    const updated = await GuestHouse.findByIdAndUpdate(guestHouseId, { $set: patch }, { new: true })
+      .select("name email contactNumber location guestExperienceSettings")
+      .lean();
+    if (!updated) return res.status(404).json({ success: false, message: "Guest house not found" });
+    return res.json({ success: true, message: "Profile settings updated", data: updated });
+  } catch (error) {
+    logger.error({ error: error.message }, "updateManagerProfileSettings failed");
+    return res.status(500).json({ success: false, message: "Failed to update profile settings" });
   }
 };

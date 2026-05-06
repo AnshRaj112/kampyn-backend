@@ -83,6 +83,20 @@ const guestHouseRoomBookingSchema = new mongoose.Schema(
       default: "confirmed",
       index: true,
     },
+    lifecycleStatus: {
+      type: String,
+      enum: ["booked", "checked_in", "checked_out", "no_show"],
+      default: "booked",
+      index: true,
+    },
+    actualCheckInAt: {
+      type: Date,
+      default: null,
+    },
+    actualCheckOutAt: {
+      type: Date,
+      default: null,
+    },
     paymentStatus: {
       type: String,
       enum: ["pending", "paid", "failed", "refunded"],

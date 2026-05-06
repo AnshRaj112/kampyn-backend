@@ -8,6 +8,12 @@ const {
   updateGuestHouseRoom,
   deleteGuestHouseRoom,
 } = require("../controllers/guestHouse/guestHouseRoomController");
+const {
+  listRateRulesForUni,
+  createRateRuleForUni,
+  updateRateRuleForUni,
+  deleteRateRuleForUni,
+} = require("../controllers/guestHouse/guestHouseRateRuleController");
 
 const router = express.Router();
 
@@ -33,6 +39,10 @@ router.put(
   updateGuestHouseRoom
 );
 router.delete("/:roomId", deleteGuestHouseRoom);
+router.get("/rate-rules", listRateRulesForUni);
+router.post("/:roomId/rate-rules", createRateRuleForUni);
+router.put("/rate-rules/:ruleId", updateRateRuleForUni);
+router.delete("/rate-rules/:ruleId", deleteRateRuleForUni);
 
 module.exports = router;
 
