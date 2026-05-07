@@ -42,7 +42,32 @@ async function verifyPaymentHandler(req, res, next) {
       });
     }
 
-    // 2. Signature is valid → create the Order in DB
+    // 2. Signature is valid → ensure idempotency before creating a new order
+    const existingPayment = await Payment.findOne({
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      status: "paid",
+    })
+      .select("_id orderId")
+      .lean();
+
+    if (existingPayment) {
+      const existingOrder =
+        (existingPayment.orderId && (await Order.findById(existingPayment.orderId).select("_id orderNumber").lean())) ||
+        (orderId && (await Order.findById(orderId).select("_id orderNumber").lean()));
+
+      if (existingOrder) {
+        return res.json({
+          success: true,
+          message: "Payment already verified for this order.",
+          orderId: existingOrder._id,
+          orderNumber: existingOrder.orderNumber,
+          idempotent: true,
+        });
+      }
+    }
+
+    // 3. Signature is valid → create the Order in DB
     // Retrieve order details from temporary storage using razorpay_order_id
     logger.info("🔍 Looking for order details with razorpay_order_id:", razorpay_order_id);
     const orderDetails = orderUtils.getPendingOrderDetails(razorpay_order_id);
@@ -58,7 +83,7 @@ async function verifyPaymentHandler(req, res, next) {
 
     const { userId, cart, vendorId, orderType, collectorName, collectorPhone, address, finalTotal } = orderDetails;
 
-    // 3. Create a new Payment document in the payment collection:
+    // 4. Create a new Payment document in the payment collection:
     const paymentDoc = await Payment.create({
       userId,
       amount: finalTotal,
@@ -68,7 +93,7 @@ async function verifyPaymentHandler(req, res, next) {
       razorpayPaymentId: razorpay_payment_id,
     });
 
-    // 4. Create the Order in DB (status: inProgress)
+    // 5. Create the Order in DB (status: inProgress)
     const order = await orderUtils.createOrderAfterPayment({
       userId,
       vendorId,
@@ -83,13 +108,16 @@ async function verifyPaymentHandler(req, res, next) {
       paymentDocId: paymentDoc._id,
     });
 
-    // 5. Clean up temporary order details
+    // Persist reverse link for idempotent callbacks and support lookups by payment.
+    await Payment.updateOne({ _id: paymentDoc._id }, { $set: { orderId: order._id } });
+
+    // 6. Clean up temporary order details
     orderUtils.removePendingOrderDetails(razorpay_order_id);
 
-    // 6. Run post-payment logic (inventory updates, user.cart → pastOrders, vendor.activeOrders, etc.)
+    // 7. Run post-payment logic (inventory updates, user.cart → pastOrders, vendor.activeOrders, etc.)
     await orderUtils.postPaymentProcessing(order);
 
-    // 7. Notify vendor dashboard to refresh active orders
+    // 8. Notify vendor dashboard to refresh active orders
     try {
       sendVendorNotification(vendorId, "active-order-update", {
         orderId: order._id,
@@ -99,14 +127,14 @@ async function verifyPaymentHandler(req, res, next) {
       logger.warn({ err: e.message }, "Failed to send vendor notification for new order");
     }
 
-    // 🔓 RELEASE LOCKS: After successful payment, release all item locks
+    // 9. 🔓 RELEASE LOCKS: After successful payment, release all item locks
     const lockReleaseResult = atomicCache.releaseOrderLocks(order.items, userId);
     
     if (lockReleaseResult.failed.length > 0) {
       console.warn(`Failed to release locks for items: ${lockReleaseResult.failed.join(', ')}`);
     }
 
-    // 📄 Generate invoices for the order
+    // 10. 📄 Generate invoices for the order
     try {
       // Prepare order data for invoice generation
       const orderDataForInvoice = {

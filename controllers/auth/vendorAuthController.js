@@ -5,15 +5,17 @@ const mongoose = require("mongoose");
 const Otp = require("../../models/users/Otp");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
-const { checkUserActivity, updateUserActivity, hashPassword } = require("../../utils/authUtils");
+const { updateUserActivity, hashPassword } = require("../../utils/authUtils");
 const { populateVendorWithUniversityItems } = require("../../utils/vendorUtils");
 const logger = require("../../utils/pinoLogger");
 const { getCookieOptions, clearCookie } = require("../../middleware/cookieConfig");
-
-// Utility: Generate OTP
-const generateOtp = () => crypto.randomInt(100000, 999999).toString();
+const { createVerifyTokenHandler, createRefreshTokenHandler, checkSessionHandler } = require("./shared/authSessionHandlers");
+const { createGoogleAuthHandler, createGoogleSignupHandler } = require("./shared/googleAuthHandlers");
+const { createAccountResendOtpHandler, createVerifyOtpHandler } = require("./shared/otpHandlers");
+const { generateOtp } = require("./shared/otpGenerator");
+const { processIdentifier, handleUnverifiedLogin } = require("./shared/authLoginHelpers");
+const { createRoleSignupHandler, createRoleLoginHandler } = require("./shared/authFlowHandlers");
 
 
 // Cookie Token Set
@@ -22,313 +24,125 @@ const setTokenCookie = (res, token) => {
 };
 
 // **1. User Signup**
-exports.signup = async (req, res) => {
-  try {
-    logger.info({ email: req.body.email }, "Signup Request Received");
-
-    const { fullName, email, phone, password, location, uniID, sellerType } =
-      req.body;
-
-    // Validate uniID is a string or valid ObjectId; otherwise, reject
-    if (
-      typeof uniID !== "string" ||
-      !mongoose.Types.ObjectId.isValid(uniID)
-    ) {
-      return res.status(400).json({ message: "Invalid university ID." });
+exports.signup = createRoleSignupHandler({
+  AccountModel: Account,
+  OtpModel: Otp,
+  logger,
+  hashPassword,
+  jwt,
+  jwtSecret: process.env.JWT_SECRET,
+  generateOtp,
+  sendOtpEmail,
+  getSignupData: (req) => {
+    const { fullName, email, phone, password, location, uniID, sellerType } = req.body;
+    return { fullName, email, phone, password, location, uniID, sellerType };
+  },
+  validateSignup: (signupData) => {
+    if (typeof signupData.uniID !== "string" || !mongoose.Types.ObjectId.isValid(signupData.uniID)) {
+      return "Invalid university ID.";
     }
-
-    // Convert email to lowercase
-    const emailLower = email.toLowerCase();
-
-    const existingUser = await Account.findOne({ $or: [{ email: emailLower }, { phone }] });
-    if (existingUser) {
-      logger.info({ email: emailLower }, "User already exists");
-      return res.status(400).json({ message: "User already exists" });
-    }
-
-    const hashedPassword = await hashPassword(password);
-    logger.info("Password hashed successfully");
-
-    const accountData = {
-      fullName,
-      email: emailLower,
-      phone,
-      password: hashedPassword,
-      location,
-      uniID,
-      sellerType,
-      isVerified: false,
-    };
-
-    const newAccount = new Account(accountData);
-    await newAccount.save();
-    logger.info({ email: emailLower }, "Account created");
-
-    // Populate vendor with existing university items
-    await populateVendorWithUniversityItems(newAccount, uniID);
-    logger.info("Vendor populated with university items");
-
-    // Update Uni's vendors array
-    await Uni.findByIdAndUpdate(
-      new mongoose.Types.ObjectId(uniID),
-      {
-        $push: {
-          vendors: {
-            vendorId: newAccount._id,
-            isAvailable: "Y"
-          }
-        }
-      }
-    );
-    logger.info("Vendor added to Uni's vendors array");
-
-    const token = jwt.sign(
-      { userId: newAccount._id, role: 'vendor' },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // Send OTP if needed
-    const otp = generateOtp();
-    await new Otp({ email: emailLower, otp }).save();
-    logger.info({ email: emailLower }, "OTP Generated and Saved");
-
-    await sendOtpEmail(emailLower, otp);
-    logger.info({ email: emailLower }, "OTP sent to email");
-
-    return res.status(201).json({
-      message: "Account created successfully. OTP sent for verification.",
-      token,
-      role: newAccount.type,
-      id: newAccount._id,
+    return null;
+  },
+  duplicateQuery: (signupData, emailLower) => ({ $or: [{ email: emailLower }, { phone: signupData.phone }] }),
+  buildAccountData: (signupData, emailLower, hashedPassword) => ({
+    fullName: signupData.fullName,
+    email: emailLower,
+    phone: signupData.phone,
+    password: hashedPassword,
+    location: signupData.location,
+    uniID: signupData.uniID,
+    sellerType: signupData.sellerType,
+    isVerified: false,
+  }),
+  afterAccountCreated: async (newAccount, signupData) => {
+    await populateVendorWithUniversityItems(newAccount, signupData.uniID);
+    await Uni.findByIdAndUpdate(new mongoose.Types.ObjectId(signupData.uniID), {
+      $push: { vendors: { vendorId: newAccount._id, isAvailable: "Y" } },
     });
-  } catch (error) {
-    logger.error({ error: error.message }, "Signup Error");
-    return res
-      .status(500)
-      .json({ message: "Signup failed.", error: error.message });
-  }
-};
+  },
+  tokenPayload: (newAccount) => ({ userId: newAccount._id, role: "vendor" }),
+  successRole: (newAccount) => newAccount.type,
+});
 
 // **2. OTP Verification**
-exports.verifyOtp = async (req, res) => {
-  try {
-    logger.info({ email: req.body.email }, "OTP Verification Request");
-
-    const { email, otp } = req.body;
-
-    // Input validation
-    if (!email || !otp) {
-      return res.status(400).json({ message: "Email and OTP are required" });
-    }
-
-    // Sanitize email: convert to lowercase and validate format
-    const sanitizedEmail = email.toLowerCase().trim();
-
-    // Validate email format using regex
+exports.verifyOtp = createVerifyOtpHandler({
+  AccountModel: Account,
+  OtpModel: Otp,
+  jwt,
+  jwtSecret: process.env.JWT_SECRET,
+  logger,
+  setTokenCookie,
+  activityRole: "vendor",
+  updateUserActivity,
+  normalizeEmail: (email) => String(email || "").toLowerCase().trim(),
+  validateInput: ({ email, otp }) => {
+    if (!email || !otp) return "Email and OTP are required";
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(sanitizedEmail)) {
-      return res.status(400).json({ message: "Invalid email format" });
-    }
-
-    // Validate OTP format (should be 6 digits)
+    if (!emailRegex.test(email)) return "Invalid email format";
     const otpRegex = /^\d{6}$/;
-    if (!otpRegex.test(otp)) {
-      return res.status(400).json({ message: "Invalid OTP format" });
-    }
-
-    logger.debug({ email: sanitizedEmail }, "Looking for OTP");
-
-    const otpRecord = await Otp.findOne({ email: sanitizedEmail, otp: { $eq: otp } });
-    logger.debug({ found: !!otpRecord }, "OTP record lookup result");
-
-    if (!otpRecord) {
-      logger.info({ otp }, "Invalid or expired OTP");
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
-
-    // Update user verification status using sanitized email
-    const user = await Account.findOneAndUpdate(
-      { email: sanitizedEmail },
-      { isVerified: true },
-      { new: true }
-    );
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    logger.info({ email: sanitizedEmail }, "User verified");
-
-    // Delete the used OTP using sanitized email
-    await Otp.deleteOne({ email: sanitizedEmail });
-    logger.info({ email: sanitizedEmail }, "OTP deleted from database");
-
-    // Generate new token for the verified user
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    // Reset inactivity timer so immediate user fetches don't fail
-    await updateUserActivity(user._id, 'vendor');
-
-    setTokenCookie(res, token);
-
-    res.status(200).json({
-      success: true,
-      message: "OTP verified successfully",
-      token,
-      user: {
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        isVerified: user.isVerified,
-        uniID: user.uniID
-      }
-    });
-  } catch (error) {
-    logger.error({ error: error.message }, "OTP Verification Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+    if (!otpRegex.test(otp)) return "Invalid OTP format";
+    return null;
+  },
+  buildOtpQuery: (email, otp) => ({ email, otp: { $eq: otp } }),
+  buildSuccessUser: (user) => ({
+    _id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    isVerified: user.isVerified,
+    uniID: user.uniID,
+  }),
+});
 
 // **2a. Resend OTP**
-exports.resendOtp = async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email || typeof email !== "string") {
-      return res.status(400).json({ message: "Valid email is required" });
+exports.resendOtp = createAccountResendOtpHandler({
+  AccountModel: Account,
+  OtpModel: Otp,
+  generateOtp,
+  sendOtpEmail,
+  logger,
+});
+exports.login = createRoleLoginHandler({
+  AccountModel: Account,
+  OtpModel: Otp,
+  logger,
+  argon2,
+  jwt,
+  jwtSecret: process.env.JWT_SECRET,
+  processIdentifier,
+  handleUnverifiedLogin,
+  generateOtp,
+  sendOtpEmail,
+  unverifiedRedirect: (user) => `/otpverification?email=${user.email}&from=login&role=vendor`,
+  includeEmailInUnverified: true,
+  clearExistingOtps: true,
+  checkAccess: async (user) => {
+    if (!user.uniID) return null;
+    const university = await Uni.findById(user.uniID).select("isAvailable fullName");
+    if (!university) {
+      return { status: 400, message: "University not found. Please contact support." };
     }
-
-    const emailLower = email.toLowerCase().trim();
-    let otpRecord = await Otp.findOne({ email: { $eq: emailLower } });
-
-    if (!otpRecord) {
-      // If no OTP record, it might have expired from TTL (10 mins).
-      // Check if this email belongs to an existing account to allow regenerating the OTP.
-      const account = await Account.findOne({ email: { $eq: emailLower } }).lean().select('_id');
-
-      if (account) {
-        const otp = generateOtp();
-        await new Otp({ email: emailLower, otp, createdAt: new Date() }).save();
-        await sendOtpEmail(emailLower, otp);
-        return res.json({ message: "OTP resent successfully" });
-      }
-
-      return res.status(404).json({
-        message: "Session expired or no OTP request found. Please restart the process."
-      });
+    if (university.isAvailable !== "Y") {
+      return {
+        status: 403,
+        message: `Access denied. ${university.fullName} is currently unavailable. Please contact support for assistance.`,
+      };
     }
-
-    // OTP record exists - just refresh it
-    const otp = generateOtp();
-    otpRecord.otp = otp;
-    otpRecord.createdAt = new Date();
-    await otpRecord.save();
-
-    await sendOtpEmail(emailLower, otp);
-
-    return res.json({ message: "OTP resent successfully" });
-  } catch (error) {
-    logger.error({ error: error.message }, "Resend OTP Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-exports.login = async (req, res) => {
-  try {
-    logger.info({ identifier: req.body.identifier }, "Login Request");
-
-    const { identifier, password } = req.body;
-
-    // Process identifier based on type
-    const processedIdentifier = identifier.includes('@')
-      ? identifier.toLowerCase() // Convert email to lowercase
-      : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
-
-    const user = await Account.findOne({
-      $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: "User not found" });
-    }
-
-    if (!user.isVerified) {
-      // Generate new OTP
-      const otp = generateOtp();
-      logger.info({ email: user.email }, "Generated OTP for login");
-
-      // Delete any existing OTPs for this email first
-      await Otp.deleteMany({ email: user.email });
-      logger.info({ email: user.email }, "Deleted existing OTPs");
-
-      // Save new OTP with lowercase email
-      const newOtp = new Otp({ email: user.email.toLowerCase(), otp, createdAt: Date.now() });
-      await newOtp.save();
-      logger.info({ email: user.email }, "Saved new OTP");
-
-      // Send OTP email
-      await sendOtpEmail(user.email, otp);
-      logger.info({ email: user.email }, "Sent OTP email");
-
-      // Redirect user to OTP verification
-      return res.status(400).json({
-        message: "User not verified. OTP sent to email.",
-        email: user.email,
-        redirectTo: `/otpverification?email=${user.email}&from=login&role=vendor`,
-      });
-    }
-
-    const isMatch = await argon2.verify(user.password, password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    // Check if the university is available
-    if (user.uniID) {
-      const university = await Uni.findById(user.uniID).select('isAvailable fullName');
-      if (!university) {
-        return res.status(400).json({
-          message: "University not found. Please contact support."
-        });
-      }
-
-      if (university.isAvailable !== 'Y') {
-        return res.status(403).json({
-          message: `Access denied. ${university.fullName} is currently unavailable. Please contact support for assistance.`
-        });
-      }
-    }
-
-    const token = jwt.sign({ userId: user._id, role: 'vendor' }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    // Update last activity on login
-    await updateUserActivity(user._id, 'vendor');
-
-    setTokenCookie(res, token);
-
-    res.json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        isVerified: user.isVerified,
-        uniID: user.uniID
-      }
-    });
-  } catch (error) {
-    logger.error({ error: error.message }, "Login Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+    return null;
+  },
+  tokenPayload: (user) => ({ userId: user._id, role: "vendor" }),
+  updateUserActivity,
+  activityRole: "vendor",
+  setTokenCookie,
+  buildSuccessUser: (user) => ({
+    _id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    isVerified: user.isVerified,
+    uniID: user.uniID,
+  }),
+});
 
 // **4. Forgot Password**
 exports.forgotPassword = async (req, res) => {
@@ -441,70 +255,26 @@ exports.resetPassword = async (req, res) => {
 };
 
 // **6. Google Login**
-exports.googleAuth = async (req, res) => {
-  try {
-    logger.info({ email: req.body.email }, "Google Login Request");
-
-    const { email } = req.body;
-    let user = await Account.findOne({ email });
-
-    if (!user) {
-      logger.info({ email }, "User not found for Google login");
-      return res
-        .status(400)
-        .json({ message: "User does not exist, sign up first" });
-    }
-
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-    logger.info({ email }, "Google login successful");
-
-    res.json({ message: "Google login successful", token });
-  } catch (error) {
-    logger.error({ error: error.message }, "Google Login Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+exports.googleAuth = createGoogleAuthHandler({
+  AccountModel: Account,
+  logger,
+  logPrefix: "vendor:",
+});
 
 // **7. Google Signup**
-exports.googleSignup = async (req, res) => {
-  try {
-    logger.info({ email: req.body.email }, "Google Signup Request");
-
-    const { email, googleId, fullName } = req.body;
-
-    let existingUser = await Account.findOne({ email });
-
-    if (existingUser) {
-      logger.info({ email }, "User already exists");
-      return res
-        .status(400)
-        .json({ message: "User already exists. Please log in." });
-    }
-
-    const newUser = new Account({
-      fullName,
-      email,
-      phone: "", // No phone number required for Google signup
-      password: "", // Google users won't have a password
-      sellerType: "NON_SELLER", // Default to non-seller for google signup
-      isVerified: true, // No OTP needed for Google Signup
-    });
-
-    await newUser.save();
-    logger.info({ email }, "Google user saved to database");
-
-    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    res.status(201).json({ message: "Google signup successful", token });
-  } catch (error) {
-    logger.error({ error: error.message }, "Google Signup Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+exports.googleSignup = createGoogleSignupHandler({
+  AccountModel: Account,
+  logger,
+  logPrefix: "vendor:",
+  buildNewUserData: ({ email, fullName }) => ({
+    fullName,
+    email,
+    phone: "",
+    password: "",
+    sellerType: "NON_SELLER",
+    isVerified: true,
+  }),
+});
 
 // **8. Logout**
 exports.logout = (req, res) => {
@@ -515,79 +285,24 @@ exports.logout = (req, res) => {
 };
 
 // ** 9. Middleware: Verify JWT Token**
-exports.verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1] || req.cookies?.token || req.query?.token;
-
-  if (!token) {
-    logger.warn({ path: req.originalUrl }, "vendor:verifyToken: No token provided");
-    return res.status(401).json({ message: "Unauthorized: No token provided" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Check if vendor should be logged out due to inactivity
-    const { shouldLogout, user } = await checkUserActivity(decoded.userId, 'vendor');
-
-    if (shouldLogout) {
-      const message = user ? "Session expired due to inactivity. Please log in again." : "Vendor not found or account inactive.";
-      logger.warn({ userId: decoded.userId, userFound: !!user }, `vendor:verifyToken: ${message}`);
-      return res.status(401).json({ message });
-    }
-
-    // Update last activity
-    await updateUserActivity(decoded.userId, 'vendor');
-
-    req.user = decoded;
-    req.fullVendor = user; // Attach full vendor object
-    next();
-  } catch (error) {
-    logger.warn({ error: error.message, path: req.originalUrl }, "vendor:verifyToken: Verification failed");
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: "Token expired. Please log in again." });
-    }
-    return res
-      .status(401)
-      .json({ message: "Unauthorized: Invalid or expired token" });
-  }
-};
+exports.verifyToken = createVerifyTokenHandler({
+  userType: "vendor",
+  tokenResolver: (req) => req.headers.authorization?.split(" ")[1] || req.cookies?.token || req.query?.token,
+  attachFullUserAs: "fullVendor",
+  logger,
+  logPrefix: "vendor:verifyToken",
+  invalidTokenStatus: 401,
+  notFoundMessage: "Vendor not found or account inactive.",
+});
 
 // **10. Refresh Token Endpoint**
-exports.refreshToken = (req, res) => {
-  let token = req.cookies?.token || req.headers.authorization?.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Generate a new token with a fresh 7-day expiration
-    const newToken = jwt.sign(
-      { userId: decoded.userId, access: decoded.access },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // Store the new token in HTTP-only cookies for persistence
-    res.cookie("vendorToken", newToken, getCookieOptions());
-
-    res.json({ message: "Token refreshed", token: newToken });
-  } catch (error) {
-    return res
-      .status(403)
-      .json({ message: "Forbidden: Invalid or expired token" });
-  }
-};
+exports.refreshToken = createRefreshTokenHandler({
+  tokenResolver: (req) => req.cookies?.token || req.headers.authorization?.split(" ")[1],
+  cookieName: "vendorToken",
+});
 
 // **11. Check if Session is Active**
-exports.checkSession = (req, res) => {
-  if (req.user) {
-    return res.json({ message: "Session active", user: req.user });
-  }
-  return res.status(401).json({ message: "Session expired" });
-};
+exports.checkSession = checkSessionHandler;
 
 // **12. Get User**
 exports.getUser = async (req, res) => {

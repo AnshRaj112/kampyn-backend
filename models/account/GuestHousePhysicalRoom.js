@@ -1,21 +1,11 @@
 const mongoose = require("mongoose");
 const { Cluster_Accounts } = require("../../config/db");
+const { guestHouseBaseFields } = require("./shared/guestHouseSchemaFields");
 
 /** One bookable physical unit (bedroom) tied to a room *type* for availability-aware assignment. */
 const guestHousePhysicalRoomSchema = new mongoose.Schema(
   {
-    uniId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Uni",
-      required: true,
-      index: true,
-    },
-    guestHouseId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "GuestHouse",
-      required: true,
-      index: true,
-    },
+    ...guestHouseBaseFields(),
     /** GuestHouseRoom _id — category (e.g. double bed); null until configured on floor plan. */
     roomTypeId: {
       type: mongoose.Schema.Types.ObjectId,

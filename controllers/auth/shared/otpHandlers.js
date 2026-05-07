@@ -1,0 +1,140 @@
+const createResendOtpHandler = ({
+  OtpModel,
+  generateOtp,
+  sendOtpEmail,
+  logger,
+  resolveEmailOwner,
+  missingEmailMessage = "Valid email is required",
+  noOwnerMessage = "Session expired or no OTP request found. Please restart the process.",
+}) => {
+  return async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ message: missingEmailMessage });
+      }
+
+      const emailLower = email.toLowerCase().trim();
+      let otpRecord = await OtpModel.findOne({ email: { $eq: emailLower } });
+
+      if (!otpRecord) {
+        const canResend = await resolveEmailOwner(emailLower);
+
+        if (canResend) {
+          const otp = generateOtp();
+          await new OtpModel({ email: emailLower, otp, createdAt: new Date() }).save();
+          await sendOtpEmail(emailLower, otp);
+          return res.json({ message: "OTP resent successfully" });
+        }
+
+        return res.status(404).json({ message: noOwnerMessage });
+      }
+
+      const otp = generateOtp();
+      otpRecord.otp = otp;
+      otpRecord.createdAt = new Date();
+      await otpRecord.save();
+
+      await sendOtpEmail(emailLower, otp);
+
+      return res.json({ message: "OTP resent successfully" });
+    } catch (error) {
+      logger.error({ error: error.message }, "Resend OTP Error");
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  };
+};
+
+const createAccountResendOtpHandler = ({
+  AccountModel,
+  OtpModel,
+  generateOtp,
+  sendOtpEmail,
+  logger,
+  noOwnerMessage,
+}) =>
+  createResendOtpHandler({
+    OtpModel,
+    generateOtp,
+    sendOtpEmail,
+    logger,
+    noOwnerMessage,
+    resolveEmailOwner: async (emailLower) => {
+      const account = await AccountModel.findOne({ email: { $eq: emailLower } }).lean().select("_id");
+      return Boolean(account);
+    },
+  });
+
+const createVerifyOtpHandler = ({
+  AccountModel,
+  OtpModel,
+  jwt,
+  jwtSecret,
+  logger,
+  setTokenCookie,
+  activityRole,
+  updateUserActivity,
+  normalizeEmail = (email) => email,
+  validateInput,
+  buildOtpQuery = (email, otp) => ({ email: { $eq: email }, otp: { $eq: otp } }),
+  buildUserQuery = (email) => ({ email: { $eq: email } }),
+  buildSuccessUser,
+}) => {
+  return async (req, res) => {
+    try {
+      logger.info({ email: req.body.email }, "OTP Verification Request");
+
+      const { email, otp } = req.body;
+      const normalizedEmail = normalizeEmail(email);
+
+      if (validateInput) {
+        const validationError = validateInput({ email: normalizedEmail, otp });
+        if (validationError) {
+          return res.status(400).json({ message: validationError });
+        }
+      }
+
+      const otpRecord = await OtpModel.findOne(buildOtpQuery(normalizedEmail, otp));
+      if (!otpRecord) {
+        logger.info({ otp }, "Invalid or expired OTP");
+        return res.status(400).json({ message: "Invalid or expired OTP" });
+      }
+
+      const user = await AccountModel.findOneAndUpdate(
+        buildUserQuery(normalizedEmail),
+        { isVerified: true },
+        { new: true }
+      );
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      logger.info({ email: normalizedEmail }, "User verified");
+
+      await OtpModel.deleteOne({ email: { $eq: normalizedEmail } });
+      logger.info({ email: normalizedEmail }, "OTP deleted from database");
+
+      const token = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: "7d" });
+      await updateUserActivity(user._id, activityRole);
+      setTokenCookie(res, token);
+
+      return res.status(200).json({
+        success: true,
+        message: "OTP verified successfully",
+        token,
+        user: buildSuccessUser(user),
+      });
+    } catch (error) {
+      logger.error({ error: error.message }, "OTP Verification Error");
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  };
+};
+
+module.exports = {
+  createResendOtpHandler,
+  createAccountResendOtpHandler,
+  createVerifyOtpHandler,
+};

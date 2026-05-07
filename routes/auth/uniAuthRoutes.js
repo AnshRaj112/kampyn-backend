@@ -1,22 +1,4 @@
-const express = require("express");
-const { signup, verifyOtp, resendOtp, login, forgotPassword, resetPassword, googleAuth, googleSignup, logout, refreshToken, verifyToken, checkSession, getUser } = require("../../controllers/auth/uniAuthController");
-const { perApiAuthLimiter } = require("../../middleware/rateLimit");
-const router = express.Router();
+const handlers = require("../../controllers/auth/uniAuthController");
+const { createStandardAuthRouter } = require("./shared/createStandardAuthRouter");
 
-// Auth routes with per-API rate limiting
-router.post("/signup", perApiAuthLimiter, signup);
-router.post("/otpverification", perApiAuthLimiter, verifyOtp);
-router.post("/resendotp", perApiAuthLimiter, resendOtp);
-router.post("/login", perApiAuthLimiter, login);
-router.post("/forgotpassword", perApiAuthLimiter, forgotPassword);
-router.post("/resetpassword", perApiAuthLimiter, resetPassword);
-router.post("/googleAuth", perApiAuthLimiter, googleAuth);
-router.post("/googleSignup", perApiAuthLimiter, googleSignup);
-router.post("/logout", perApiAuthLimiter, logout);
-router.get("/refresh", perApiAuthLimiter, refreshToken);
-router.get("/check", verifyToken, checkSession);
-
-// User data route - protected by verifyToken middleware
-router.get("/user", verifyToken, getUser);
-
-module.exports = router;
+module.exports = createStandardAuthRouter(handlers);

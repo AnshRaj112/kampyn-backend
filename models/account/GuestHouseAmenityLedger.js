@@ -1,20 +1,10 @@
 const mongoose = require("mongoose");
 const { Cluster_Accounts } = require("../../config/db");
+const { guestHouseBaseFields } = require("./shared/guestHouseSchemaFields");
 
 const amenityLedgerSchema = new mongoose.Schema(
   {
-    uniId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Uni",
-      required: true,
-      index: true,
-    },
-    guestHouseId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "GuestHouse",
-      required: true,
-      index: true,
-    },
+    ...guestHouseBaseFields(),
     physicalRoomId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "GuestHousePhysicalRoom",

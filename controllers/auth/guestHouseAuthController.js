@@ -2,13 +2,12 @@ const GuestHouse = require("../../models/account/GuestHouse");
 const Otp = require("../../models/users/Otp");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
-const { checkUserActivity, updateUserActivity, hashPassword } = require("../../utils/authUtils");
+const { updateUserActivity, hashPassword } = require("../../utils/authUtils");
 const logger = require("../../utils/pinoLogger");
 const { getCookieOptions, clearCookie } = require("../../middleware/cookieConfig");
-
-const generateOtp = () => crypto.randomInt(100000, 999999).toString();
+const { createVerifyTokenHandler, checkSessionHandler } = require("./shared/authSessionHandlers");
+const { generateOtp } = require("./shared/otpGenerator");
 
 const setTokenCookie = (res, token) => {
   res.cookie("guestHouseToken", token, getCookieOptions());
@@ -168,36 +167,17 @@ exports.logout = (req, res) => {
   return res.json({ message: "Logged out successfully" });
 };
 
-exports.verifyToken = async (req, res, next) => {
-  const token =
-    req.headers.authorization?.split(" ")[1] || req.cookies?.guestHouseToken || req.cookies?.token;
-  if (!token) return res.status(401).json({ message: "Unauthorized: No token provided" });
+exports.verifyToken = createVerifyTokenHandler({
+  userType: "guestHouse",
+  tokenResolver: (req) => req.headers.authorization?.split(" ")[1] || req.cookies?.guestHouseToken || req.cookies?.token,
+  attachFullUserAs: "fullGuestHouse",
+  logger,
+  logPrefix: "guestHouse:verifyToken",
+  invalidTokenStatus: 401,
+  notFoundMessage: "Guest house not found or inactive.",
+});
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const { shouldLogout, user } = await checkUserActivity(decoded.userId, "guestHouse");
-    if (shouldLogout) {
-      const message = user
-        ? "Session expired due to inactivity. Please log in again."
-        : "Guest house not found or inactive.";
-      return res.status(401).json({ message });
-    }
-    await updateUserActivity(decoded.userId, "guestHouse");
-    req.user = decoded;
-    req.fullGuestHouse = user;
-    next();
-  } catch (error) {
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({ message: "Token expired. Please log in again." });
-    }
-    return res.status(401).json({ message: "Unauthorized: Invalid or expired token" });
-  }
-};
-
-exports.checkSession = (req, res) => {
-  if (req.user) return res.json({ message: "Session active", user: req.user });
-  return res.status(401).json({ message: "Session expired" });
-};
+exports.checkSession = checkSessionHandler;
 
 exports.getUser = async (req, res) => {
   try {

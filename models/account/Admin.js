@@ -2,6 +2,13 @@ const mongoose = require("mongoose");
 const argon2 = require("argon2");
 const { Cluster_Accounts } = require("../../config/db");
 
+const getArgonHashOptions = () => ({
+  type: argon2.argon2id,
+  memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 24576, // KiB
+  timeCost: Number(process.env.ARGON2_TIME) || 2,
+  parallelism: Number(process.env.ARGON2_PAR) || 1
+});
+
 const adminSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -85,12 +92,7 @@ adminSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
   try {
-    this.password = await argon2.hash(this.password, {
-      type: argon2.argon2id,
-      memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 24576, // KiB
-      timeCost: Number(process.env.ARGON2_TIME) || 2,
-      parallelism: Number(process.env.ARGON2_PAR) || 1
-    });
+    this.password = await argon2.hash(this.password, getArgonHashOptions());
     this.updatedAt = new Date();
     next();
   } catch (error) {
@@ -103,12 +105,7 @@ adminSchema.pre('findOneAndUpdate', async function(next) {
   const update = this.getUpdate();
   if (update.password) {
     try {
-      update.password = await argon2.hash(update.password, {
-        type: argon2.argon2id,
-        memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 24576, // KiB
-        timeCost: Number(process.env.ARGON2_TIME) || 2,
-        parallelism: Number(process.env.ARGON2_PAR) || 1
-      });
+      update.password = await argon2.hash(update.password, getArgonHashOptions());
       update.updatedAt = new Date();
     } catch (error) {
       return next(error);

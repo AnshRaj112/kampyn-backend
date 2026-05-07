@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Cluster_Accounts } = require("../../config/db");
+const { guestRequestBaseFields } = require("./shared/guestRequestSchemaFields");
 
 const orderItemSchema = new mongoose.Schema(
   {
@@ -14,12 +15,7 @@ const orderItemSchema = new mongoose.Schema(
 
 const guestHouseFoodOrderSchema = new mongoose.Schema(
   {
-    uniId: { type: mongoose.Schema.Types.ObjectId, ref: "Uni", required: true, index: true },
-    guestHouseId: { type: mongoose.Schema.Types.ObjectId, ref: "GuestHouse", required: true, index: true },
-    bookingId: { type: mongoose.Schema.Types.ObjectId, ref: "GuestHouseRoomBooking", required: true, index: true },
-    guestName: { type: String, trim: true, maxlength: 120, default: "" },
-    guestPhone: { type: String, trim: true, maxlength: 20, default: "" },
-    roomLabel: { type: String, trim: true, maxlength: 80, default: "" },
+    ...guestRequestBaseFields(),
     items: { type: [orderItemSchema], default: [] },
     subtotal: { type: Number, required: true, min: 0 },
     notes: { type: String, trim: true, maxlength: 240, default: "" },

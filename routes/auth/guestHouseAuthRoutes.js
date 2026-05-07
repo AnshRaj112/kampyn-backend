@@ -1,29 +1,7 @@
-const express = require("express");
-const { perApiAuthLimiter } = require("../../middleware/rateLimit");
-const {
-  verifyOtp,
-  resendOtp,
-  login,
-  forgotPassword,
-  resetPassword,
-  logout,
-  verifyToken,
-  checkSession,
-  getUser,
-  getAssignments,
-} = require("../../controllers/auth/guestHouseAuthController");
+const handlers = require("../../controllers/auth/guestHouseAuthController");
+const { createStandardAuthRouter } = require("./shared/createStandardAuthRouter");
 
-const router = express.Router();
-
-router.post("/otpverification", perApiAuthLimiter, verifyOtp);
-router.post("/resendotp", perApiAuthLimiter, resendOtp);
-router.post("/login", perApiAuthLimiter, login);
-router.post("/forgotpassword", perApiAuthLimiter, forgotPassword);
-router.post("/resetpassword", perApiAuthLimiter, resetPassword);
-router.post("/logout", perApiAuthLimiter, logout);
-router.get("/check", verifyToken, checkSession);
-router.get("/user", verifyToken, getUser);
-router.get("/assignments", verifyToken, getAssignments);
-
-module.exports = router;
+module.exports = createStandardAuthRouter(handlers, (router, controllerHandlers) => {
+  router.get("/assignments", controllerHandlers.verifyToken, controllerHandlers.getAssignments);
+});
 

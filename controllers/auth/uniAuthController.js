@@ -1,27 +1,19 @@
 const Account = require("../../models/account/Uni");
 const User = require("../../models/account/User");
-const Vendor = require("../../models/account/Vendor");
 const Otp = require("../../models/users/Otp");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 const sendOtpEmail = require("../../utils/sendOtp");
-const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
+const { updateUserActivity, hashPassword } = require("../../utils/authUtils");
 const logger = require("../../utils/pinoLogger");
 const { getCookieOptions, clearCookie } = require("../../middleware/cookieConfig");
-
-// Utility: Generate OTP
-const generateOtp = () => crypto.randomInt(100000, 999999).toString();
-
-// Utility: Hash Password
-const hashPassword = async (password) => {
-  return await argon2.hash(password, {
-    type: argon2.argon2id,
-    memoryCost: Number(process.env.ARGON2_MEMORY_KIB) || 24576, // KiB
-    timeCost: Number(process.env.ARGON2_TIME) || 2,
-    parallelism: Number(process.env.ARGON2_PAR) || 1
-  });
-};
+const { createVerifyTokenHandler, createRefreshTokenHandler, checkSessionHandler } = require("./shared/authSessionHandlers");
+const { createGoogleAuthHandler, createGoogleSignupHandler } = require("./shared/googleAuthHandlers");
+const { createForgotPasswordHandler, createResetPasswordHandler } = require("./shared/passwordRecoveryHandlers");
+const { createAccountResendOtpHandler, createVerifyOtpHandler } = require("./shared/otpHandlers");
+const { generateOtp } = require("./shared/otpGenerator");
+const { processIdentifier, handleUnverifiedLogin } = require("./shared/authLoginHelpers");
+const { createRoleLoginHandler } = require("./shared/authFlowHandlers");
 
 // Cookie Token Set
 const setTokenCookie = (res, token) => {
@@ -112,304 +104,107 @@ exports.signup = async (req, res) => {
 };
 
 // **2. OTP Verification**
-exports.verifyOtp = async (req, res) => {
-  try {
-    logger.info({ email: req.body.email }, "OTP Verification Request");
-
-    const { email, otp } = req.body;
-    const otpRecord = await Otp.findOne({ email: { $eq: email }, otp: { $eq: otp } });
-
-    if (!otpRecord) {
-      logger.info({ otp }, "Invalid or expired OTP");
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
-
-    // Update user verification status
-    const user = await Account.findOneAndUpdate(
-      { email: { $eq: email } },
-      { isVerified: true },
-      { new: true }
-    );
-    logger.info({ email }, "User verified");
-
-    // Delete the used OTP
-    await Otp.deleteOne({ email: { $eq: email } });
-    logger.info({ email }, "OTP deleted from database");
-
-    // Generate new token for the verified user
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-    // Reset inactivity timer so immediate user fetches don't fail
-    await updateUserActivity(user._id, 'uni');
-
-    setTokenCookie(res, token);
-
-    res.status(200).json({
-      success: true,
-      message: "OTP verified successfully",
-      token,
-      user: {
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        gstNumber: user.gstNumber,
-        isVerified: user.isVerified
-      }
-    });
-  } catch (error) {
-    logger.error({ error: error.message }, "OTP Verification Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+exports.verifyOtp = createVerifyOtpHandler({
+  AccountModel: Account,
+  OtpModel: Otp,
+  jwt,
+  jwtSecret: process.env.JWT_SECRET,
+  logger,
+  setTokenCookie,
+  activityRole: "uni",
+  updateUserActivity,
+  normalizeEmail: (email) => email,
+  buildSuccessUser: (user) => ({
+    _id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    gstNumber: user.gstNumber,
+    isVerified: user.isVerified,
+  }),
+});
 
 // **2a. Resend OTP**
-exports.resendOtp = async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email || typeof email !== "string") {
-      return res.status(400).json({ message: "Valid email is required" });
+exports.resendOtp = createAccountResendOtpHandler({
+  AccountModel: Account,
+  OtpModel: Otp,
+  generateOtp,
+  sendOtpEmail,
+  logger,
+});
+exports.login = createRoleLoginHandler({
+  AccountModel: Account,
+  OtpModel: Otp,
+  logger,
+  argon2,
+  jwt,
+  jwtSecret: process.env.JWT_SECRET,
+  processIdentifier,
+  handleUnverifiedLogin,
+  generateOtp,
+  sendOtpEmail,
+  unverifiedRedirect: (user) => `/otpverification?email=${user.email}&from=login&role=uni`,
+  checkAccess: async (user) => {
+    if (user.isAvailable !== "Y") {
+      return {
+        status: 403,
+        message: `Access denied. ${user.fullName} is currently unavailable. Please contact support for assistance.`,
+      };
     }
-
-    const emailLower = email.toLowerCase().trim();
-    let otpRecord = await Otp.findOne({ email: { $eq: emailLower } });
-
-    if (!otpRecord) {
-      // If no OTP record, it might have expired from TTL (10 mins).
-      // Check if this email belongs to an existing account to allow regenerating the OTP.
-      const account = await Account.findOne({ email: { $eq: emailLower } }).lean().select('_id');
-
-      if (account) {
-        const otp = generateOtp();
-        await new Otp({ email: emailLower, otp, createdAt: new Date() }).save();
-        await sendOtpEmail(emailLower, otp);
-        return res.json({ message: "OTP resent successfully" });
-      }
-
-      return res.status(404).json({
-        message: "Session expired or no OTP request found. Please restart the process."
-      });
-    }
-
-    // OTP record exists - just refresh it
-    const otp = generateOtp();
-    otpRecord.otp = otp;
-    otpRecord.createdAt = new Date();
-    await otpRecord.save();
-
-    await sendOtpEmail(emailLower, otp);
-
-    return res.json({ message: "OTP resent successfully" });
-  } catch (error) {
-    logger.error({ error: error.message }, "Resend OTP Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-exports.login = async (req, res) => {
-  try {
-    logger.info({ identifier: req.body.identifier }, "Login Request");
-
-    const { identifier, password } = req.body;
-
-    // Process identifier based on type
-    const processedIdentifier = identifier.includes('@')
-      ? identifier.toLowerCase() // Convert email to lowercase
-      : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
-
-    const user = await Account.findOne({
-      $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: "User not found" });
-    }
-
-    if (!user.isVerified) {
-      // Generate new OTP
-      const otp = generateOtp();
-      await new Otp({ email: user.email, otp, createdAt: Date.now() }).save();
-
-      // Send OTP email
-      await sendOtpEmail(user.email, otp);
-
-      // Redirect user to OTP verification
-      return res.status(400).json({
-        message: "User not verified. OTP sent to email.",
-        redirectTo: `/otpverification?email=${user.email}&from=login&role=uni`,
-      });
-    }
-
-    const isMatch = await argon2.verify(user.password, password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    // Check if the university is available
-    if (user.isAvailable !== 'Y') {
-      return res.status(403).json({
-        message: `Access denied. ${user.fullName} is currently unavailable. Please contact support for assistance.`
-      });
-    }
-
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    // Update last activity on login
-    await updateUserActivity(user._id, 'uni');
-
-    setTokenCookie(res, token);
-
-    res.json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        gstNumber: user.gstNumber,
-        isVerified: user.isVerified
-      }
-    });
-  } catch (error) {
-    logger.error({ error: error.message }, "Login Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+    return null;
+  },
+  updateUserActivity,
+  activityRole: "uni",
+  setTokenCookie,
+  buildSuccessUser: (user) => ({
+    _id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    gstNumber: user.gstNumber,
+    isVerified: user.isVerified,
+  }),
+});
 
 // **4. Forgot Password**
-exports.forgotPassword = async (req, res) => {
-  try {
-    logger.info({ identifier: req.body.identifier }, "Forgot Password Request");
-
-    const { identifier } = req.body;
-
-    // Process identifier based on type
-    const processedIdentifier = identifier.includes('@')
-      ? identifier.toLowerCase() // Convert email to lowercase
-      : identifier.replace(/\s+/g, ''); // Remove spaces from phone number
-
-    // Find user by email OR phone number
-    const user = await Account.findOne({
-      $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
-    });
-
-    if (!user) {
-      logger.info({ identifier: processedIdentifier }, "User not found");
-      return res.status(400).json({ message: "User not found" });
-    }
-
-    const emailToSend = user.email; // Use the user's email to send OTP
-
-    const otp = generateOtp();
-    logger.info({ email: emailToSend }, "OTP Generated");
-
-    await new Otp({ email: emailToSend, otp }).save();
-    logger.info({ email: emailToSend }, "OTP saved to database");
-
-    await sendOtpEmail(emailToSend, otp);
-    logger.info({ email: emailToSend }, "OTP sent to email");
-
-    res.json({ message: "OTP sent for password reset", email: emailToSend });
-  } catch (error) {
-    logger.error({ error: error.message }, "Forgot Password Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+exports.forgotPassword = createForgotPasswordHandler({
+  AccountModel: Account,
+  OtpModel: Otp,
+  generateOtp,
+  sendOtpEmail,
+  logger,
+});
 
 // **5. Reset Password**
-exports.resetPassword = async (req, res) => {
-  try {
-    logger.info({ email: req.body.email }, "Reset Password Request");
-
-    const { email, password } = req.body;
-    if (typeof email !== 'string') {
-      logger.info({ email }, "Invalid email format in reset password");
-      return res.status(400).json({ message: "Invalid email format" });
-    }
-    const hashedPassword = await hashPassword(password);
-    logger.info("Password hashed successfully");
-
-    await Account.findOneAndUpdate({ email: { $eq: email } }, { password: hashedPassword });
-    logger.info({ email }, "Password updated");
-
-    res.json({ message: "Password updated successfully" });
-  } catch (error) {
-    logger.error({ error: error.message }, "Reset Password Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+exports.resetPassword = createResetPasswordHandler({
+  AccountModel: Account,
+  hashPassword,
+  logger,
+  invalidEmailMessage: "Invalid email format",
+});
 
 // **6. Google Login**
-exports.googleAuth = async (req, res) => {
-  try {
-    logger.info({ email: req.body.email }, "Google Login Request");
-
-    const { email } = req.body;
-    let user = await User.findOne({ email });
-
-    if (!user) {
-      logger.info({ email }, "User not found for Google login");
-      return res
-        .status(400)
-        .json({ message: "User does not exist, sign up first" });
-    }
-
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-    logger.info({ email }, "Google login successful");
-
-    res.json({ message: "Google login successful", token });
-  } catch (error) {
-    logger.error({ error: error.message }, "Google Login Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+exports.googleAuth = createGoogleAuthHandler({
+  AccountModel: User,
+  logger,
+  logPrefix: "uni:",
+});
 
 // **7. Google Signup**
-exports.googleSignup = async (req, res) => {
-  try {
-    logger.info({ email: req.body.email }, "Google Signup Request");
-
-    const { email, googleId, fullName } = req.body;
-
-    let existingUser = await User.findOne({ email });
-
-    if (existingUser) {
-      logger.info({ email }, "User already exists");
-      return res
-        .status(400)
-        .json({ message: "User already exists. Please log in." });
-    }
-
-    const newUser = new User({
-      fullName,
-      email,
-      phone: "", // No phone number required for Google signup
-      password: "", // Google users won't have a password
-      gender: "", // Ask later or keep it optional
-      googleId,
-      isVerified: true, // No OTP needed for Google Signup
-    });
-
-    await newUser.save();
-    logger.info({ email }, "Google user saved to database");
-
-    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    res.status(201).json({ message: "Google signup successful", token });
-  } catch (error) {
-    logger.error({ error: error.message }, "Google Signup Error");
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-};
+exports.googleSignup = createGoogleSignupHandler({
+  AccountModel: User,
+  logger,
+  logPrefix: "uni:",
+  buildNewUserData: ({ email, googleId, fullName }) => ({
+    fullName,
+    email,
+    phone: "",
+    password: "",
+    gender: "",
+    googleId,
+    isVerified: true,
+  }),
+});
 
 // **8. Logout**
 exports.logout = (req, res) => {
@@ -420,80 +215,23 @@ exports.logout = (req, res) => {
 };
 
 // ** 9. Middleware: Verify JWT Token**
-exports.verifyToken = async (req, res, next) => {
-  // Get token from cookie or Authorization header
-  const token = req.headers.authorization?.split(" ")[1] || req.cookies?.token;
-
-  if (!token) {
-    logger.warn({ url: req.originalUrl, method: req.method }, "uni:verifyToken: No token provided");
-    return res.status(401).json({ message: "Unauthorized: No token provided" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Check if university should be logged out due to inactivity
-    const { shouldLogout, user } = await checkUserActivity(decoded.userId, 'uni');
-
-    if (shouldLogout) {
-      const message = user ? "Session expired due to inactivity. Please log in again." : "University not found or account inactive.";
-      logger.warn({ userId: decoded.userId, userFound: !!user }, `uni:verifyToken: ${message}`);
-      return res.status(401).json({ message });
-    }
-
-    // Update last activity
-    await updateUserActivity(decoded.userId, 'uni');
-
-    req.user = decoded;
-    req.fullUni = user; // Attach full uni object
-    next();
-  } catch (error) {
-    logger.error({ error: error.message, name: error.name }, "uni:verifyToken: Verification failed");
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: "Token expired. Please log in again." });
-    }
-    return res
-      .status(403)
-      .json({ message: "Forbidden: Invalid or expired token" });
-  }
-};
+exports.verifyToken = createVerifyTokenHandler({
+  userType: "uni",
+  tokenResolver: (req) => req.headers.authorization?.split(" ")[1] || req.cookies?.token,
+  attachFullUserAs: "fullUni",
+  logger,
+  logPrefix: "uni:verifyToken",
+  notFoundMessage: "University not found or account inactive.",
+});
 
 // **10. Refresh Token Endpoint**
-exports.refreshToken = (req, res) => {
-  let token = req.cookies?.token || req.headers.authorization?.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Generate a new token with a fresh 7-day expiration
-    const newToken = jwt.sign(
-      { userId: decoded.userId, access: decoded.access },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // Store the new token in HTTP-only cookies for persistence
-    res.cookie("uniToken", newToken, getCookieOptions());
-
-    res.json({ message: "Token refreshed", token: newToken });
-  } catch (error) {
-    return res
-      .status(403)
-      .json({ message: "Forbidden: Invalid or expired token" });
-  }
-};
+exports.refreshToken = createRefreshTokenHandler({
+  tokenResolver: (req) => req.cookies?.token || req.headers.authorization?.split(" ")[1],
+  cookieName: "uniToken",
+});
 
 // **11. Check if Session is Active**
-exports.checkSession = (req, res) => {
-  if (req.user) {
-    return res.json({ message: "Session active", user: req.user });
-  }
-  return res.status(401).json({ message: "Session expired" });
-};
+exports.checkSession = checkSessionHandler;
 
 // **12. Get User**
 exports.getUser = async (req, res) => {
