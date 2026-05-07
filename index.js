@@ -70,6 +70,8 @@ const guestHouseRoutes = require("./routes/guestHouseRoutes");
 const guestHouseRoomRoutes = require("./routes/guestHouseRoomRoutes");
 const guestHouseBookingRoutes = require("./routes/guestHouseBookingRoutes");
 const adminGuestHouseRoutes = require("./routes/adminGuestHouseRoutes");
+const auditoriumRoutes = require("./routes/auditoriumRoutes");
+const auditoriumBookingRoutes = require("./routes/auditoriumBookingRoutes");
 // NEW: Order approval workflow routes (new file) - handles vendor accept/deny order requests
 const orderApprovalRoutes = require("./routes/orderApprovalRoutes");
 const menuSortRoutes = require("./routes/menuSortRoutes");
@@ -178,6 +180,8 @@ app.use("/api/guest-house", guestHouseRoutes);
 app.use("/api/guest-house-rooms", guestHouseRoomRoutes);
 app.use("/api/guest-house-bookings", guestHouseBookingRoutes);
 app.use("/api/admin/guest-houses", adminGuestHouseRoutes);
+app.use("/api/auditoriums", auditoriumRoutes);
+app.use("/api/auditorium-bookings", auditoriumBookingRoutes);
 app.use("/api/menu-sort", menuSortRoutes);
 app.use("/api/vendor/notifications", vendorNotificationRoutes);
 //app.use("/temp", tempRoutes);

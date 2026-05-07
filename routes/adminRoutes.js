@@ -492,7 +492,9 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
 
     // Fetch university details
     const university = await Uni.findById(uniId)
-      .select('_id fullName email phone gstNumber packingCharge deliveryCharge isVerified isAvailable createdAt updatedAt vendors')
+      .select('_id fullName email phone gstNumber packingCharge deliveryCharge isVerified isAvailable createdAt updatedAt vendors features services')
+      .populate("features")
+      .populate({ path: "services", populate: { path: "feature" } })
       .lean();
 
     if (!university) {
@@ -544,6 +546,8 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
       createdAt: university.createdAt,
       updatedAt: university.updatedAt,
       vendors: vendorsWithAvailability,
+      features: university.features || [],
+      services: university.services || [],
       statistics: {
         totalVendors,
         activeVendors,
@@ -565,6 +569,185 @@ router.get("/universities/:uniId", adminLimiter, async (req, res) => {
       message: "Failed to fetch university details",
       error: error.message
     });
+  }
+});
+
+/**
+ * GET /admin/universities/:uniId/assignments
+ * Get assigned features and services for a university (admin access).
+ */
+router.get("/universities/:uniId/assignments", adminLimiter, async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const uni = await Uni.findById(uniId)
+      .populate("features")
+      .populate({ path: "services", populate: { path: "feature" } });
+    if (!uni) return res.status(404).json({ success: false, message: "University not found" });
+    return res.json({
+      success: true,
+      data: {
+        features: uni.features || [],
+        services: uni.services || [],
+      },
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error fetching university assignments:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch assignments" });
+  }
+});
+
+/**
+ * PATCH /admin/universities/:uniId/features
+ * Update assigned features for a university (admin access).
+ */
+router.patch("/universities/:uniId/features", adminLimiter, async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const { features } = req.body;
+    if (!Array.isArray(features)) {
+      return res.status(400).json({ success: false, message: "features must be an array of IDs" });
+    }
+    const count = await Feature.countDocuments({ _id: { $in: features } });
+    if (count !== features.length) {
+      return res.status(400).json({ success: false, message: "One or more feature IDs are invalid" });
+    }
+    const uni = await Uni.findByIdAndUpdate(uniId, { $set: { features } }, { new: true }).populate("features");
+    if (!uni) return res.status(404).json({ success: false, message: "University not found" });
+    return res.json({ success: true, message: "Features updated", data: uni.features || [] });
+  } catch (error) {
+    logger.error("❌ Admin: Error updating university features:", error);
+    return res.status(500).json({ success: false, message: "Failed to update features" });
+  }
+});
+
+/**
+ * PATCH /admin/universities/:uniId/services
+ * Update assigned services for a university (admin access).
+ */
+router.patch("/universities/:uniId/services", adminLimiter, async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const { services } = req.body;
+    if (!Array.isArray(services)) {
+      return res.status(400).json({ success: false, message: "services must be an array of IDs" });
+    }
+    const count = await Service.countDocuments({ _id: { $in: services } });
+    if (count !== services.length) {
+      return res.status(400).json({ success: false, message: "One or more service IDs are invalid" });
+    }
+    const uni = await Uni.findByIdAndUpdate(uniId, { $set: { services } }, { new: true }).populate({
+      path: "services",
+      populate: { path: "feature" },
+    });
+    if (!uni) return res.status(404).json({ success: false, message: "University not found" });
+    return res.json({ success: true, message: "Services updated", data: uni.services || [] });
+  } catch (error) {
+    logger.error("❌ Admin: Error updating university services:", error);
+    return res.status(500).json({ success: false, message: "Failed to update services" });
+  }
+});
+
+/**
+ * GET /admin/universities/:uniId/allowed-services
+ * Get all services available for a university (admin access).
+ */
+router.get("/universities/:uniId/allowed-services", adminLimiter, async (req, res) => {
+  try {
+    const { uniId } = req.params;
+    const university = await Uni.findById(uniId).populate("features").lean();
+    if (!university) {
+      return res.status(404).json({ success: false, message: "University not found" });
+    }
+    const allServices = await Service.find({
+      feature: { $in: (university.features || []).map((f) => f._id) },
+      isActive: true,
+    })
+      .populate("feature")
+      .lean();
+    return res.json({
+      success: true,
+      data: { services: allServices, features: university.features || [] },
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error fetching allowed services:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch allowed services" });
+  }
+});
+
+/**
+ * GET /admin/universities/:uniId/vendors/:vendorId/services
+ * Get service assignment status for a vendor (admin access).
+ */
+router.get("/universities/:uniId/vendors/:vendorId/services", adminLimiter, async (req, res) => {
+  try {
+    const { uniId, vendorId } = req.params;
+    const vendor = await Vendor.findOne({ _id: vendorId, uniID: uniId }).lean();
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "Vendor not found or not associated with this university" });
+    }
+    const university = await Uni.findById(uniId).populate("features").lean();
+    if (!university) {
+      return res.status(404).json({ success: false, message: "University not found" });
+    }
+    const allServices = await Service.find({
+      feature: { $in: (university.features || []).map((f) => f._id) },
+      isActive: true,
+    })
+      .populate("feature")
+      .lean();
+    const assignedServiceIds = (vendor.services || []).map((s) => s.toString());
+    const servicesWithStatus = allServices.map((service) => ({
+      ...service,
+      isAssigned: assignedServiceIds.includes(service._id.toString()),
+    }));
+    return res.json({
+      success: true,
+      data: {
+        services: servicesWithStatus,
+        features: university.features || [],
+      },
+    });
+  } catch (error) {
+    logger.error("❌ Admin: Error fetching vendor services:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch vendor services" });
+  }
+});
+
+/**
+ * PATCH /admin/universities/:uniId/vendors/:vendorId/services
+ * Update assigned services for a vendor (admin access).
+ */
+router.patch("/universities/:uniId/vendors/:vendorId/services", adminLimiter, async (req, res) => {
+  try {
+    const { uniId, vendorId } = req.params;
+    const { services } = req.body;
+    if (!Array.isArray(services)) {
+      return res.status(400).json({ success: false, message: "services must be an array of service IDs" });
+    }
+    const vendor = await Vendor.findOne({ _id: vendorId, uniID: uniId });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "Vendor not found or not associated with this university" });
+    }
+    const university = await Uni.findById(uniId).populate("features").lean();
+    if (!university) {
+      return res.status(404).json({ success: false, message: "University not found" });
+    }
+    const validServices = await Service.find({
+      _id: { $in: services },
+      feature: { $in: (university.features || []).map((f) => f._id) },
+    });
+    if (validServices.length !== services.length) {
+      return res.status(400).json({ success: false, message: "One or more services are not available for this university" });
+    }
+    const updatedVendor = await Vendor.findByIdAndUpdate(vendorId, { $set: { services } }, { new: true }).populate({
+      path: "services",
+      populate: { path: "feature" },
+    });
+    if (!updatedVendor) return res.status(404).json({ success: false, message: "Vendor not found" });
+    return res.json({ success: true, message: "Vendor services updated", data: updatedVendor.services || [] });
+  } catch (error) {
+    logger.error("❌ Admin: Error updating vendor services:", error);
+    return res.status(500).json({ success: false, message: "Failed to update vendor services" });
   }
 });
 
