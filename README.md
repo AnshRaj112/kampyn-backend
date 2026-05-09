@@ -3,146 +3,235 @@
 *Project under **EXSOLVIA** - Excellence in Software Solutions*
 
 ## Introduction
-The **KAMPYN Backend** serves as the core infrastructure for our comprehensive food ordering and inventory management ecosystem designed for university campuses.
+
+The **KAMPYN backend** is an **Express.js** API for campus ordering, inventory, payments, university and vendor administration, guest-house and auditorium booking, invoices, notifications, and related workflows. It uses **multiple MongoDB databases** (one connection per domain cluster), **JWT** authentication, **Argon2** password hashing, **Razorpay**, **Cloudinary** uploads, and structured logging with **Pino**.
 
 ## Tech Stack
-- **Backend Framework:** Node.js with Express.js
-- **Database:** MongoDB with Mongoose ODM
-- **Authentication:** JWT (JSON Web Token)
-- **Real-Time Communication:** Socket.io
-- **Caching:** Redis
-- **Payment Gateway:** Razorpay
-- **Email Service:** Nodemailer
+
+- **Runtime:** Node.js (see `engines` in `package.json`: 18.x / 20.x / 22.x)
+- **Framework:** Express.js 4
+- **Database:** MongoDB via Mongoose (separate URIs per cluster)
+- **Security:** Helmet, CORS (configurable frontend origins), cookie settings, rate limiting (`express-rate-limit`), `lusca`-related patterns where applied
+- **Auth:** JWT (`JWT_SECRET`), role-specific route modules
+- **Passwords:** Argon2 (tunable via optional env vars)
+- **Payments:** Razorpay
+- **Media:** Cloudinary
+- **Email / OTP:** Nodemailer (SMTP) and optional **Loops** transactional API (`LOOPS_*` vars)
+- **PDF:** PDFKit (invoices / reports)
+- **Process manager:** PM2 (production-oriented tooling)
+- **Patches:** `patch-package` runs on `postinstall`
 
 ## Features
-- Multi-role authentication (Users, Admins, Vendors, Universities)
-- Real-time order processing and tracking
-- Intelligent inventory management
-- Secure payment integration
-- Advanced notification system
-- Comprehensive analytics and reporting
+
+- Multi-role auth (users, universities, vendors, admins, guest house)
+- Orders, carts, inventory, menus, favourites, express orders, order approval flow
+- Razorpay payment and vendor settlement flows
+- University and vendor management, platform fees, admin features and analytics hooks
+- Guest house and auditorium APIs
+- Invoices, grievances, recipes, reviews, team/contact endpoints
+- Health check for uptime monitoring (`GET /api/health`)
 
 ## Quick Start
 
 ### Prerequisites
-- Node.js (v18 or higher)
-- MongoDB database
-- Redis server (optional)
+
+- **Node.js** 18, 20, or 22 (see `package.json` → `engines`)
+- **MongoDB** — six cluster URIs are expected for a full deployment (see environment variables)
+- **npm** ≥ 8
 
 ### Installation
+
+From this repository’s backend folder:
+
 ```bash
-# Clone repository
 git clone https://github.com/exsolvia/kampyn-backend.git
 cd kampyn-backend
 
-# Install dependencies
 npm install
+```
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your configuration
+Create a **`.env`** file in the project root with the variables below (there is no committed `.env.example` in all setups—copy from your team’s secret manager or internal docs).
 
-# Start development server
+Start the development server (reloads with **nodemon**):
+
+```bash
 npm run dev
 ```
 
-Server will start on `http://localhost:5001`
+The server listens on **`PORT`** (default **5001**) and binds to **0.0.0.0**.
 
-## Quick API Examples
+Production-style start:
 
-### Authentication
 ```bash
-# User Registration
-POST /api/user/auth/signup
-{
-  "fullName": "John Doe",
-  "email": "john@example.com",
-  "phone": "1234567890",
-  "password": "password123",
-  "gender": "male",
-  "uniID": "university_id"
-}
+npm start
+```
 
-# User Login
+Uses `scripts/start-server.js` (suitable for platforms that expect `npm start`).
+
+If you use the **KAMPYN monorepo**, open `kampyn-backend` from the workspace root and follow the same steps. Configure **`FRONTEND_URL`** (and optional `FRONTEND_URL_2` … `FRONTEND_URL_5`) so CORS matches your Next.js origin.
+
+## NPM scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Development with nodemon (`index.js`) |
+| `npm start` | Production-oriented server start |
+| `npm run verify-debug` | Debug verification utility |
+| `npm run fix-debug` | Debug fix utility |
+| `npm run migrate-orders` | Order migration script |
+| `npm run test-locks` | Locking system test |
+| `npm run create-admin` | Create super-admin helper |
+| `npm run validate-cicd` | CI/CD validation helper |
+
+## Quick API examples
+
+Routes use mixed prefixes (`/api/...`, `/order`, `/cart`, `/admin`, etc.). Always inspect `index.js` for the full map.
+
+### Health
+
+```bash
+curl http://localhost:5001/api/health
+```
+
+### User auth (illustrative)
+
+Mounted at **`/api/user/auth`** — standard routes include `/signup`, `/login`, `/otpverification`, Google endpoints, etc.
+
+```bash
+# Login (adjust body to match your schema)
 POST /api/user/auth/login
+Content-Type: application/json
+
 {
-  "identifier": "john@example.com",
-  "password": "password123"
+  "identifier": "user@example.com",
+  "password": "your-password"
 }
 ```
 
 ### Orders
+
+Order routes are mounted at **`/order`** (not under `/api/orders`). Example:
+
 ```bash
-# Place Order
-POST /api/orders
-{
-  "userId": "user_id",
-  "items": [...],
-  "vendorId": "vendor_id",
-  "orderType": "dinein"
-}
-
-# Get Order Status
-GET /api/orders/:orderId
+# Place order (requires Authorization / cookie per your deployment)
+POST /order/:userId
 ```
 
-## Environment Variables
-```env
-PORT=5001
-MONGO_URL=your_mongodb_uri
-JWT_SECRET=your_secret_key
-REDIS_URL=your_redis_url
-RAZORPAY_KEY_ID=your_razorpay_key_id
-RAZORPAY_KEY_SECRET=your_razorpay_key_secret
-EMAIL_USER=your_email
-EMAIL_PASS=your_email_password
-```
+Refer to `routes/orderRoutes.js` and controllers for required fields.
+
+## Environment variables
+
+Below are the **primary** variables used across the codebase. Tune Mongo pool settings only if you know your deployment limits.
+
+### Core
+
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | HTTP port (default `5001`) |
+| `NODE_ENV` | `development` / `production` |
+| `JWT_SECRET` | Secret for signing and verifying JWTs |
+| `TZ` | Set to `Asia/Kolkata` in `index.js` for IST |
+
+### MongoDB (multi-cluster)
+
+| Variable | Purpose |
+|----------|---------|
+| `MONGO_URI_USER` | Users cluster |
+| `MONGO_URI_ORDER` | Orders cluster |
+| `MONGO_URI_ITEM` | Items cluster |
+| `MONGO_URI_INVENTORY` | Inventory cluster |
+| `MONGO_URI_ACCOUNT` | Accounts cluster |
+| `MONGO_URI_CACHE` | Cache / analytics cluster |
+
+Optional pool tuning: `MONGO_MAX_POOL_SIZE`, `MONGO_MIN_POOL_SIZE`, `MONGO_MAX_IDLE_TIME_MS`, `MONGO_WAIT_QUEUE_TIMEOUT_MS`, `MONGO_SERVER_SELECTION_TIMEOUT_MS`, `MONGO_SOCKET_TIMEOUT_MS`, `MONGO_CONNECT_TIMEOUT_MS`, `MONGO_HEARTBEAT_FREQUENCY_MS`.
+
+### CORS / cookies
+
+| Variable | Purpose |
+|----------|---------|
+| `FRONTEND_URL` | Allowed frontend origin |
+| `FRONTEND_URL_2` … `FRONTEND_URL_5` | Additional allowed origins |
+| `COOKIE_DOMAIN` | Cookie domain in production (when set) |
+
+### Razorpay
+
+| Variable | Purpose |
+|----------|---------|
+| `RAZORPAY_KEY_ID` | Key ID |
+| `RAZORPAY_KEY_SECRET` | Key secret (primary; a few invoice branches read `RAZORPAY_SECRET` — use the same value for both if both are set) |
+
+### Cloudinary
+
+| Variable | Purpose |
+|----------|---------|
+| `CLOUDINARY_CLOUD_NAME` | Cloud name |
+| `CLOUDINARY_API_KEY` | API key |
+| `CLOUDINARY_API_SECRET` | API secret |
+
+### Email / Loops
+
+| Variable | Purpose |
+|----------|---------|
+| `EMAIL_USER` | SMTP user / from mailbox |
+| `EMAIL_PASS` | SMTP password |
+| `LOOPS_API_KEY` | Loops API key (if using Loops) |
+| `LOOPS_TRANSACTIONAL_ID` | Loops transactional template ID |
+
+### Argon2 (optional overrides)
+
+| Variable | Purpose |
+|----------|---------|
+| `ARGON2_MEMORY_KIB` | Memory cost (KiB) |
+| `ARGON2_TIME` | Time cost |
+| `ARGON2_PAR` | Parallelism |
+
+### Logging
+
+| Variable | Purpose |
+|----------|---------|
+| `LOG_LEVEL` | Pino level (default `info`) |
 
 ## Documentation
-- [Documentation Overview](./docs/README.md)
-- [Development Guide](./docs/DEVELOPMENT_GUIDE.md)
-- [API Reference](./docs/API_REFERENCE.md)
-- [Security Guide](./docs/SECURITY.md)
-- [Deployment Guide](./docs/DEPLOYMENT.md)
 
-## Development Workflow
+- [Documentation overview](./docs/README.md)
+- [Development guide](./docs/DEVELOPMENT_GUIDE.md)
+- [API reference](./docs/API_REFERENCE.md)
+- [Security guide](./docs/SECURITY.md)
+- [Deployment guide](./docs/DEPLOYMENT.md)
 
-### Branch Naming Convention
+## Development workflow
+
+### Branch naming
+
 - **Features:** `feature/feature-description`
-- **Bug Fixes:** `fix/bug-description`
+- **Bug fixes:** `fix/bug-description`
 - **Hotfixes:** `hotfix/critical-fix-description`
 
-### Commit Message Format
+### Commit messages
+
 ```bash
-# Feature development
 git commit -m "feat: implement user authentication system"
-
-# Bug fixes
 git commit -m "fix: resolve payment validation issue"
-
-# Documentation updates
 git commit -m "docs: update API documentation"
-
-# Code refactoring
 git commit -m "refactor: improve order processing logic"
-
-# Performance improvements
 git commit -m "perf: optimize database queries"
 ```
 
 ## Contributing
-1. Fork the repository
+
+1. Fork or branch from the appropriate repo
 2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Commit your changes (`git commit -m 'feat: add new feature'`)
-4. Push to your branch (`git push origin feature/your-feature`)
-5. Open a pull request
+3. Commit your changes with clear messages
+4. Push and open a pull request
 
 ## License
-This project is licensed under the MIT License.
+
+**ISC** — see `package.json` for the SPDX identifier.
 
 ## Support & Contact
+
 - **Contact:** [contact@kampyn.com](mailto:contact@kampyn.com)
 
 ---
 
-**© 2025 EXSOLVIA. All rights reserved.**
+**© 2026 EXSOLVIA. All rights reserved.**
