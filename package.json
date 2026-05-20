@@ -38,7 +38,7 @@
     "nodemailer": "8.0.5",
     "pdfkit": "^0.14.0",
     "pino": "10.1.0",
-    "pm2": "6.0.14",
+    "pm2": "7.0.0",
     "razorpay": "^2.9.6",
     "sanitize-filename": "^1.6.3",
     "uuid": "14.0.0",
