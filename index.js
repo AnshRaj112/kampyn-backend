@@ -1,5 +1,15 @@
 require("dotenv").config();
 
+// Suppress noisy Mongoose duplicate schema index warnings in terminal
+process.on("warning", (warning) => {
+  if (warning.message && warning.message.includes("Duplicate schema index")) {
+    return;
+  }
+  console.warn(warning.stack || warning.message);
+});
+
+console.log(require("./kampyn-logo.js"));
+
 // Set timezone to Indian Standard Time (IST)
 process.env.TZ = "Asia/Kolkata";
 
