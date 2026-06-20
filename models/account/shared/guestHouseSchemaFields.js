@@ -14,6 +14,11 @@ function guestHouseBaseFields() {
       required: true,
       index: true,
     },
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tenant",
+      index: true,
+    },
   };
 }
 

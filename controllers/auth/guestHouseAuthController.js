@@ -36,7 +36,7 @@ exports.verifyOtp = async (req, res) => {
 
     await Otp.deleteOne({ email: normalizedEmail });
 
-    const token = jwt.sign({ userId: guestHouse._id, role: "guestHouse" }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: guestHouse._id, tenantId: guestHouse.tenantId || guestHouse.uniId, role: "guestHouse" }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
     await updateUserActivity(guestHouse._id, "guestHouse");
@@ -98,7 +98,7 @@ exports.login = async (req, res) => {
     const isMatch = await argon2.verify(guestHouse.password, String(password || ""));
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign({ userId: guestHouse._id, role: "guestHouse" }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: guestHouse._id, tenantId: guestHouse.tenantId || guestHouse.uniId, role: "guestHouse" }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
     await updateUserActivity(guestHouse._id, "guestHouse");

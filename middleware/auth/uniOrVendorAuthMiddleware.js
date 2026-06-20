@@ -48,6 +48,14 @@ const uniOrVendorAuthMiddleware = async (req, res, next) => {
                 fullName: university.fullName,
                 email: university.email
             };
+
+            // Cross-tenant validation
+            if (req.tenantId && String(university._id) !== String(req.tenantId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Access denied. Your session does not belong to the requested university tenant context."
+                });
+            }
             return next();
         }
 
@@ -72,6 +80,15 @@ const uniOrVendorAuthMiddleware = async (req, res, next) => {
                 uniID: vendor.uniID,
                 services: vendor.services
             };
+
+            // Cross-tenant validation
+            const vendorTenantId = vendor.tenantId || vendor.uniID;
+            if (vendorTenantId && req.tenantId && String(vendorTenantId) !== String(req.tenantId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Access denied. Your session does not belong to the requested university tenant context."
+                });
+            }
             return next();
         }
 

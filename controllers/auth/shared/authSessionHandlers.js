@@ -56,7 +56,12 @@ function createRefreshTokenHandler({ tokenResolver, cookieName }) {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const newToken = jwt.sign(
-        { userId: decoded.userId, access: decoded.access },
+        { 
+          userId: decoded.userId, 
+          tenantId: decoded.tenantId, 
+          role: decoded.role, 
+          access: decoded.access 
+        },
         process.env.JWT_SECRET,
         { expiresIn: "7d" },
       );

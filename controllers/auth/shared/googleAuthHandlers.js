@@ -17,7 +17,7 @@ function createGoogleAuthHandler({
         return res.status(400).json({ message: "User does not exist, sign up first" });
       }
 
-      const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      const token = jwt.sign({ userId: user._id, tenantId: user.tenantId || user.uniID }, process.env.JWT_SECRET, {
         expiresIn: "7d",
       });
 
@@ -55,7 +55,7 @@ function createGoogleSignupHandler({
       await newUser.save();
       logger.info({ email }, `${logPrefix} Google user saved to database`);
 
-      const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
+      const token = jwt.sign({ userId: newUser._id, tenantId: newUser.tenantId || newUser.uniID }, process.env.JWT_SECRET, {
         expiresIn: "7d",
       });
 

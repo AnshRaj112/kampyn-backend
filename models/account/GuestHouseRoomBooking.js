@@ -116,10 +116,11 @@ const guestHouseRoomBookingSchema = new mongoose.Schema(
       default: [],
     },
   },
-  { timestamps: true }
+  { timestamps: true, shardKey: { tenantId: 1 } }
 );
 
 guestHouseRoomBookingSchema.index({ roomId: 1, checkInDate: 1, checkOutDate: 1, status: 1 });
 guestHouseRoomBookingSchema.index({ guestHouseId: 1, checkInDate: -1 });
+guestHouseRoomBookingSchema.index({ tenantId: 1 });
 
 module.exports = Cluster_Accounts.model("GuestHouseRoomBooking", guestHouseRoomBookingSchema);

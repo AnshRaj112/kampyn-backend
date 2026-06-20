@@ -1,8 +1,22 @@
 {
-  "name": "kampyn-backend",
+  "name": "@kampyn/backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "KAMPYN Core Multi-Tenant Backend Package",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "models",
+    "middleware",
+    "config",
+    "utils"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./models/*": "./models/*.js",
+    "./middleware/*": "./middleware/*.js",
+    "./config/*": "./config/*.js",
+    "./utils/*": "./utils/*.js"
+  },
   "scripts": {
     "start": "node scripts/start-server.js",
     "dev": "nodemon index.js",

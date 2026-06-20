@@ -39,10 +39,11 @@ const guestHouseRoomSchema = new mongoose.Schema(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true, shardKey: { tenantId: 1 } }
 );
 
 guestHouseRoomSchema.index({ guestHouseId: 1, roomName: 1 }, { unique: true });
+guestHouseRoomSchema.index({ tenantId: 1 });
 
 module.exports = Cluster_Accounts.model("GuestHouseRoom", guestHouseRoomSchema);
 

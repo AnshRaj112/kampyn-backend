@@ -116,7 +116,7 @@ const createVerifyOtpHandler = ({
       await OtpModel.deleteOne({ email: { $eq: normalizedEmail } });
       logger.info({ email: normalizedEmail }, "OTP deleted from database");
 
-      const token = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: "7d" });
+      const token = jwt.sign({ userId: user._id, tenantId: user.tenantId || user.uniID }, jwtSecret, { expiresIn: "7d" });
       await updateUserActivity(user._id, activityRole);
       setTokenCookie(res, token);
 

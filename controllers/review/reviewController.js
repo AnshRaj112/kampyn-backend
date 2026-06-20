@@ -17,7 +17,7 @@ exports.upsertReview = async (req, res) => {
       return res.status(400).json({ success: false, message: "rating must be 1-5" });
     }
 
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findOne({ _id: orderId, tenantId: req.tenantId }).lean();
     if (!order) return res.status(404).json({ success: false, message: "Order not found" });
     if (String(order.userId) !== String(userId)) {
       return res.status(403).json({ success: false, message: "Not your order" });
@@ -30,7 +30,7 @@ exports.upsertReview = async (req, res) => {
     let resolvedUniId = req.body.uniId;
     try {
       if (order.vendorId) {
-        const vendor = await Vendor.findById(order.vendorId).lean();
+        const vendor = await Vendor.findOne({ _id: order.vendorId, tenantId: req.tenantId }).lean();
         if (vendor?.uniID) {
           resolvedUniId = vendor.uniID;
         }
@@ -40,7 +40,7 @@ exports.upsertReview = async (req, res) => {
     }
 
     // Check if review already exists to prevent duplicates
-    const existingReview = await Review.findOne({ orderId: order._id, userId }).lean();
+    const existingReview = await Review.findOne({ orderId: order._id, userId, tenantId: req.tenantId }).lean();
     if (existingReview) {
       return res.status(400).json({ success: false, message: "You have already reviewed this order" });
     }
@@ -50,7 +50,8 @@ exports.upsertReview = async (req, res) => {
       orderNumber: order.orderNumber,
       userId,
       vendorId: order.vendorId,
-      uniId: resolvedUniId,
+      uniId: resolvedUniId || req.tenantId,
+      tenantId: req.tenantId,
       rating,
       comment: comment || "",
     };
@@ -67,52 +68,54 @@ exports.upsertReview = async (req, res) => {
 // Get reviews visible to a university with order/vendor details
 exports.listReviewsForUniversity = async (req, res) => {
   try {
-    const { uniId } = req.params;
     const { page = 1, limit = 20 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const pipeline = [
-      { $match: { uniId: new mongoose.Types.ObjectId(uniId) } },
-      { $sort: { createdAt: -1 } },
-      { $skip: skip },
-      { $limit: Number(limit) },
-      {
-        $lookup: {
-          from: "orders",
-          localField: "orderId",
-          foreignField: "_id",
-          as: "order",
-        },
-      },
-      { $unwind: "$order" },
-      {
-        $lookup: {
-          from: "vendors",
-          localField: "vendorId",
-          foreignField: "_id",
-          as: "vendor",
-        },
-      },
-      { $unwind: "$vendor" },
-      {
-        $project: {
-          rating: 1,
-          comment: 1,
-          createdAt: 1,
-          orderNumber: 1,
-          vendorName: "$vendor.fullName",
-          orderSummary: {
-            total: "$order.total",
-            items: "$order.items",
-            orderType: "$order.orderType",
-            createdAt: "$order.createdAt",
-          },
-        },
-      },
-    ];
+    // Query reviews scoped by tenantId
+    const reviews = await Review.find({ tenantId: req.tenantId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
 
-    const ReviewModel = Review; // access model connection
-    const results = await ReviewModel.aggregate(pipeline);
+    if (!reviews.length) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const orderIds = reviews.map((r) => r.orderId).filter(Boolean);
+    const vendorIds = reviews.map((r) => r.vendorId).filter(Boolean);
+
+    // Fetch related orders and vendors
+    const [orders, vendors] = await Promise.all([
+      Order.find({ _id: { $in: orderIds }, tenantId: req.tenantId }).lean(),
+      Vendor.find({ _id: { $in: vendorIds }, tenantId: req.tenantId }).lean(),
+    ]);
+
+    const orderMap = Object.fromEntries(orders.map((o) => [String(o._id), o]));
+    const vendorMap = Object.fromEntries(vendors.map((v) => [String(v._id), v]));
+
+    // Construct final results, skipping items where order/vendor isn't resolved (mimics aggregate unwind behavior)
+    const results = [];
+    reviews.forEach((review) => {
+      const order = orderMap[String(review.orderId)];
+      const vendor = vendorMap[String(review.vendorId)];
+      if (order && vendor) {
+        results.push({
+          _id: review._id,
+          rating: review.rating,
+          comment: review.comment,
+          createdAt: review.createdAt,
+          orderNumber: review.orderNumber,
+          vendorName: vendor.fullName,
+          orderSummary: {
+            total: order.total,
+            items: order.items,
+            orderType: order.orderType,
+            createdAt: order.createdAt,
+          },
+        });
+      }
+    });
 
     // Enrich item details with names and units
     const retailIds = new Set();
@@ -126,8 +129,8 @@ exports.listReviewsForUniversity = async (req, res) => {
     });
 
     const [retails, produces] = await Promise.all([
-      Retail.find({ _id: { $in: [...retailIds] } }, "name price unit").lean(),
-      Produce.find({ _id: { $in: [...produceIds] } }, "name price unit").lean(),
+      Retail.find({ _id: { $in: [...retailIds] }, tenantId: req.tenantId }, "name price unit").lean(),
+      Produce.find({ _id: { $in: [...produceIds] }, tenantId: req.tenantId }, "name price unit").lean(),
     ]);
     const retailMap = Object.fromEntries(retails.map((r) => [String(r._id), r]));
     const produceMap = Object.fromEntries(produces.map((p) => [String(p._id), p]));
@@ -163,7 +166,7 @@ exports.getMyReviewForOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
     const userId = req.user?.userId || req.query.userId;
-    const review = await Review.findOne({ orderId, userId }).lean();
+    const review = await Review.findOne({ orderId, userId, tenantId: req.tenantId }).lean();
     return res.json({ success: true, data: review || null });
   } catch (err) {
     logger.error("getMyReviewForOrder error", err);

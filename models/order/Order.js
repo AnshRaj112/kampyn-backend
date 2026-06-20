@@ -72,7 +72,8 @@ const orderSchema = new mongoose.Schema({
   isGuest: { type: Boolean, default: false }, // Flag for guest orders created by vendors
   createdAt: { type: Date, default: Date.now },
   deleted: { type: Boolean, default: false }, // Soft-delete flag
-});
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", index: true },
+}, { shardKey: { tenantId: 1 } });
 
 // Ensure _id is unique (MongoDB default, but explicit for clarity)
 orderSchema.index({ _id: 1 }, { unique: true });
@@ -91,4 +92,5 @@ orderSchema.index(
   }
 );
 
+orderSchema.index({ tenantId: 1 });
 module.exports = Cluster_Order.model("Order", orderSchema);

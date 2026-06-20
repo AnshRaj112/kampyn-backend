@@ -40,6 +40,14 @@ const uniAuthMiddleware = async (req, res, next) => {
       });
     }
 
+    // Cross-tenant validation: Ensure university matches active tenant context
+    if (req.tenantId && String(university._id) !== String(req.tenantId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Your session does not belong to the requested university tenant context."
+      });
+    }
+
     // Check if university is available
     if (university.isAvailable !== 'Y') {
       return res.status(403).json({

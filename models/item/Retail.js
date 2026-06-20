@@ -7,8 +7,9 @@ const retailSchema = new mongoose.Schema({
   ...commonTaxedItemFields(),
   unit: { type: String, default: "pcs" },
   packable: { type: Boolean, default: false },
-});
+}, { shardKey: { tenantId: 1 } });
 retailSchema.index({ uniId: 1, type: 1 });
+retailSchema.index({ tenantId: 1 });
 retailSchema.post("findOneAndDelete", async function (doc) {
   if (doc) {
     const User = require("../account/User");

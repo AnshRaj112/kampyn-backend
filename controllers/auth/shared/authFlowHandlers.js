@@ -78,7 +78,7 @@ const createRoleLoginHandler = ({
   includeEmailInUnverified = false,
   clearExistingOtps = false,
   checkAccess,
-  tokenPayload = (user) => ({ userId: user._id }),
+  tokenPayload = (user) => ({ userId: user._id, tenantId: user.tenantId || user.uniID }),
   updateUserActivity,
   activityRole,
   setTokenCookie,

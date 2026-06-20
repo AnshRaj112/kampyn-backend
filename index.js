@@ -89,6 +89,11 @@ const vendorNotificationRoutes = require("./routes/vendorNotificationRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const { trackApiHit } = require("./middleware/apiTrackingMiddleware");
 
+// NEW: Tenant routes and middlewares
+const tenantRoutes = require("./routes/tenantRoutes");
+const tenantMiddleware = require("./middleware/tenantMiddleware");
+const moduleGuard = require("./middleware/moduleGuard");
+
 // ✅ Initialize Express app
 const app = express();
 
@@ -136,6 +141,9 @@ const PORT = process.env.PORT || 5001;
 // ✅ API Tracking Middleware - Track all API hits
 app.use(trackApiHit);
 
+// ✅ Resolve and inject tenant context globally
+app.use(tenantMiddleware);
+
 // ✅ Health check endpoint for Render
 app.get("/api/health", (req, res) => {
   res.status(200).json({
@@ -150,34 +158,49 @@ app.get("/api/health", (req, res) => {
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ✅ Routes
+app.use("/api/tenant", tenantRoutes); // NEW: Tenant routing configurations
 app.use("/api/user/auth", userAuthRoutes);
 app.use("/api/uni/auth", uniAuthRoutes);
 app.use("/api/vendor/auth", vendorAuthRoutes);
 app.use("/api/admin/auth", adminAuthRoutes); // 🔒 Admin authentication routes
 app.use("/api/guest-house/auth", guestHouseAuthRoutes);
-app.use("/api/foods", foodRoutes);
 app.use("/contact", contactRoute);
 app.use("/team", teamRoutes);
-app.use("/api/item", itemRoutes);
-// Backward/forward compatibility: support both singular and plural paths
-app.use("/api/items", itemRoutes);
-app.use("/foodcourts", foodCourtRoutes);
-app.use("/cart", cartRoutes);
-app.use("/inventory", inventoryRoutes);
-app.use("/fav", favouriteRoutes);
-app.use("/order", orderRoutes);
-app.use("/order-approval", orderApprovalRoutes); // NEW: Order approval workflow routes
+
+// Food Ordering Module Routes (Guarded)
+app.use("/api/foods", moduleGuard("food"), foodRoutes);
+app.use("/api/item", moduleGuard("food"), itemRoutes);
+app.use("/api/items", moduleGuard("food"), itemRoutes);
+app.use("/foodcourts", moduleGuard("food"), foodCourtRoutes);
+app.use("/cart", moduleGuard("food"), cartRoutes);
+app.use("/order", moduleGuard("food"), orderRoutes);
+app.use("/order-approval", moduleGuard("food"), orderApprovalRoutes);
+app.use("/vendorcart", moduleGuard("food"), vendorCartRoutes);
+app.use("/express-order", moduleGuard("food"), expressOrderRoutes);
+app.use("/api/menu-sort", moduleGuard("food"), menuSortRoutes);
+
+// Guest House / Hostel Module Routes (Guarded)
+app.use("/api/guest-house", moduleGuard("hostel"), guestHouseRoutes);
+app.use("/api/guest-house-rooms", moduleGuard("hostel"), guestHouseRoomRoutes);
+app.use("/api/guest-house-bookings", moduleGuard("hostel"), guestHouseBookingRoutes);
+app.use("/api/admin/guest-houses", moduleGuard("hostel"), adminGuestHouseRoutes);
+
+// Auditorium Module Routes (Guarded)
+app.use("/api/auditoriums", moduleGuard("auditorium"), auditoriumRoutes);
+app.use("/api/auditorium-bookings", moduleGuard("auditorium"), auditoriumBookingRoutes);
+
+// Shared/System Routes
 app.use("/payment", paymentRoutes);
 app.use("/api/vendor", vendorRoutes);
 app.use("/api/university", universityRoutes);
 app.use("/inventoryreport", inventoryReportRoutes);
-app.use("/vendorcart", vendorCartRoutes);
+app.use("/inventory", inventoryRoutes);
+app.use("/fav", favouriteRoutes);
 app.use("/billinginfo", billingInfoRoutes);
 app.use("/admin", adminRoutes);
 app.use("/razorpay", razorpayRoutes);
 app.use("/vendor-payment", vendorPaymentRoutes);
 app.use("/api", configRoutes);
-app.use("/express-order", expressOrderRoutes);
 app.use("/api", vendorTransferRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/admin", featureRoutes);
@@ -186,13 +209,6 @@ app.use("/api/access", accessRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api", grievanceRoutes);
 app.use("/api/recipes", recipeRoutes);
-app.use("/api/guest-house", guestHouseRoutes);
-app.use("/api/guest-house-rooms", guestHouseRoomRoutes);
-app.use("/api/guest-house-bookings", guestHouseBookingRoutes);
-app.use("/api/admin/guest-houses", adminGuestHouseRoutes);
-app.use("/api/auditoriums", auditoriumRoutes);
-app.use("/api/auditorium-bookings", auditoriumBookingRoutes);
-app.use("/api/menu-sort", menuSortRoutes);
 app.use("/api/vendor/notifications", vendorNotificationRoutes);
 //app.use("/temp", tempRoutes);
 
