@@ -1,5 +1,5 @@
 {
-  "name": "@EXSOLVIA/kampyn-backend",
+  "name": "@exsolvia/kampyn-backend",
   "version": "1.0.2",
   "description": "KAMPYN Core Multi-Tenant Backend Package",
   "main": "index.js",
