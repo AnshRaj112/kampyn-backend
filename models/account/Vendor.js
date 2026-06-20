@@ -10,6 +10,7 @@ const vendorSchema = new mongoose.Schema(
     password: { type: String, required: true }, // hash in pre-save
     location: { type: String },
     uniID: { type: mongoose.Schema.Types.ObjectId, ref: "Uni" },
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", index: true },
     isVerified: { type: Boolean, default: false },
 
     // Profile Images
@@ -104,11 +105,12 @@ const vendorSchema = new mongoose.Schema(
     lastLoginAttempt: { type: Date, default: null },
     lastActivity: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { timestamps: true, shardKey: { tenantId: 1 } }
 );
 
 // this compound index can help—MongoDB can jump directly to that subdocument.
 vendorSchema.index({ uniID: 1, "retailInventory.itemId": 1 });
 vendorSchema.index({ uniID: 1, "produceInventory.itemId": 1 });
 vendorSchema.index({ uniID: 1, "rawMaterialInventory.itemId": 1 });
+vendorSchema.index({ tenantId: 1 });
 module.exports = Cluster_Accounts.model("Vendor", vendorSchema);

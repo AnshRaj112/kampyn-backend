@@ -5,12 +5,20 @@ FROM node:20-slim
 WORKDIR /app
 
 
-# Copy package runtimes to install dependencies
+# Declare the build argument for the private registry access token
+ARG NPM_TOKEN
+ENV NPM_TOKEN=$NPM_TOKEN
+
+# Copy package runtimes and registry configurations to install dependencies
 COPY package*.json ./
+COPY .npmrc ./
 
 # Install only production dependencies
 # This automatically respects NODE_ENV=production
 RUN npm ci --omit=dev && npm cache clean --force
+
+# Securely remove the .npmrc file after installation so that tokens are not stored in the image
+RUN rm -f .npmrc
 
 # Copy the application source code
 COPY . .

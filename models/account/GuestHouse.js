@@ -9,6 +9,7 @@ const guestHouseSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", index: true },
     name: {
       type: String,
       required: true,
@@ -109,10 +110,11 @@ const guestHouseSchema = new mongoose.Schema(
       },
     },
   },
-  { timestamps: true }
+  { timestamps: true, shardKey: { tenantId: 1 } }
 );
 
 guestHouseSchema.index({ uniId: 1, name: 1 }, { unique: true });
+guestHouseSchema.index({ tenantId: 1 });
 
 module.exports = Cluster_Accounts.model("GuestHouse", guestHouseSchema);
 

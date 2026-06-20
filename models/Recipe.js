@@ -245,6 +245,11 @@ const recipeSchema = new mongoose.Schema({
     ref: 'Uni',
     required: true
   },
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    index: true
+  },
 
   // Status and Visibility
   status: {
@@ -319,6 +324,8 @@ const recipeSchema = new mongoose.Schema({
 });
 
 // Indexes for better performance
+recipeSchema.set('shardKey', { tenantId: 1 });
+recipeSchema.index({ tenantId: 1 });
 recipeSchema.index({ vendorId: 1, status: 1 });
 recipeSchema.index({ uniId: 1, status: 1 });
 recipeSchema.index({ category: 1, cuisine: 1 });

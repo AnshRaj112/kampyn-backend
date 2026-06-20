@@ -56,6 +56,15 @@ const vendorAuthMiddleware = async (req, res, next) => {
       });
     }
 
+    // Cross-tenant validation: Ensure vendor belongs to active tenant
+    const vendorTenantId = vendor.tenantId || vendor.uniID;
+    if (vendorTenantId && req.tenantId && String(vendorTenantId) !== String(req.tenantId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Your session does not belong to the requested university tenant context."
+      });
+    }
+
     // Check if vendor should be logged out due to inactivity
     const { shouldLogout } = await checkUserActivity(decoded.userId, 'vendor');
     if (shouldLogout) {

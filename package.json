@@ -1,8 +1,22 @@
 {
-  "name": "kampyn-backend",
+  "name": "@EXSOLVIA/kampyn-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "KAMPYN Core Multi-Tenant Backend Package",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "models",
+    "middleware",
+    "config",
+    "utils"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./models/*": "./models/*.js",
+    "./middleware/*": "./middleware/*.js",
+    "./config/*": "./config/*.js",
+    "./utils/*": "./utils/*.js"
+  },
   "scripts": {
     "start": "node scripts/start-server.js",
     "dev": "nodemon index.js",
@@ -33,7 +47,7 @@
     "lusca": "^1.7.0",
     "minimatch": "10.2.5",
     "mongoose": "^8.12.1",
-    "multer": "2.1.1",
+    "multer": "2.2.0",
     "node-fetch": "3.3.2",
     "nodemailer": "9.0.1",
     "pdfkit": "^0.14.0",

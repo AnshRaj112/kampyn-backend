@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true },
     gender: { type: String },
     uniID: { type: mongoose.Schema.Types.ObjectId, ref: "Uni" },
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", index: true },
 
     isVerified: { type: Boolean, default: false },
 
@@ -66,12 +67,13 @@ const userSchema = new mongoose.Schema(
     lastLoginAttempt: { type: Date, default: null },
     lastActivity: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { timestamps: true, shardKey: { tenantId: 1 } }
 );
 // Indexes for authentication queries (email and phone lookups)
 userSchema.index({ email: 1 });
 userSchema.index({ phone: 1 });
 userSchema.index({ uniID: 1 });
+userSchema.index({ tenantId: 1 });
 
 // Indexes for cart and favorites
 userSchema.index({ "cart.itemId": 1, "cart.kind": 1 });

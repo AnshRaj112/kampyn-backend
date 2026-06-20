@@ -68,7 +68,7 @@ exports.signup = async (req, res) => {
     logger.info({ email: emailLower }, "Account created");
 
     const token = jwt.sign(
-      { userId: newAccount._id, role: "university" },
+      { userId: newAccount._id, tenantId: newAccount._id, role: "university" },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );

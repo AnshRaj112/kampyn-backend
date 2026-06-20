@@ -8,8 +8,9 @@ const produceSchema = new mongoose.Schema({
   subtype: { type: String },
   unit: { type: String, required: true },
   packable: { type: Boolean, default: true },
-});
+}, { shardKey: { tenantId: 1 } });
 produceSchema.index({ uniId: 1, type: 1 });
+produceSchema.index({ tenantId: 1 });
 // Helpful for subtype-based lookups if used
 produceSchema.index({ uniId: 1, subtype: 1 });
 produceSchema.post("findOneAndDelete", async function (doc) {

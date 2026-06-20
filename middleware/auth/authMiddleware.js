@@ -27,6 +27,15 @@ exports.authMiddleware = async (req, res, next) => {
       return res.status(401).json({ message: "User not found" });
     }
 
+    // Cross-tenant verification: Ensure user matches active tenant context
+    const userTenantId = user.tenantId || user.uniID;
+    if (userTenantId && req.tenantId && String(userTenantId) !== String(req.tenantId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Your session does not belong to the requested university tenant context."
+      });
+    }
+
     // Determine user type based on user's type field
     let userType = 'user';
     if (user.type === 'admin') {

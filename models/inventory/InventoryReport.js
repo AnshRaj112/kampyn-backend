@@ -8,6 +8,7 @@ const inventoryReportSchema = new mongoose.Schema(
       ref: "Vendor",
       required: true,
     },
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", index: true },
     date: { type: Date, default: Date.now, required: true },
 
     retailEntries: [
@@ -68,11 +69,12 @@ const inventoryReportSchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true, shardKey: { tenantId: 1 } }
 );
 
 // Now build the correct unique index on vendorId + date:
 inventoryReportSchema.index({ vendorId: 1, date: 1 }, { unique: true });
+inventoryReportSchema.index({ tenantId: 1 });
 
 const InventoryReport = Cluster_Inventory.model(
   "InventoryReport",

@@ -52,8 +52,24 @@ function getCorsConfig() {
                 return callback(null, true);
             }
 
-            // Check if origin is in allowed list
-            if (allowedOrigins.includes(origin)) {
+            // Check if origin is in allowed list or is a valid tenant subdomain of allowed origins
+            const isAllowed = allowedOrigins.some((allowedUrl) => {
+                try {
+                    const allowedHost = new URL(allowedUrl).hostname;
+                    const originHost = new URL(origin).hostname;
+
+                    // Direct match
+                    if (allowedHost === originHost) return true;
+
+                    // Subdomain match (e.g., kiit.localhost matches localhost, tenant.kampyn.com matches kampyn.com)
+                    if (originHost.endsWith('.' + allowedHost)) return true;
+                } catch (e) {
+                    return false;
+                }
+                return false;
+            });
+
+            if (isAllowed) {
                 callback(null, true);
             } else {
                 // Log blocked origin for debugging
@@ -75,6 +91,8 @@ function getCorsConfig() {
             'Accept',
             'X-CSRF-Token',
             'X-Requested-With',
+            'X-Tenant',
+            'x-tenant',
         ],
 
         // Exposed response headers (accessible to frontend)
