@@ -116,7 +116,17 @@ exports.login = createRoleLoginHandler({
   unverifiedRedirect: (user) => `/otpverification?email=${user.email}&from=login&role=vendor`,
   includeEmailInUnverified: true,
   clearExistingOtps: true,
-  checkAccess: async (user) => {
+  checkAccess: async (user, req) => {
+    // Assert tenant link locking
+    const userTenantId = String(user.tenantId || user.uniID);
+    const activeTenantId = String(req.tenantId);
+    if (userTenantId !== activeTenantId) {
+      return {
+        status: 403,
+        message: "Access Denied: Your account is not registered under this university/tenant link."
+      };
+    }
+
     if (!user.uniID) return null;
     const university = await Uni.findById(user.uniID).select("isAvailable fullName");
     if (!university) {

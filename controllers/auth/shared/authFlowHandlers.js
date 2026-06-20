@@ -117,7 +117,7 @@ const createRoleLoginHandler = ({
       }
 
       if (checkAccess) {
-        const accessError = await checkAccess(user);
+        const accessError = await checkAccess(user, req);
         if (accessError) {
           return res.status(accessError.status).json({ message: accessError.message });
         }

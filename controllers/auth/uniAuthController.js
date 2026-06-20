@@ -144,7 +144,17 @@ exports.login = createRoleLoginHandler({
   generateOtp,
   sendOtpEmail,
   unverifiedRedirect: (user) => `/otpverification?email=${user.email}&from=login&role=uni`,
-  checkAccess: async (user) => {
+  checkAccess: async (user, req) => {
+    // Assert tenant link locking
+    const userTenantId = String(user._id);
+    const activeTenantId = String(req.tenantId);
+    if (userTenantId !== activeTenantId) {
+      return {
+        status: 403,
+        message: "Access Denied: Your admin account is not registered under this university/tenant link."
+      };
+    }
+
     if (user.isAvailable !== "Y") {
       return {
         status: 403,

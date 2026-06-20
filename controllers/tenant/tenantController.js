@@ -16,6 +16,7 @@ exports.getTenantConfig = async (req, res) => {
     res.json({
       success: true,
       data: {
+        _id: tenant._id,
         name: tenant.name,
         slug: tenant.slug,
         branding: tenant.branding,
