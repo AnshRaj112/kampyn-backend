@@ -10,7 +10,7 @@ exports.promoteConfiguration = async (req, res) => {
   try {
     const { sourceEnv, targetEnv } = req.body;
     const tenantId = req.tenantId;
-    const actorId = req.admin?.adminId || req.user?._id; // Resolve actor context safely
+    const actorId = req.admin?.adminId || req.uni?._id || req.user?._id; // Resolve actor context safely
 
     if (!tenantId) {
       return res.status(400).json({ success: false, message: "Tenant context missing." });
@@ -96,7 +96,7 @@ exports.rollbackConfiguration = async (req, res) => {
   try {
     const { targetVersion, environment } = req.body;
     const tenantId = req.tenantId;
-    const actorId = req.admin?.adminId || req.user?._id;
+    const actorId = req.admin?.adminId || req.uni?._id || req.user?._id;
 
     if (!tenantId || !environment || !targetVersion) {
       return res.status(400).json({ success: false, message: "Missing required fields: targetVersion, environment" });
