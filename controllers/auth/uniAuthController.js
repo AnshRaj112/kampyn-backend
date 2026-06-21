@@ -1,6 +1,7 @@
 const Account = require("../../models/account/Uni");
 const User = require("../../models/account/User");
 const Tenant = require("../../models/account/Tenant");
+const SubAdmin = require("../../models/account/SubAdmin");
 const Otp = require("../../models/users/Otp");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
@@ -13,8 +14,8 @@ const { createGoogleAuthHandler, createGoogleSignupHandler } = require("./shared
 const { createForgotPasswordHandler, createResetPasswordHandler } = require("./shared/passwordRecoveryHandlers");
 const { createAccountResendOtpHandler, createVerifyOtpHandler } = require("./shared/otpHandlers");
 const { generateOtp } = require("./shared/otpGenerator");
-const { processIdentifier, handleUnverifiedLogin } = require("./shared/authLoginHelpers");
-const { createRoleLoginHandler } = require("./shared/authFlowHandlers");
+const { handleUnverifiedLogin } = require("./shared/authLoginHelpers");
+// const { createRoleLoginHandler } = require("./shared/authFlowHandlers");
 
 // Cookie Token Set
 const setTokenCookie = (res, token) => {
@@ -194,11 +195,10 @@ exports.login = async (req, res) => {
     });
     let role = "university";
 
-    // 2. Search in User (secondary admin)
+    // 2. Search in SubAdmin (secondary admin)
     if (!user) {
-      user = await User.findOne({
-        $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
-        type: "admin"
+      user = await SubAdmin.findOne({
+        $or: [{ email: processedIdentifier }, { phone: processedIdentifier }]
       });
       role = "university-sub";
     }
@@ -230,7 +230,9 @@ exports.login = async (req, res) => {
     }
 
     // Check access restrictions (tenant link locking)
-    const userTenantId = String(user._id || user.tenantId);
+    const userTenantId = role === "university-sub"
+      ? String(user.tenantId || user.uniID)
+      : String(user._id);
     const activeTenantId = req.tenantId ? String(req.tenantId) : null;
     const isCentralPortal = host.includes("tenant-studio.") || 
                             referer.includes("tenant-studio.");
@@ -377,8 +379,8 @@ exports.getUser = async (req, res) => {
 exports.signupSubAdmin = async (req, res) => {
   try {
     const { fullName, email, phone, password } = req.body;
-    const tenantId = req.tenantId;
-    const uniID = req.tenantId;
+    const tenantId = req.uni?._id || req.tenantId;
+    const uniID = req.uni?._id || req.tenantId;
 
     if (!tenantId) {
       return res.status(400).json({ message: "Tenant context is required to register a sub-administrator." });
@@ -388,20 +390,25 @@ exports.signupSubAdmin = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields: fullName, email, phone, and password are required." });
     }
 
-    // Check if email already exists in User collection
+    // Check if email already exists in User or SubAdmin collection
     const existingUser = await User.findOne({
       $or: [
         { email: email.toLowerCase().trim() },
         { phone }
       ]
     });
-    if (existingUser) {
+    const existingSubAdmin = await SubAdmin.findOne({
+      $or: [
+        { email: email.toLowerCase().trim() },
+        { phone }
+      ]
+    });
+    if (existingUser || existingSubAdmin) {
       return res.status(400).json({ message: "An account already exists with this email or phone number." });
     }
 
     const hashedPassword = await hashPassword(password);
-    const newSubAdmin = new User({
-      type: "admin",
+    const newSubAdmin = new SubAdmin({
       fullName,
       email: email.toLowerCase().trim(),
       phone,
@@ -426,6 +433,64 @@ exports.signupSubAdmin = async (req, res) => {
   } catch (error) {
     logger.error({ error: error.message }, "Sub-admin signup error");
     res.status(500).json({ message: "Failed to register sub-administrator.", error: error.message });
+  }
+};
+
+/**
+ * Fetch all secondary university sub-administrators (tenant studio IDs)
+ */
+exports.getSubAdmins = async (req, res) => {
+  try {
+    const uniId = req.uni?._id;
+    if (!uniId) {
+      return res.status(401).json({ success: false, message: "Unauthorized. University context missing." });
+    }
+
+    const subAdmins = await SubAdmin.find({
+      $or: [{ uniID: uniId }, { tenantId: uniId }]
+    }).select("-password -__v");
+
+    res.json({
+      success: true,
+      data: subAdmins
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "Get Sub Admins Error");
+    res.status(500).json({ success: false, message: "Failed to retrieve sub-administrators." });
+  }
+};
+
+/**
+ * Delete a secondary university sub-administrator
+ */
+exports.deleteSubAdmin = async (req, res) => {
+  try {
+    const uniId = req.uni?._id;
+    const { id } = req.params;
+
+    if (!uniId) {
+      return res.status(401).json({ success: false, message: "Unauthorized. University context missing." });
+    }
+
+    const subAdmin = await SubAdmin.findOne({
+      _id: id,
+      $or: [{ uniID: uniId }, { tenantId: uniId }]
+    });
+
+    if (!subAdmin) {
+      return res.status(404).json({ success: false, message: "Sub-administrator account not found or access denied." });
+    }
+
+    await SubAdmin.findByIdAndDelete(id);
+
+    logger.info({ subAdminId: id, uniId }, "Sub-administrator deleted successfully");
+    res.json({
+      success: true,
+      message: "Sub-administrator account deleted successfully."
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "Delete Sub Admin Error");
+    res.status(500).json({ success: false, message: "Failed to delete sub-administrator account." });
   }
 };
 

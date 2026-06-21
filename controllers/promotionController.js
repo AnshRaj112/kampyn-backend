@@ -16,6 +16,13 @@ exports.promoteConfiguration = async (req, res) => {
       return res.status(400).json({ success: false, message: "Tenant context missing." });
     }
 
+    if (req.uni && String(req.uni._id) !== String(tenantId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. You can only promote configurations for your own university."
+      });
+    }
+
     if (!["DEV", "TEST", "UAT"].includes(sourceEnv) || !["TEST", "UAT", "PROD"].includes(targetEnv)) {
       return res.status(400).json({ success: false, message: "Invalid source or target environments." });
     }
@@ -100,6 +107,13 @@ exports.rollbackConfiguration = async (req, res) => {
 
     if (!tenantId || !environment || !targetVersion) {
       return res.status(400).json({ success: false, message: "Missing required fields: targetVersion, environment" });
+    }
+
+    if (req.uni && String(req.uni._id) !== String(tenantId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. You can only rollback configurations for your own university."
+      });
     }
 
     const currentConfig = await TenantConfiguration.findOne({ tenantId, environment, status: "active" });

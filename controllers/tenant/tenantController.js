@@ -1,5 +1,6 @@
 const Tenant = require("../../models/account/Tenant");
 const SystemAuditLog = require("../../models/account/SystemAuditLog");
+const Uni = require("../../models/account/Uni");
 const jwt = require("jsonwebtoken");
 const logger = require("../../utils/pinoLogger");
 
@@ -13,6 +14,9 @@ exports.getTenantConfig = async (req, res) => {
       return res.status(404).json({ success: false, message: "Tenant context not found." });
     }
 
+    const uni = await Uni.findById(tenant._id).lean();
+    const createdByUniName = uni ? uni.fullName : tenant.name;
+
     res.json({
       success: true,
       data: {
@@ -23,7 +27,8 @@ exports.getTenantConfig = async (req, res) => {
         enabledModules: tenant.enabledModules,
         navigation: tenant.navigation || [],
         widgets: tenant.widgets || ["StatCard", "SystemAlerts"],
-        workflows: tenant.workflows || { approvalRole: "Warden", outingLimit: 3 }
+        workflows: tenant.workflows || { approvalRole: "Warden", outingLimit: 3 },
+        createdByUniName
       }
     });
   } catch (error) {
@@ -99,8 +104,16 @@ exports.switchTenantContext = async (req, res) => {
  */
 exports.updateTenantBranding = async (req, res) => {
   try {
-    const actorId = req.admin.adminId;
+    const actorId = req.admin?.adminId || req.uni?._id;
     const tenantId = req.tenantId;
+
+    if (req.uni && String(req.uni._id) !== String(tenantId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. You can only customize configurations for your own university."
+      });
+    }
+
     const { logo, favicon, primaryColor, secondaryColor, font } = req.body;
 
     const tenant = await Tenant.findById(tenantId);
@@ -245,6 +258,14 @@ exports.updateTenantStatus = async (req, res) => {
 exports.updateTenantStudioConfig = async (req, res) => {
   try {
     const tenantId = req.tenantId;
+
+    if (req.uni && String(req.uni._id) !== String(tenantId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. You can only customize configurations for your own university."
+      });
+    }
+
     const { branding, navigation, widgets, workflows } = req.body;
 
     const tenant = await Tenant.findById(tenantId);

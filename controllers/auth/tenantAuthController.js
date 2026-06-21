@@ -1,6 +1,7 @@
 const Account = require("../../models/account/Uni");
 const User = require("../../models/account/User");
 const Tenant = require("../../models/account/Tenant");
+const SubAdmin = require("../../models/account/SubAdmin");
 const Otp = require("../../models/users/Otp");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
@@ -47,11 +48,10 @@ exports.login = async (req, res) => {
     });
     let role = "university";
 
-    // 2. Search in User (secondary admin)
+    // 2. Search in SubAdmin (secondary admin)
     if (!user) {
-      user = await User.findOne({
-        $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
-        type: "admin"
+      user = await SubAdmin.findOne({
+        $or: [{ email: processedIdentifier }, { phone: processedIdentifier }]
       });
       role = "university-sub";
     }
@@ -83,7 +83,9 @@ exports.login = async (req, res) => {
     }
 
     // Check access restrictions (tenant link locking)
-    const userTenantId = String(user._id || user.tenantId);
+    const userTenantId = role === "university-sub"
+      ? String(user.tenantId || user.uniID)
+      : String(user._id);
     const activeTenantId = req.tenantId ? String(req.tenantId) : null;
     const isCentralPortal = host.includes("tenant-studio.") || 
                             referer.includes("tenant-studio.");
@@ -149,11 +151,10 @@ exports.forgotPassword = async (req, res) => {
       $or: [{ email: processedIdentifier }, { phone: processedIdentifier }]
     });
 
-    // 2. Search in User (secondary admin)
+    // 2. Search in SubAdmin (secondary admin)
     if (!user) {
-      user = await User.findOne({
-        $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
-        type: "admin"
+      user = await SubAdmin.findOne({
+        $or: [{ email: processedIdentifier }, { phone: processedIdentifier }]
       });
     }
 
@@ -205,8 +206,8 @@ exports.verifyOtp = async (req, res) => {
     let role = "university";
 
     if (!user) {
-      user = await User.findOneAndUpdate(
-        { email: emailLower, type: "admin" },
+      user = await SubAdmin.findOneAndUpdate(
+        { email: emailLower },
         { isVerified: true },
         { new: true }
       );
@@ -269,10 +270,10 @@ exports.resendOtp = async (req, res) => {
     }
     const emailLower = email.toLowerCase().trim();
 
-    // Check if owner exists in Uni or User (type: admin)
+    // Check if owner exists in Uni or SubAdmin
     let userExists = await Account.findOne({ email: emailLower });
     if (!userExists) {
-      userExists = await User.findOne({ email: emailLower, type: "admin" });
+      userExists = await SubAdmin.findOne({ email: emailLower });
     }
 
     if (!userExists) {
@@ -313,8 +314,8 @@ exports.resetPassword = async (req, res) => {
     );
 
     if (!user) {
-      user = await User.findOneAndUpdate(
-        { email: emailLower, type: "admin" },
+      user = await SubAdmin.findOneAndUpdate(
+        { email: emailLower },
         { password: hashedPassword },
         { new: true }
       );
@@ -354,7 +355,7 @@ exports.getUser = async (req, res) => {
     const userId = req.user.userId;
     let user = await Account.findById(userId).select("-password -__v");
     if (!user) {
-      user = await User.findById(userId).select("-password -__v");
+      user = await SubAdmin.findById(userId).select("-password -__v");
     }
 
     if (!user) {

@@ -71,11 +71,16 @@ const tenantMiddleware = async (req, res, next) => {
 
   let isReservedSubdomain = false;
   let subdomain = "";
-  if (parts.length === 2 && parts[1] === "localhost") {
-    subdomain = parts[0];
-  } else if (parts.length >= 3) {
-    subdomain = parts[0];
+  const isIPAddress = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(cleanHost);
+
+  if (!isIPAddress) {
+    if (parts.length === 2 && parts[1] === "localhost") {
+      subdomain = parts[0];
+    } else if (parts.length >= 3) {
+      subdomain = parts[0];
+    }
   }
+
   if (subdomain && reservedSubdomains.includes(subdomain)) {
     isReservedSubdomain = true;
   }

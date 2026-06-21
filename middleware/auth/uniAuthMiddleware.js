@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const Uni = require("../../models/account/Uni");
 const Admin = require("../../models/account/Admin");
 const User = require("../../models/account/User");
+const SubAdmin = require("../../models/account/SubAdmin");
 const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
 const logger = require("../../utils/pinoLogger");
 
@@ -153,9 +154,9 @@ const uniOrSuperAdminAuth = async (req, res, next) => {
       return next();
     }
 
-    // Try finding secondary university admin (User model of type 'admin')
-    const subAdmin = await User.findById(decoded.userId).select("-password");
-    if (subAdmin && subAdmin.type === "admin" && subAdmin.isVerified) {
+    // Try finding secondary university admin (SubAdmin model)
+    const subAdmin = await SubAdmin.findById(decoded.userId).select("-password");
+    if (subAdmin && subAdmin.isVerified) {
       const uniOwner = await Uni.findById(subAdmin.uniID || subAdmin.tenantId);
       if (!uniOwner || uniOwner.isAvailable !== 'Y') {
         return res.status(403).json({ success: false, message: "Access denied. University platform is unavailable." });
