@@ -105,7 +105,8 @@ const tenantMiddleware = async (req, res, next) => {
   // 4. Fallback to default tenant only if NOT on a reserved subdomain and not an admin API route
   const isAdminRoute = req.path.startsWith("/api/admin") || req.path.startsWith("/admin");
   const isGlobalRoute = req.path.startsWith("/api/tenant/switch-tenant");
-  const bypassTenant = isReservedSubdomain || isAdminRoute || isGlobalRoute;
+  const isTenantAuthRoute = req.path.startsWith("/api/tenant/auth");
+  const bypassTenant = isReservedSubdomain || isAdminRoute || isGlobalRoute || isTenantAuthRoute;
 
   if (!tenantIdentifier && !bypassTenant) {
     tenantIdentifier = process.env.DEFAULT_TENANT_SLUG || "kiit";

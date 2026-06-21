@@ -26,6 +26,19 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Identifier and password are required." });
     }
 
+    const host = req.headers.host || "";
+    const referer = req.headers.referer || "";
+    const isAdminPortal = host.includes("admin.localhost") || 
+                          host.includes("admin.kampyn.com") || 
+                          referer.includes("admin.localhost") || 
+                          referer.includes("admin.kampyn.com");
+
+    if (isAdminPortal) {
+      return res.status(403).json({
+        message: "Access Denied: Tenant administrators cannot log in on the admin portal."
+      });
+    }
+
     const processedIdentifier = identifier.toLowerCase().trim();
 
     // 1. Search in Uni (primary admin)
@@ -72,8 +85,8 @@ exports.login = async (req, res) => {
     // Check access restrictions (tenant link locking)
     const userTenantId = String(user._id || user.tenantId);
     const activeTenantId = req.tenantId ? String(req.tenantId) : null;
-    const host = req.headers.host || "";
-    const isCentralPortal = host.startsWith("tenant-studio.") || host.startsWith("admin.");
+    const isCentralPortal = host.includes("tenant-studio.") || 
+                            referer.includes("tenant-studio.");
 
     if (activeTenantId && !isCentralPortal && userTenantId !== activeTenantId) {
       return res.status(403).json({
