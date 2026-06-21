@@ -36,6 +36,16 @@ const tenantSchema = new mongoose.Schema(
         name: { type: String, required: true },
         image: { type: String, required: true }
       }
+    ],
+    
+    // Dynamic navigation menu structure
+    navigation: [
+      {
+        label: { type: String, required: true },
+        path: { type: String, required: true },
+        icon: { type: String },
+        roles: [{ type: String }]
+      }
     ]
   },
   { 

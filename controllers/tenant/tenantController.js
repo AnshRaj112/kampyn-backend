@@ -20,7 +20,8 @@ exports.getTenantConfig = async (req, res) => {
         name: tenant.name,
         slug: tenant.slug,
         branding: tenant.branding,
-        enabledModules: tenant.enabledModules
+        enabledModules: tenant.enabledModules,
+        navigation: tenant.navigation || []
       }
     });
   } catch (error) {
