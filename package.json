@@ -19,7 +19,7 @@
   },
   "scripts": {
     "start": "node scripts/start-server.js",
-    "dev": "nodemon index.js",
+    "dev": "node --watch index.js",
     "verify-debug": "node scripts/verify-debug.js",
     "fix-debug": "node scripts/fix-debug.js",
     "migrate-orders": "node scripts/migrate-orders.js",
