@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
 const Uni = require("../../models/account/Uni");
+const Admin = require("../../models/account/Admin");
+const User = require("../../models/account/User");
 const { checkUserActivity, updateUserActivity } = require("../../utils/authUtils");
 const logger = require("../../utils/pinoLogger");
 
@@ -110,6 +112,76 @@ const uniAuthMiddleware = async (req, res, next) => {
   }
 };
 
+/**
+ * Helper middleware to authenticate either University Admin, Sub Admin, or Super Admin
+ */
+const uniOrSuperAdminAuth = async (req, res, next) => {
+  try {
+    let token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token || req.cookies?.adminToken || req.cookies?.uniToken;
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Access denied. No token provided." });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Try finding super admin first
+    const admin = await Admin.findById(decoded.userId).select("-password");
+    if (admin && admin.isActive && admin.role === "super_admin") {
+      req.admin = {
+        adminId: admin._id,
+        email: admin.email,
+        role: admin.role,
+        permissions: admin.permissions
+      };
+      return next();
+    }
+
+    // Try finding university admin
+    const university = await Uni.findById(decoded.userId).select("-password");
+    if (university && university.isAvailable === 'Y') {
+      if (req.tenantId && String(university._id) !== String(req.tenantId)) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. Your session does not belong to the requested university tenant context."
+        });
+      }
+      req.uni = {
+        _id: university._id,
+        fullName: university.fullName,
+        email: university.email
+      };
+      return next();
+    }
+
+    // Try finding secondary university admin (User model of type 'admin')
+    const subAdmin = await User.findById(decoded.userId).select("-password");
+    if (subAdmin && subAdmin.type === "admin" && subAdmin.isVerified) {
+      const uniOwner = await Uni.findById(subAdmin.uniID || subAdmin.tenantId);
+      if (!uniOwner || uniOwner.isAvailable !== 'Y') {
+        return res.status(403).json({ success: false, message: "Access denied. University platform is unavailable." });
+      }
+
+      if (req.tenantId && String(subAdmin.tenantId || subAdmin.uniID) !== String(req.tenantId)) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. Your session does not belong to the requested university tenant context."
+        });
+      }
+      req.uni = {
+        _id: subAdmin.uniID || subAdmin.tenantId,
+        fullName: subAdmin.fullName,
+        email: subAdmin.email
+      };
+      return next();
+    }
+
+    return res.status(401).json({ success: false, message: "Access denied. Invalid or inactive account." });
+  } catch (error) {
+    return res.status(401).json({ success: false, message: "Access denied. Invalid or expired token." });
+  }
+};
+
 module.exports = {
-  uniAuthMiddleware
+  uniAuthMiddleware,
+  uniOrSuperAdminAuth
 }; 

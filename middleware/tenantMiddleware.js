@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Tenant = require("../models/account/Tenant");
 const logger = require("../utils/pinoLogger");
+const jwt = require("jsonwebtoken");
 
 // In-memory cache for tenant configuration to optimize lookup times
 const tenantCache = new Map();
@@ -62,36 +63,72 @@ const tenantMiddleware = async (req, res, next) => {
     tenantIdentifier = headerTenant;
   }
 
-  // 2. Resolve from hostname subdomain
+  // Determine subdomain
+  const host = req.headers.host || "";
+  const cleanHost = host.split(":")[0].toLowerCase();
+  const parts = cleanHost.split(".");
+  const reservedSubdomains = ["admin", "api", "www", "main", "tenant-studio"];
+
+  let isReservedSubdomain = false;
+  let subdomain = "";
+  if (parts.length === 2 && parts[1] === "localhost") {
+    subdomain = parts[0];
+  } else if (parts.length >= 3) {
+    subdomain = parts[0];
+  }
+  if (subdomain && reservedSubdomains.includes(subdomain)) {
+    isReservedSubdomain = true;
+  }
+
+  // 2. Resolve from hostname subdomain (if not reserved)
+  if (!tenantIdentifier && subdomain && !isReservedSubdomain) {
+    tenantIdentifier = subdomain;
+  }
+
+  // 3. Resolve from Authorization token if on a reserved subdomain or if header/hostname is missing
   if (!tenantIdentifier) {
-    const host = req.headers.host || "";
-    const cleanHost = host.split(":")[0].toLowerCase();
-    const parts = cleanHost.split(".");
-
-    // Exclude system reserved subdomains
-    const reservedSubdomains = ["admin", "api", "www", "main"];
-
-    if (parts.length === 2 && parts[1] === "localhost") {
-      // Handle tenant.localhost dev parity
-      if (!reservedSubdomains.includes(parts[0])) {
-        tenantIdentifier = parts[0];
-      }
-    } else if (parts.length >= 3) {
-      // Handle tenant.domain.com prod environment
-      if (!reservedSubdomains.includes(parts[0])) {
-        tenantIdentifier = parts[0];
+    let token = req.cookies?.uniToken || req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded.impersonatedTenantId) {
+          tenantIdentifier = decoded.impersonatedTenantId;
+        } else if (decoded.role === "university" || decoded.tenantId) {
+          tenantIdentifier = decoded.tenantId || decoded.userId;
+        }
+      } catch (err) {
+        // Ignore JWT verification errors here
       }
     }
   }
 
-  // 3. Fallback to default tenant (for localhost or direct IP accesses)
-  if (!tenantIdentifier) {
+  // 4. Fallback to default tenant only if NOT on a reserved subdomain and not an admin API route
+  const isAdminRoute = req.path.startsWith("/api/admin") || req.path.startsWith("/admin");
+  const isGlobalRoute = req.path.startsWith("/api/tenant/switch-tenant");
+  const bypassTenant = isReservedSubdomain || isAdminRoute || isGlobalRoute;
+
+  if (!tenantIdentifier && !bypassTenant) {
     tenantIdentifier = process.env.DEFAULT_TENANT_SLUG || "kiit";
+  }
+
+  if (!tenantIdentifier) {
+    // Standalone context (e.g. admin.kampyn.com)
+    req.tenant = null;
+    req.tenantId = null;
+    req.tenantSlug = null;
+    return next();
   }
 
   const tenant = await resolveTenant(tenantIdentifier);
 
   if (!tenant) {
+    if (bypassTenant) {
+      // If bypass is allowed, proceed even if tenant resolution failed
+      req.tenant = null;
+      req.tenantId = null;
+      req.tenantSlug = null;
+      return next();
+    }
     return res.status(404).json({
       success: false,
       message: `Tenant resolution failed. Specified tenant context '${tenantIdentifier}' not found.`

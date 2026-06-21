@@ -43,6 +43,7 @@ const {
 // Import routes
 const userAuthRoutes = require("./routes/auth/userAuthRoutes");
 const uniAuthRoutes = require("./routes/auth/uniAuthRoutes");
+const tenantAuthRoutes = require("./routes/auth/tenantAuthRoutes");
 const vendorAuthRoutes = require("./routes/auth/vendorAuthRoutes");
 const adminAuthRoutes = require("./routes/auth/adminAuthRoutes");
 const guestHouseAuthRoutes = require("./routes/auth/guestHouseAuthRoutes");
@@ -126,6 +127,10 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' })); // Limit payload size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Global Sanitization Middleware (XSS & NoSQL Injection Protection)
+const sanitizeMiddleware = require("./middleware/sanitizeMiddleware");
+app.use(sanitizeMiddleware);
+
 // 7. Cookie parser - Parse cookies for authentication
 app.use(cookieParser());
 
@@ -159,6 +164,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ✅ Routes
 app.use("/api/tenant", tenantRoutes); // NEW: Tenant routing configurations
+app.use("/api/tenant/auth", tenantAuthRoutes);
 app.use("/api/user/auth", userAuthRoutes);
 app.use("/api/uni/auth", uniAuthRoutes);
 app.use("/api/vendor/auth", vendorAuthRoutes);

@@ -21,7 +21,9 @@ exports.getTenantConfig = async (req, res) => {
         slug: tenant.slug,
         branding: tenant.branding,
         enabledModules: tenant.enabledModules,
-        navigation: tenant.navigation || []
+        navigation: tenant.navigation || [],
+        widgets: tenant.widgets || ["StatCard", "SystemAlerts"],
+        workflows: tenant.workflows || { approvalRole: "Warden", outingLimit: 3 }
       }
     });
   } catch (error) {
@@ -235,3 +237,153 @@ exports.updateTenantStatus = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to update tenant status." });
   }
 };
+
+/**
+ * Saves entire Tenant Studio configuration (branding, navigation, widgets, workflows)
+ * Updates both Tenant model and DEV environment TenantConfiguration with checksum
+ */
+exports.updateTenantStudioConfig = async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const { branding, navigation, widgets, workflows } = req.body;
+
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: "Tenant not found." });
+    }
+
+    // 1. Update branding details in primary Tenant model
+    if (branding) {
+      if (branding.logo !== undefined) tenant.branding.logo = branding.logo;
+      if (branding.favicon !== undefined) tenant.branding.favicon = branding.favicon;
+      if (branding.primaryColor !== undefined) tenant.branding.primaryColor = branding.primaryColor;
+      if (branding.secondaryColor !== undefined) tenant.branding.secondaryColor = branding.secondaryColor;
+      if (branding.font !== undefined) tenant.branding.font = branding.font;
+    }
+
+    // 2. Update navigation structure
+    if (navigation) {
+      if (!Array.isArray(navigation)) {
+        return res.status(400).json({ success: false, message: "navigation must be an array." });
+      }
+      tenant.navigation = navigation;
+    }
+
+    // 3. Update dashboard widgets list
+    if (widgets) {
+      if (!Array.isArray(widgets)) {
+        return res.status(400).json({ success: false, message: "widgets must be an array." });
+      }
+      tenant.widgets = widgets;
+    }
+
+    // 4. Update approval workflows settings
+    if (workflows) {
+      if (workflows.approvalRole !== undefined) tenant.workflows.approvalRole = workflows.approvalRole;
+      if (workflows.outingLimit !== undefined) tenant.workflows.outingLimit = Number(workflows.outingLimit);
+    }
+
+    // Save primary model
+    await Tenant.findByIdAndUpdate(tenantId, {
+      $set: {
+        branding: tenant.branding,
+        navigation: tenant.navigation,
+        widgets: tenant.widgets,
+        workflows: tenant.workflows
+      }
+    });
+
+    // 5. Sync snapshot configuration to TenantConfiguration DEV environment
+    const TenantConfiguration = require("../../models/account/TenantConfiguration");
+    const crypto = require("crypto");
+    
+    let devConfig = await TenantConfiguration.findOne({ tenantId, environment: "DEV", status: "active" });
+    
+    // Map active modules
+    const modules = [
+      {
+        name: "food",
+        enabled: tenant.enabledModules.includes("food"),
+        features: new Map([["selectedWidgets", tenant.widgets || []]])
+      },
+      {
+        name: "hostel",
+        enabled: tenant.enabledModules.includes("hostel"),
+        features: new Map([
+          ["approvalRole", tenant.workflows.approvalRole || "Warden"],
+          ["outingLimit", tenant.workflows.outingLimit || 3]
+        ])
+      }
+    ];
+
+    if (!devConfig) {
+      // Find highest version or start with 1
+      const latestConfig = await TenantConfiguration.findOne({ tenantId, environment: "DEV" }).sort({ version: -1 }).lean();
+      const nextVersion = latestConfig ? latestConfig.version + 1 : 1;
+
+      devConfig = new TenantConfiguration({
+        tenantId,
+        environment: "DEV",
+        version: nextVersion,
+        status: "active",
+        branding: tenant.branding,
+        navigation: { header: tenant.navigation },
+        modules,
+        checksum: "temp"
+      });
+    } else {
+      devConfig.branding = tenant.branding;
+      devConfig.navigation = { header: tenant.navigation };
+      devConfig.modules = modules;
+    }
+
+    // Calculate checksum of the payload to enforce promotion verification
+    const payloadStr = JSON.stringify({
+      branding: devConfig.branding,
+      modules: devConfig.modules,
+      navigation: devConfig.navigation,
+      permissions: devConfig.permissions
+    });
+    devConfig.checksum = crypto.createHash("sha256").update(payloadStr).digest("hex");
+    await devConfig.save();
+
+    // Log the change
+    try {
+      const actorId = req.uni?._id || req.admin?.adminId || tenantId;
+      await SystemAuditLog.create({
+        actorId,
+        tenantId,
+        actionType: "CONFIG_SAVE",
+        description: `Updated Tenant Studio DEV configurations (Version: ${devConfig.version})`,
+        newState: {
+          branding: tenant.branding,
+          navigation: tenant.navigation,
+          widgets: tenant.widgets,
+          workflows: tenant.workflows
+        },
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"]
+      });
+    } catch (auditErr) {
+      logger.warn({ error: auditErr.message }, "Audit log creation failed during config update");
+    }
+
+    res.json({
+      success: true,
+      message: "Tenant Studio configurations saved successfully to DEV environment.",
+      data: {
+        branding: tenant.branding,
+        navigation: tenant.navigation,
+        widgets: tenant.widgets,
+        workflows: tenant.workflows,
+        version: devConfig.version,
+        checksum: devConfig.checksum
+      }
+    });
+
+  } catch (error) {
+    logger.error({ error: error.message }, "Error updating Tenant Studio configurations");
+    res.status(500).json({ success: false, message: "Failed to update configurations.", error: error.message });
+  }
+};
+

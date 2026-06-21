@@ -613,6 +613,27 @@ router.patch("/universities/:uniId/features", adminLimiter, async (req, res) => 
     }
     const uni = await Uni.findByIdAndUpdate(uniId, { $set: { features } }, { new: true }).populate("features");
     if (!uni) return res.status(404).json({ success: false, message: "University not found" });
+
+    // Synchronize features to Tenant enabledModules
+    try {
+      const Tenant = require("../models/account/Tenant");
+      const moduleSet = new Set();
+      (uni.features || []).forEach(f => {
+        const name = (f.name || "").toLowerCase();
+        if (name.includes('food') || name.includes('ordering') || name.includes('vendor')) moduleSet.add('food');
+        if (name.includes('hostel') || name.includes('guest') || name.includes('room') || name.includes('accommodation')) moduleSet.add('hostel');
+        if (name.includes('auditorium') || name.includes('booking')) moduleSet.add('auditorium');
+        if (name.includes('laundry')) moduleSet.add('laundry');
+        if (name.includes('library')) moduleSet.add('library');
+        if (name.includes('transport')) moduleSet.add('transport');
+      });
+
+      await Tenant.findByIdAndUpdate(uniId, { $set: { enabledModules: Array.from(moduleSet) } });
+      logger.info({ tenantId: uniId, enabledModules: Array.from(moduleSet) }, "Synchronized features to Tenant enabledModules");
+    } catch (tenantErr) {
+      logger.warn({ error: tenantErr.message }, "Failed to sync features to Tenant enabledModules");
+    }
+
     return res.json({ success: true, message: "Features updated", data: uni.features || [] });
   } catch (error) {
     logger.error("❌ Admin: Error updating university features:", error);
@@ -947,6 +968,15 @@ router.patch("/universities/:uniId/availability", async (req, res) => {
         success: false,
         message: "University not found"
       });
+    }
+
+    // Synchronize to Tenant status
+    try {
+      const Tenant = require("../models/account/Tenant");
+      await Tenant.findByIdAndUpdate(uniId, { $set: { status: isAvailable === 'Y' ? 'active' : 'inactive' } });
+      logger.info({ tenantId: uniId, status: isAvailable === 'Y' ? 'active' : 'inactive' }, "Synchronized availability to Tenant status");
+    } catch (tenantErr) {
+      logger.warn({ error: tenantErr.message }, "Failed to sync availability to Tenant status");
     }
 
     logger.info(`✅ Admin: University ${university.fullName} availability updated to ${isAvailable}`);

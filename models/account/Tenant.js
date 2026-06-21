@@ -46,7 +46,19 @@ const tenantSchema = new mongoose.Schema(
         icon: { type: String },
         roles: [{ type: String }]
       }
-    ]
+    ],
+
+    // Dashboard widgets
+    widgets: {
+      type: [String],
+      default: ["StatCard", "SystemAlerts"]
+    },
+
+    // Approval workflows configurations
+    workflows: {
+      approvalRole: { type: String, default: "Warden" },
+      outingLimit: { type: Number, default: 3 }
+    }
   },
   { 
     timestamps: true,

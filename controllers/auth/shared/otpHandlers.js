@@ -113,6 +113,18 @@ const createVerifyOtpHandler = ({
 
       logger.info({ email: normalizedEmail }, "User verified");
 
+      // Synchronize verified status to Tenant if Tenant model is available and matches
+      try {
+        const mongoose = require("mongoose");
+        const Tenant = mongoose.models.Tenant || require("../../../models/account/Tenant");
+        if (Tenant) {
+          await Tenant.findByIdAndUpdate(user._id, { $set: { isVerified: true } });
+          logger.info({ tenantId: user._id }, "Synchronized verified status to Tenant record");
+        }
+      } catch (err) {
+        logger.warn({ error: err.message }, "Tenant verification status synchronization skipped/failed");
+      }
+
       await OtpModel.deleteOne({ email: { $eq: normalizedEmail } });
       logger.info({ email: normalizedEmail }, "OTP deleted from database");
 

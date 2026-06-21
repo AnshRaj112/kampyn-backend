@@ -1,5 +1,6 @@
 const Account = require("../../models/account/Uni");
 const User = require("../../models/account/User");
+const Tenant = require("../../models/account/Tenant");
 const Otp = require("../../models/users/Otp");
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
@@ -67,6 +68,38 @@ exports.signup = async (req, res) => {
     await newAccount.save();
     logger.info({ email: emailLower }, "Account created");
 
+    // Create a matching Tenant document synchronously
+    const slug = fullName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    await Tenant.create({
+      _id: newAccount._id, // Keep the same ID for referential integrity
+      name: fullName,
+      slug,
+      status: "active",
+      branding: {
+        logo: "",
+        favicon: "",
+        primaryColor: "#01796f",
+        secondaryColor: "#4ea199",
+        font: "Poppins"
+      },
+      enabledModules: ["food", "hostel", "auditorium"],
+      email: emailLower,
+      phone,
+      password: newAccount.password, // hashed password
+      isVerified: false,
+      gstNumber,
+      packingCharge: 5,
+      deliveryCharge: 50,
+      platformFee: 2,
+      categoryImages: []
+    });
+    logger.info({ email: emailLower, slug }, "Tenant metadata document created");
+
     const token = jwt.sign(
       { userId: newAccount._id, tenantId: newAccount._id, role: "university" },
       process.env.JWT_SECRET,
@@ -132,49 +165,107 @@ exports.resendOtp = createAccountResendOtpHandler({
   sendOtpEmail,
   logger,
 });
-exports.login = createRoleLoginHandler({
-  AccountModel: Account,
-  OtpModel: Otp,
-  logger,
-  argon2,
-  jwt,
-  jwtSecret: process.env.JWT_SECRET,
-  processIdentifier,
-  handleUnverifiedLogin,
-  generateOtp,
-  sendOtpEmail,
-  unverifiedRedirect: (user) => `/otpverification?email=${user.email}&from=login&role=uni`,
-  checkAccess: async (user, req) => {
-    // Assert tenant link locking
-    const userTenantId = String(user._id);
-    const activeTenantId = String(req.tenantId);
-    if (userTenantId !== activeTenantId) {
-      return {
-        status: 403,
-        message: "Access Denied: Your admin account is not registered under this university/tenant link."
-      };
+exports.login = async (req, res) => {
+  try {
+    logger.info({ identifier: req.body.identifier }, "Login Request (Unified)");
+    const { identifier, password } = req.body;
+    if (!identifier || !password) {
+      return res.status(400).json({ message: "Identifier and password are required." });
     }
 
-    if (user.isAvailable !== "Y") {
-      return {
-        status: 403,
-        message: `Access denied. ${user.fullName} is currently unavailable. Please contact support for assistance.`,
-      };
+    const processedIdentifier = identifier.toLowerCase().trim();
+
+    // 1. Search in Uni (primary admin)
+    let user = await Account.findOne({
+      $or: [{ email: processedIdentifier }, { phone: processedIdentifier }]
+    });
+    let role = "university";
+
+    // 2. Search in User (secondary admin)
+    if (!user) {
+      user = await User.findOne({
+        $or: [{ email: processedIdentifier }, { phone: processedIdentifier }],
+        type: "admin"
+      });
+      role = "university-sub";
     }
-    return null;
-  },
-  updateUserActivity,
-  activityRole: "uni",
-  setTokenCookie,
-  buildSuccessUser: (user) => ({
-    _id: user._id,
-    fullName: user.fullName,
-    email: user.email,
-    phone: user.phone,
-    gstNumber: user.gstNumber,
-    isVerified: user.isVerified,
-  }),
-});
+
+    if (!user) {
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    if (!user.isVerified) {
+      if (role === "university") {
+        const unverifiedResponse = await handleUnverifiedLogin({
+          user,
+          OtpModel: Otp,
+          generateOtp,
+          sendOtpEmail,
+          redirectTo: `/otpverification?email=${user.email}&from=login&role=uni`,
+          includeEmail: false,
+          clearExistingOtps: false
+        });
+        return res.status(400).json(unverifiedResponse);
+      } else {
+        return res.status(400).json({ message: "Account is not verified. Please contact your primary university administrator." });
+      }
+    }
+
+    const isMatch = await argon2.verify(user.password, password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // Check access restrictions (tenant link locking)
+    const userTenantId = String(user._id || user.tenantId);
+    const activeTenantId = req.tenantId ? String(req.tenantId) : null;
+    const host = req.headers.host || "";
+    const isCentralPortal = host.startsWith("tenant-studio.") || host.startsWith("admin.");
+
+    if (activeTenantId && !isCentralPortal && userTenantId !== activeTenantId) {
+      return res.status(403).json({
+        message: "Access Denied: Your admin account is not registered under this university/tenant link."
+      });
+    }
+
+    if (user.isAvailable === "N") {
+      return res.status(403).json({
+        message: `Access denied. ${user.fullName} is currently unavailable. Please contact support.`,
+      });
+    }
+
+    // Sign the token
+    const token = jwt.sign(
+      { 
+        userId: user._id, 
+        tenantId: user.tenantId || user.uniID || user._id, 
+        role: "university"
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    await updateUserActivity(user._id, "uni");
+    setTokenCookie(res, token);
+
+    return res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      role: "university",
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        isVerified: user.isVerified
+      }
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "Login Error");
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
 
 // **4. Forgot Password**
 exports.forgotPassword = createForgotPasswordHandler({
@@ -264,6 +355,64 @@ exports.getUser = async (req, res) => {
   } catch (error) {
     logger.error({ error: error.message }, "Uni: Get User Error");
     res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+/**
+ * Creates secondary university admin account for people who will use tenant-studio
+ */
+exports.signupSubAdmin = async (req, res) => {
+  try {
+    const { fullName, email, phone, password } = req.body;
+    const tenantId = req.tenantId;
+    const uniID = req.tenantId;
+
+    if (!tenantId) {
+      return res.status(400).json({ message: "Tenant context is required to register a sub-administrator." });
+    }
+
+    if (!fullName || !email || !phone || !password) {
+      return res.status(400).json({ message: "Missing required fields: fullName, email, phone, and password are required." });
+    }
+
+    // Check if email already exists in User collection
+    const existingUser = await User.findOne({
+      $or: [
+        { email: email.toLowerCase().trim() },
+        { phone }
+      ]
+    });
+    if (existingUser) {
+      return res.status(400).json({ message: "An account already exists with this email or phone number." });
+    }
+
+    const hashedPassword = await hashPassword(password);
+    const newSubAdmin = new User({
+      type: "admin",
+      fullName,
+      email: email.toLowerCase().trim(),
+      phone,
+      password: hashedPassword,
+      uniID,
+      tenantId,
+      isVerified: true // Auto-verified since it is added by the primary admin
+    });
+
+    await newSubAdmin.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Sub-administrator account registered successfully.",
+      data: {
+        _id: newSubAdmin._id,
+        fullName: newSubAdmin.fullName,
+        email: newSubAdmin.email,
+        phone: newSubAdmin.phone
+      }
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, "Sub-admin signup error");
+    res.status(500).json({ message: "Failed to register sub-administrator.", error: error.message });
   }
 };
 
