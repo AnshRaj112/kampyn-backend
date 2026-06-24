@@ -114,7 +114,7 @@ exports.updateTenantBranding = async (req, res) => {
       });
     }
 
-    const { logo, favicon, primaryColor, secondaryColor, font } = req.body;
+    const { logo, favicon, primaryColor, secondaryColor, font, backgroundColor } = req.body;
 
     const tenant = await Tenant.findById(tenantId);
     if (!tenant) {
@@ -129,8 +129,16 @@ exports.updateTenantBranding = async (req, res) => {
     if (primaryColor !== undefined) tenant.branding.primaryColor = primaryColor;
     if (secondaryColor !== undefined) tenant.branding.secondaryColor = secondaryColor;
     if (font !== undefined) tenant.branding.font = font;
+    if (backgroundColor !== undefined) tenant.branding.backgroundColor = backgroundColor;
 
     await Tenant.findByIdAndUpdate(tenantId, { $set: { branding: tenant.branding } });
+
+    // Invalidate tenant cache
+    const tenantMiddleware = require("../../middleware/tenantMiddleware");
+    if (tenantMiddleware && typeof tenantMiddleware.clearCache === "function") {
+      tenantMiddleware.clearCache(tenantId.toString());
+      tenantMiddleware.clearCache(tenant.slug);
+    }
 
     await SystemAuditLog.create({
       actorId,
@@ -280,6 +288,7 @@ exports.updateTenantStudioConfig = async (req, res) => {
       if (branding.primaryColor !== undefined) tenant.branding.primaryColor = branding.primaryColor;
       if (branding.secondaryColor !== undefined) tenant.branding.secondaryColor = branding.secondaryColor;
       if (branding.font !== undefined) tenant.branding.font = branding.font;
+      if (branding.backgroundColor !== undefined) tenant.branding.backgroundColor = branding.backgroundColor;
     }
 
     // 2. Update navigation structure
@@ -387,6 +396,13 @@ exports.updateTenantStudioConfig = async (req, res) => {
       });
     } catch (auditErr) {
       logger.warn({ error: auditErr.message }, "Audit log creation failed during config update");
+    }
+
+    // Invalidate tenant cache
+    const tenantMiddleware = require("../../middleware/tenantMiddleware");
+    if (tenantMiddleware && typeof tenantMiddleware.clearCache === "function") {
+      tenantMiddleware.clearCache(tenantId.toString());
+      tenantMiddleware.clearCache(tenant.slug);
     }
 
     res.json({

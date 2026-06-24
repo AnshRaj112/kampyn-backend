@@ -54,7 +54,8 @@ async function runMigration() {
             favicon: "",
             primaryColor: "#01796f",
             secondaryColor: "#4ea199",
-            font: "Poppins"
+            font: "Poppins",
+            backgroundColor: "#D6E6F3"
           },
           enabledModules: ["food", "hostel", "auditorium"],
           email: uni.email,

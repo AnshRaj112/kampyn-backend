@@ -13,7 +13,8 @@ const tenantConfigurationSchema = new mongoose.Schema(
       favicon: { type: String, default: "" },
       primaryColor: { type: String, default: "#01796f" },
       secondaryColor: { type: String, default: "#4ea199" },
-      font: { type: String, default: "Poppins" }
+      font: { type: String, default: "Poppins" },
+      backgroundColor: { type: String, default: "" }
     },
     
     modules: [

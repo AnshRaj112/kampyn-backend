@@ -157,4 +157,13 @@ const tenantMiddleware = async (req, res, next) => {
   next();
 };
 
+tenantMiddleware.clearCache = (identifier) => {
+  if (identifier) {
+    tenantCache.delete(identifier);
+    tenantCache.delete(identifier.toLowerCase());
+  } else {
+    tenantCache.clear();
+  }
+};
+
 module.exports = tenantMiddleware;

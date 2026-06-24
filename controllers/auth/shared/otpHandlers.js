@@ -114,11 +114,23 @@ const createVerifyOtpHandler = ({
       logger.info({ email: normalizedEmail }, "User verified");
 
       // Synchronize verified status to Tenant if Tenant model is available and matches
+      let tenantSlug = null;
       try {
         const mongoose = require("mongoose");
         const Tenant = mongoose.models.Tenant || require("../../../models/account/Tenant");
         if (Tenant) {
-          await Tenant.findByIdAndUpdate(user._id, { $set: { isVerified: true } });
+          const tenant = await Tenant.findByIdAndUpdate(user._id, { $set: { isVerified: true } }).lean();
+          if (tenant) {
+            tenantSlug = tenant.slug;
+          } else {
+            const tId = user.tenantId || user.uniID;
+            if (tId) {
+              const subTenant = await Tenant.findById(tId).lean();
+              if (subTenant) {
+                tenantSlug = subTenant.slug;
+              }
+            }
+          }
           logger.info({ tenantId: user._id }, "Synchronized verified status to Tenant record");
         }
       } catch (err) {
@@ -136,6 +148,7 @@ const createVerifyOtpHandler = ({
         success: true,
         message: "OTP verified successfully",
         token,
+        tenantSlug,
         user: buildSuccessUser(user),
       });
     } catch (error) {

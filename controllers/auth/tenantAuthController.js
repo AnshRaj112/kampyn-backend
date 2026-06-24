@@ -102,6 +102,9 @@ exports.login = async (req, res) => {
       });
     }
 
+    const userTenant = await Tenant.findById(userTenantId).lean();
+    const tenantSlug = userTenant ? userTenant.slug : null;
+
     // Sign the token
     const token = jwt.sign(
       { 
@@ -121,6 +124,7 @@ exports.login = async (req, res) => {
       message: "Login successful",
       token,
       role: "university",
+      tenantSlug,
       user: {
         _id: user._id,
         fullName: user.fullName,
@@ -230,6 +234,12 @@ exports.verifyOtp = async (req, res) => {
 
     await Otp.deleteOne({ email: emailLower });
 
+    const userTenantId = role === "university-sub"
+      ? (user.tenantId || user.uniID)
+      : user._id;
+    const userTenant = await Tenant.findById(userTenantId).lean();
+    const tenantSlug = userTenant ? userTenant.slug : null;
+
     const token = jwt.sign(
       { 
         userId: user._id, 
@@ -247,6 +257,7 @@ exports.verifyOtp = async (req, res) => {
       success: true,
       message: "OTP verified successfully",
       token,
+      tenantSlug,
       user: {
         _id: user._id,
         fullName: user.fullName,
