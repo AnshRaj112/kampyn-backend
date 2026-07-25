@@ -3,6 +3,7 @@ const User = require("../../models/account/User");
 const Vendor = require("../../models/account/Vendor");
 const cartUtils = require("../../utils/cartUtils");
 const { validateUserAccess } = require("../../utils/authUtils");
+const logger = require("../../utils/pinoLogger");
 
 exports.addToCart = async (req, res) => {
   try {
@@ -70,7 +71,7 @@ exports.getCart = async (req, res) => {
       vendorName: data.vendorName,
     });
   } catch (err) {
-    logger.error("Get cart error:", err.message);
+    logger.error({ error: err.message }, "Get cart error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -92,7 +93,7 @@ exports.increaseOne = async (req, res) => {
     await cartUtils.changeQuantity(userId, itemId, kind, +1, vendorId);
     return res.status(200).json({ message: "Quantity increased." });
   } catch (err) {
-    logger.error("Increase one error:", err.message);
+    logger.error({ error: err.message }, "Increase one error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -114,7 +115,7 @@ exports.decreaseOne = async (req, res) => {
     await cartUtils.changeQuantity(userId, itemId, kind, -1);
     return res.status(200).json({ message: "Quantity decreased." });
   } catch (err) {
-    logger.error("Decrease one error:", err.message);
+    logger.error({ error: err.message }, "Decrease one error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -136,7 +137,7 @@ exports.removeItem = async (req, res) => {
     await cartUtils.removeItem(userId, itemId, kind);
     return res.status(200).json({ message: "Item removed from cart." });
   } catch (err) {
-    logger.error("Remove item error:", err.message);
+    logger.error({ error: err.message }, "Remove item error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -159,7 +160,7 @@ exports.getExtras = async (req, res) => {
       extras,
     });
   } catch (err) {
-    logger.error("Get extras error:", err.message);
+    logger.error({ error: err.message }, "Get extras error");
     return res.status(400).json({ message: err.message });
   }
 };

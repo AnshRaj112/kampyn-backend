@@ -7,7 +7,20 @@ const systemAuditLogSchema = new mongoose.Schema(
     tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     actionType: { 
       type: String, 
-      enum: ["MODULE_TOGGLE", "BRANDING_UPDATE", "TENANT_SUSPENSION", "FEES_MODIFICATION", "TENANT_CREATION", "TENANT_SWITCH"], 
+      enum: [
+        "MODULE_TOGGLE",
+        "BRANDING_UPDATE",
+        "TENANT_SUSPENSION",
+        "FEES_MODIFICATION",
+        "TENANT_CREATION",
+        "TENANT_SWITCH",
+        "CONFIG_SAVE",
+        "CONFIG_PROMOTION",
+        "THEME_DRAFT_SAVE",
+        "THEME_PUBLISH",
+        "THEME_RESET",
+        "THEME_IMPORT",
+      ], 
       required: true 
     },
     description: { type: String, required: true }, // Human-readable change text

@@ -15,6 +15,10 @@ const tenantSchema = new mongoose.Schema(
       font: { type: String, default: "Poppins" },
       backgroundColor: { type: String, default: "" }
     },
+
+    // Published tenant theme (sparse JSON validated against themeRegistry)
+    theme: { type: mongoose.Schema.Types.Mixed, default: null },
+    themeVersion: { type: Number, default: 0 },
     
     enabledModules: {
       type: [String],

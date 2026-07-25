@@ -19,6 +19,15 @@ const MAX_QTY = {
   Produce: 10,
 };
 
+/**
+ * Fields required when mutating cart via document.save().
+ * Inclusive .select() must include:
+ *  - tenantId: User schema shardKey; without it save() cannot route/match
+ *  - __v: optimistic concurrency; omitting it makes Mongoose assume version 0
+ *    → VersionError "No matching document found ... version 0"
+ */
+const CART_MUTATION_SELECT = "cart vendorId tenantId __v";
+
 
 /**
 * Convert a string (or ObjectId) → mongoose.Types.ObjectId
@@ -168,8 +177,8 @@ async function _validateAndFetch(
 * If any step throws, nothing was saved or we throw before persisting partial state.
 */
 async function addToCart(userId, itemId, kind, qty, vendorIdFromController) {
-  // 1) load user
-  const user = await User.findById(userId).select("cart vendorId");
+  // 1) load user (tenantId + __v required for sharded save / version check)
+  const user = await User.findById(userId).select(CART_MUTATION_SELECT);
   if (!user) {
     throw new Error("User not found");
   }
@@ -233,7 +242,7 @@ async function addToCart(userId, itemId, kind, qty, vendorIdFromController) {
 * - If item not in cart and delta > 0 and vendorId is provided, add the item using addToCart logic.
 */
 async function changeQuantity(userId, itemId, kind, delta, vendorId = null) {
-  const user = await User.findById(userId).select("cart vendorId");
+  const user = await User.findById(userId).select(CART_MUTATION_SELECT);
   if (!user) {
     throw new Error("User not found");
   }
@@ -303,7 +312,7 @@ async function changeQuantity(userId, itemId, kind, delta, vendorId = null) {
 * If cart becomes empty, unset vendorId.
 */
 async function removeItem(userId, itemId, kind) {
-  const user = await User.findById(userId).select("cart vendorId");
+  const user = await User.findById(userId).select(CART_MUTATION_SELECT);
   if (!user) {
     throw new Error("User not found");
   }

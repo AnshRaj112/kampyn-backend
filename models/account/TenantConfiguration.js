@@ -16,6 +16,9 @@ const tenantConfigurationSchema = new mongoose.Schema(
       font: { type: String, default: "Poppins" },
       backgroundColor: { type: String, default: "" }
     },
+
+    // Draft / environment-scoped theme (sparse JSON)
+    theme: { type: mongoose.Schema.Types.Mixed, default: null },
     
     modules: [
       {

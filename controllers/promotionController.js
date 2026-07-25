@@ -40,6 +40,7 @@ exports.promoteConfiguration = async (req, res) => {
     const newConfigData = {
       tenantId: sourceConfig.tenantId,
       branding: sourceConfig.branding,
+      theme: sourceConfig.theme || null,
       modules: sourceConfig.modules,
       navigation: sourceConfig.navigation,
       permissions: sourceConfig.permissions,
@@ -52,6 +53,7 @@ exports.promoteConfiguration = async (req, res) => {
     // Calculate cryptographic checksum to verify configuration payload integrity
     const payloadStr = JSON.stringify({
       branding: newConfigData.branding,
+      theme: newConfigData.theme,
       modules: newConfigData.modules,
       navigation: newConfigData.navigation,
       permissions: newConfigData.permissions
@@ -66,6 +68,32 @@ exports.promoteConfiguration = async (req, res) => {
 
     // 5. Create new promoted configuration
     const promotedConfig = await TenantConfiguration.create(newConfigData);
+
+    // When promoting to PROD, also publish live Tenant.theme
+    if (targetEnv === "PROD" && newConfigData.theme) {
+      const Tenant = require("../models/account/Tenant");
+      const { themeToBranding } = require("../theme/themeResolve");
+      const tenant = await Tenant.findById(tenantId);
+      if (tenant) {
+        const branding = themeToBranding(newConfigData.theme, tenant.branding);
+        await Tenant.findByIdAndUpdate(tenantId, {
+          $set: {
+            theme: newConfigData.theme,
+            branding,
+            themeVersion: (tenant.themeVersion || 0) + 1,
+          },
+        });
+        try {
+          const tenantMiddleware = require("../middleware/tenantMiddleware");
+          if (tenantMiddleware?.clearCache) {
+            tenantMiddleware.clearCache(tenantId.toString());
+            tenantMiddleware.clearCache(tenant.slug);
+          }
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    }
 
     // 6. Record audit log (impersonated log or super admin log)
     try {

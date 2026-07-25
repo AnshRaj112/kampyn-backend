@@ -24,6 +24,8 @@ exports.getTenantConfig = async (req, res) => {
         name: tenant.name,
         slug: tenant.slug,
         branding: tenant.branding,
+        theme: tenant.theme || null,
+        themeVersion: tenant.themeVersion || 0,
         enabledModules: tenant.enabledModules,
         navigation: tenant.navigation || [],
         widgets: tenant.widgets || ["StatCard", "SystemAlerts"],
@@ -131,7 +133,18 @@ exports.updateTenantBranding = async (req, res) => {
     if (font !== undefined) tenant.branding.font = font;
     if (backgroundColor !== undefined) tenant.branding.backgroundColor = backgroundColor;
 
-    await Tenant.findByIdAndUpdate(tenantId, { $set: { branding: tenant.branding } });
+    // Keep published theme tokens in sync with legacy branding fields
+    const { brandingToThemeTokens, mergeThemeSparse, stripEmpty } = require("../../theme/themeResolve");
+    const brandingPatch = brandingToThemeTokens(tenant.branding);
+    const nextTheme = stripEmpty(mergeThemeSparse(tenant.theme || {}, brandingPatch || {}));
+
+    await Tenant.findByIdAndUpdate(tenantId, {
+      $set: {
+        branding: tenant.branding,
+        theme: nextTheme,
+        themeVersion: (tenant.themeVersion || 0) + 1,
+      },
+    });
 
     // Invalidate tenant cache
     const tenantMiddleware = require("../../middleware/tenantMiddleware");
@@ -291,6 +304,14 @@ exports.updateTenantStudioConfig = async (req, res) => {
       if (branding.backgroundColor !== undefined) tenant.branding.backgroundColor = branding.backgroundColor;
     }
 
+    const { brandingToThemeTokens, mergeThemeSparse, stripEmpty } = require("../../theme/themeResolve");
+    let nextTheme = tenant.theme || null;
+    if (branding) {
+      const brandingPatch = brandingToThemeTokens(tenant.branding);
+      nextTheme = stripEmpty(mergeThemeSparse(tenant.theme || {}, brandingPatch || {}));
+      tenant.theme = nextTheme;
+    }
+
     // 2. Update navigation structure
     if (navigation) {
       if (!Array.isArray(navigation)) {
@@ -317,6 +338,7 @@ exports.updateTenantStudioConfig = async (req, res) => {
     await Tenant.findByIdAndUpdate(tenantId, {
       $set: {
         branding: tenant.branding,
+        theme: nextTheme,
         navigation: tenant.navigation,
         widgets: tenant.widgets,
         workflows: tenant.workflows
@@ -357,12 +379,14 @@ exports.updateTenantStudioConfig = async (req, res) => {
         version: nextVersion,
         status: "active",
         branding: tenant.branding,
+        theme: nextTheme,
         navigation: { header: tenant.navigation },
         modules,
         checksum: "temp"
       });
     } else {
       devConfig.branding = tenant.branding;
+      if (nextTheme) devConfig.theme = nextTheme;
       devConfig.navigation = { header: tenant.navigation };
       devConfig.modules = modules;
     }
@@ -370,6 +394,7 @@ exports.updateTenantStudioConfig = async (req, res) => {
     // Calculate checksum of the payload to enforce promotion verification
     const payloadStr = JSON.stringify({
       branding: devConfig.branding,
+      theme: devConfig.theme,
       modules: devConfig.modules,
       navigation: devConfig.navigation,
       permissions: devConfig.permissions
