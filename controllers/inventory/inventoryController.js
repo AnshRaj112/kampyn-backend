@@ -4,8 +4,17 @@ const Produce = require("../../models/item/Produce"); // Cluster_Item
 const Raw = require("../../models/item/Raw"); // Cluster_Item
 const InventoryReport = require("../../models/inventory/InventoryReport"); // Cluster_Inventory
 const Recipe = require("../../models/Recipe");
-const { clearRawMaterialInventory } = require("../../utils/inventoryReportUtils");
+const { resolveInventoryVendorId } = require("../../utils/inventoryAuth");
 const logger = require("../../utils/pinoLogger");
+
+function bindVendorIdOrReject(req, res) {
+  const bound = resolveInventoryVendorId(req);
+  if (!bound.ok) {
+    res.status(bound.status).json({ success: false, message: bound.message });
+    return null;
+  }
+  return bound.vendorId;
+}
 
 const validateSameUniversity = (vendor, item) => {
   return vendor.uniID.toString() === item.uniId.toString();
@@ -20,10 +29,13 @@ const getTodayRange = () => {
 
 exports.addInventory = async (req, res) => {
   try {
-    let { vendorId, itemId, itemType, quantity, isAvailable } = req.body;
+    const vendorId = bindVendorIdOrReject(req, res);
+    if (!vendorId) return;
+
+    let { itemId, itemType, quantity, isAvailable } = req.body;
     quantity = quantity ? Number(quantity) : 0;
 
-    if (!vendorId || !itemId || !itemType) {
+    if (!itemId || !itemType) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
@@ -146,10 +158,13 @@ exports.addInventory = async (req, res) => {
 
 exports.reduceRetailInventory = async (req, res) => {
   try {
-    let { vendorId, itemId, quantity } = req.body;
+    const vendorId = bindVendorIdOrReject(req, res);
+    if (!vendorId) return;
+
+    let { itemId, quantity } = req.body;
     quantity = quantity ? Number(quantity) : 0;
 
-    if (!vendorId || !itemId || !quantity) {
+    if (!itemId || !quantity) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
@@ -223,8 +238,11 @@ exports.reduceRetailInventory = async (req, res) => {
 
 exports.updateRetailAvailability = async (req, res) => {
   try {
-    const { vendorId, itemId, isAvailable } = req.body;
-    if (!vendorId || !itemId || !["Y", "N"].includes(isAvailable)) {
+    const vendorId = bindVendorIdOrReject(req, res);
+    if (!vendorId) return;
+
+    const { itemId, isAvailable } = req.body;
+    if (!itemId || !["Y", "N"].includes(isAvailable)) {
       return res.status(400).json({ message: "Missing or invalid fields" });
     }
     const vendor = await Vendor.findById(vendorId);
@@ -247,9 +265,12 @@ exports.updateRetailAvailability = async (req, res) => {
 
 exports.updateRawMaterialInventory = async (req, res) => {
   try {
-    const { vendorId, itemId, openingAmount, closingAmount, unit } = req.body;
+    const vendorId = bindVendorIdOrReject(req, res);
+    if (!vendorId) return;
 
-    if (!vendorId || !itemId || openingAmount === undefined || closingAmount === undefined || !unit) {
+    const { itemId, openingAmount, closingAmount, unit } = req.body;
+
+    if (!itemId || openingAmount === undefined || closingAmount === undefined || !unit) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
@@ -339,8 +360,11 @@ exports.updateRawMaterialInventory = async (req, res) => {
 
 exports.deleteRawMaterialInventory = async (req, res) => {
   try {
-    const { vendorId, itemId } = req.body;
-    if (!vendorId || !itemId) {
+    const vendorId = bindVendorIdOrReject(req, res);
+    if (!vendorId) return;
+
+    const { itemId } = req.body;
+    if (!itemId) {
       return res.status(400).json({ message: "Missing required fields" });
     }
     const vendor = await Vendor.findById(vendorId);
@@ -372,18 +396,26 @@ exports.deleteRawMaterialInventory = async (req, res) => {
 
 /**
  * POST /inventory/clear-raw-materials
- * Manually clear all raw material inventory for all vendors
- * This is useful for testing or emergency situations
+ * Clear raw material inventory for the authenticated vendor only.
  */
 exports.clearAllRawMaterialInventory = async (req, res) => {
   try {
-    const clearedCount = await clearRawMaterialInventory();
-    return res.status(200).json({ 
-      message: `Successfully cleared raw material inventory for ${clearedCount} vendors`,
-      clearedCount 
+    const vendorId = bindVendorIdOrReject(req, res);
+    if (!vendorId) return;
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+
+    vendor.rawMaterialInventory = [];
+    vendor.markModified("rawMaterialInventory");
+    await vendor.save();
+
+    return res.status(200).json({
+      message: "Successfully cleared raw material inventory",
+      clearedCount: 1
     });
   } catch (error) {
-    logger.error("Error clearing all raw material inventory:", error);
+    logger.error("Error clearing raw material inventory:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

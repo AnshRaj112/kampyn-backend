@@ -14,12 +14,12 @@ const {
 } = require("../controllers/inventory/inventoryController");
 const vendorAuthMiddleware = require("../middleware/auth/vendorAuthMiddleware");
 
-router.post("/add", addInventory);
-router.post("/reduce", reduceRetailInventory);
-router.post("/retail/availability", updateRetailAvailability);
-router.post("/raw-materials", updateRawMaterialInventory);
-router.delete("/raw-materials", require("../controllers/inventory/inventoryController").deleteRawMaterialInventory);
-router.post("/clear-raw-materials", clearAllRawMaterialInventory);
+router.post("/add", vendorAuthMiddleware, addInventory);
+router.post("/reduce", vendorAuthMiddleware, reduceRetailInventory);
+router.post("/retail/availability", vendorAuthMiddleware, updateRetailAvailability);
+router.post("/raw-materials", vendorAuthMiddleware, updateRawMaterialInventory);
+router.delete("/raw-materials", vendorAuthMiddleware, require("../controllers/inventory/inventoryController").deleteRawMaterialInventory);
+router.post("/clear-raw-materials", vendorAuthMiddleware, clearAllRawMaterialInventory);
 
 // Recipe Works routes
 router.get("/recipe-works/recipes", vendorAuthMiddleware, getRecipeWorksRecipes);
