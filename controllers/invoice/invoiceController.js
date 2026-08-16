@@ -55,7 +55,27 @@ exports.getVendorInvoices = async (req, res) => {
   try {
     const { vendorId } = req.params;
     const { page = 1, limit = 10, startDate, endDate, status } = req.query;
-    
+
+    // --- Authorization ---------------------------------------------------
+    // Vendor: may only view their own invoices.
+    // University staff: may view vendors within their tenant.
+    // Platform admin: unrestricted.
+    if (req.vendor) {
+      if (String(req.vendor.vendorId) !== String(vendorId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You can only view your own vendor invoices.'
+        });
+      }
+    } else if (req.uni) {
+      // Uni access is scoped to their tenant — enforced via query filter below
+    } else if (req.admin) {
+      // Platform admin: no ownership constraint
+    } else {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+    // ---------------------------------------------------------------------
+
     // Validate vendor exists
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) {
@@ -67,6 +87,11 @@ exports.getVendorInvoices = async (req, res) => {
     
     // Build query
     const query = { vendorId, recipientType: 'vendor' };
+
+    // University staff: restrict results to their own tenant
+    if (req.uni) {
+      query.uniId = req.uni._id;
+    }
     
     if (startDate && endDate) {
       query.createdAt = {
@@ -190,7 +215,24 @@ exports.getUniversityInvoices = async (req, res) => {
   try {
     const { uniId } = req.params;
     const { page = 1, limit = 10, startDate, endDate, status, vendorId, invoiceType } = req.query;
-    
+
+    // --- Authorization ---------------------------------------------------
+    // University staff: may only view their own university's invoices.
+    // Platform admin (super_admin): unrestricted.
+    if (req.uni) {
+      if (String(req.uni._id) !== String(uniId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You can only view your own university invoices.'
+        });
+      }
+    } else if (req.admin) {
+      // Platform admin: no ownership constraint
+    } else {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+    // ---------------------------------------------------------------------
+
     // Validate university exists
     const university = await Uni.findById(uniId);
     if (!university) {
@@ -276,7 +318,7 @@ exports.getInvoiceById = async (req, res) => {
     const invoice = await Invoice.findById(invoiceId)
       .populate({ path: 'vendorId', select: 'name fullName', model: Vendor })
       .populate({ path: 'uniId', select: 'fullName', model: Uni })
-      .populate({ path: 'orderId', select: 'orderNumber status', model: Order })
+      .populate({ path: 'orderId', select: 'orderNumber status userId', model: Order })
       .lean();
     
     if (!invoice) {
@@ -285,7 +327,41 @@ exports.getInvoiceById = async (req, res) => {
         message: 'Invoice not found'
       });
     }
-    
+
+    // --- Authorization ---------------------------------------------------
+    // End-user: must own the order this invoice belongs to.
+    // Vendor: must be the fulfilling vendor on this invoice.
+    // University staff: invoice must belong to their tenant.
+    // Platform admin: unrestricted.
+    if (req.admin) {
+      // Platform admin: no ownership constraint
+    } else if (req.vendor) {
+      if (String(invoice.vendorId?._id || invoice.vendorId) !== String(req.vendor.vendorId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. This invoice does not belong to your vendor account.'
+        });
+      }
+    } else if (req.uni) {
+      if (String(invoice.uniId?._id || invoice.uniId) !== String(req.uni._id)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. This invoice is outside your university tenant.'
+        });
+      }
+    } else if (req.user) {
+      const orderOwner = invoice.orderId?.userId;
+      if (!orderOwner || String(orderOwner) !== String(req.user.userId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You do not own this invoice.'
+        });
+      }
+    } else {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+    // ---------------------------------------------------------------------
+
     res.json({
       success: true,
       data: invoice
@@ -317,7 +393,40 @@ exports.getInvoicesByOrder = async (req, res) => {
         message: 'Order not found'
       });
     }
-    
+
+    // --- Authorization ---------------------------------------------------
+    // End-user: must own the order.
+    // Vendor: must be the fulfilling vendor on the order.
+    // University staff: order must belong to their tenant.
+    // Platform admin: unrestricted.
+    if (req.admin) {
+      // Platform admin: no ownership constraint
+    } else if (req.user) {
+      if (String(order.userId) !== String(req.user.userId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You do not own this order.'
+        });
+      }
+    } else if (req.vendor) {
+      if (String(order.vendorId) !== String(req.vendor.vendorId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. This order does not belong to your vendor account.'
+        });
+      }
+    } else if (req.uni) {
+      if (order.tenantId && String(order.tenantId) !== String(req.uni._id)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. This order is outside your university tenant.'
+        });
+      }
+    } else {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+    // ---------------------------------------------------------------------
+
     const invoices = await Invoice.find({ orderId })
       // Explicitly specify models from Accounts DB to avoid cross-connection registration issues
       .populate({ path: 'vendorId', select: 'fullName name', model: Vendor })
@@ -525,8 +634,10 @@ exports.downloadInvoice = async (req, res) => {
     
     logger.info(`📥 Download request for invoice: ${invoiceId}`);
     
-    // Find the invoice
-    const invoice = await Invoice.findById(invoiceId);
+    // Find the invoice (include orderId.userId for ownership check)
+    const invoice = await Invoice.findById(invoiceId)
+      .populate({ path: 'orderId', select: 'userId', model: Order })
+      .lean();
     if (!invoice) {
       logger.info(`❌ Invoice not found: ${invoiceId}`);
       return res.status(404).json({
@@ -536,6 +647,38 @@ exports.downloadInvoice = async (req, res) => {
     }
     
     logger.info(`📄 Found invoice: ${invoice.invoiceNumber} (${invoice.invoiceType})`);
+
+    // --- Authorization ---------------------------------------------------
+    // Mirrors getInvoiceById: end-user owns order, vendor owns invoice,
+    // uni staff within their tenant, admin unrestricted.
+    if (req.admin) {
+      // Platform admin: no ownership constraint
+    } else if (req.vendor) {
+      if (String(invoice.vendorId) !== String(req.vendor.vendorId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. This invoice does not belong to your vendor account.'
+        });
+      }
+    } else if (req.uni) {
+      if (String(invoice.uniId) !== String(req.uni._id)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. This invoice is outside your university tenant.'
+        });
+      }
+    } else if (req.user) {
+      const orderOwner = invoice.orderId?.userId;
+      if (!orderOwner || String(orderOwner) !== String(req.user.userId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You do not own this invoice.'
+        });
+      }
+    } else {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+    // ---------------------------------------------------------------------
     
     // Check if PDF URL exists
     if (!invoice.pdfUrl && !invoice.razorpayInvoiceUrl) {
