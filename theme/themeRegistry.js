@@ -86,6 +86,8 @@ const PAGE_PROPS = ["background", "surface", "text", "accent"];
 const COMPONENT_CATALOG = {
   card: {
     ids: [
+      "home",
+      "college",
       "dish",
       "restaurant",
       "vendor",
@@ -96,6 +98,8 @@ const COMPONENT_CATALOG = {
       "offer",
       "coupon",
       "category",
+      "cartItem",
+      "bill",
       "profile",
       "order",
       "notification",
