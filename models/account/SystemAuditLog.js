@@ -20,6 +20,7 @@ const systemAuditLogSchema = new mongoose.Schema(
         "THEME_PUBLISH",
         "THEME_RESET",
         "THEME_IMPORT",
+        "INVOICE_BULK_EXPORT",
       ], 
       required: true 
     },

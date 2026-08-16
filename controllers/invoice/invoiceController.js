@@ -5,9 +5,9 @@ const Uni = require('../../models/account/Uni');
 const Admin = require('../../models/account/Admin');
 const invoiceUtils = require('../../utils/invoiceUtils');
 const { isValidCloudinaryUrl, isValidRazorpayUrl, isSafeExternalUrl } = require('../../utils/urlValidation');
+const invoiceExportService = require('./invoiceExportService');
 const fs = require('fs');
 const path = require('path');
-const sanitizeFilename = require('sanitize-filename');
 const archiver = require('archiver');
 const os = require('os'); // Added for os module
 const mongoose = require('mongoose');
@@ -1028,310 +1028,95 @@ This invoice encountered an error during processing.`;
 
 /**
  * POST /invoices/bulk-download
- * Get invoices for bulk download (date range, filters)
+ * Metadata listing for a capped date range. Auth, caps, rate limit, audit.
  */
 exports.getInvoicesForBulkDownload = async (req, res) => {
   try {
-    const { startDate, endDate, vendorId, uniId, invoiceType, recipientType } = req.body;
-    
-    if (!startDate || !endDate) {
-      return res.status(400).json({
-        success: false,
-        message: 'Start date and end date are required'
-      });
+    const result = await invoiceExportService.requestBulkMetadataExport(req);
+    if (result.status === 429 && result.body.retryAfterSeconds) {
+      res.set('Retry-After', String(result.body.retryAfterSeconds));
     }
-    
-    const filters = {
-      startDate,
-      endDate,
-      vendorId,
-      uniId,
-      invoiceType,
-      recipientType
-    };
-    
-    const invoices = await invoiceUtils.getInvoicesByDateRange(filters);
-    
-    res.json({
-      success: true,
-      data: {
-        invoices,
-        totalCount: invoices.length,
-        dateRange: { startDate, endDate }
-      }
-    });
-    
+    return res.status(result.status).json(result.body);
   } catch (error) {
     logger.error('Error getting invoices for bulk download:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: 'Failed to fetch invoices for bulk download',
-      error: error.message
+      message: 'Failed to fetch invoices for bulk download'
     });
   }
 };
 
 /**
  * POST /invoices/bulk-zip-download
- * Download multiple invoices as ZIP file with date range filtering
+ * Enqueue an async ZIP export. Never builds the archive on the HTTP thread.
  */
 exports.bulkZipDownload = async (req, res) => {
-  let tempDir = null;
   try {
-    const { startDate, endDate, vendorId, uniId, invoiceType, recipientType, orderIds } = req.body;
-
-    // Validate and sanitize date input
-    function safeDateString(val) {
-      if (!val || typeof val !== "string") return "invalid-date";
-      // Only allow ISO 8601 date format
-      const isoPattern = /^\d{4}-\d{2}-\d{2}$/;
-      return isoPattern.test(val) ? val : "invalid-date";
+    const result = await invoiceExportService.requestBulkZipExport(req);
+    if (result.status === 429 && result.body.retryAfterSeconds) {
+      res.set('Retry-After', String(result.body.retryAfterSeconds));
     }
-    const cleanStartDate = sanitizeFilename(safeDateString(startDate));
-    const cleanEndDate = sanitizeFilename(safeDateString(endDate));
-    
-    if (!startDate || !endDate) {
-      return res.status(400).json({
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    logger.error('Error queueing bulk ZIP export:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to queue bulk ZIP export'
+    });
+  }
+};
+
+/**
+ * GET /invoices/bulk-zip-jobs/:jobId
+ * Poll async ZIP job status for the owning admin/uni actor.
+ */
+exports.getBulkZipJobStatus = async (req, res) => {
+  try {
+    const result = invoiceExportService.getExportJobForActor(req);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    logger.error('Error reading bulk ZIP job status:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to read export job status'
+    });
+  }
+};
+
+/**
+ * GET /invoices/bulk-zip-jobs/:jobId/file
+ * Download a completed ZIP. 409 while the worker is still running.
+ */
+exports.downloadBulkZipFile = async (req, res) => {
+  try {
+    const result = invoiceExportService.getExportJobForActor(req);
+    if (result.status !== 200) {
+      return res.status(result.status).json(result.body);
+    }
+
+    const job = result.job;
+    if (job.status === 'queued' || job.status === 'processing') {
+      return res.status(409).json({
         success: false,
-        message: 'Start date and end date are required'
+        message: 'Export is not ready yet',
+        data: invoiceExportService.exportQueue.publicView(job)
       });
     }
-    
-    logger.info(`📦 Bulk ZIP download request: ${startDate} to ${endDate}`);
-    
-    // Build query
-    const query = {
-      createdAt: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      }
-    };
-    
-    if (vendorId) query.vendorId = vendorId;
-    if (uniId) query.uniId = uniId;
-    if (invoiceType) query.invoiceType = invoiceType;
-    if (recipientType) query.recipientType = recipientType;
-    if (orderIds && orderIds.length > 0) query.orderId = { $in: orderIds };
-    
-    // Get invoices matching criteria
-    const invoices = await Invoice.find(query)
-      .populate({ path: 'vendorId', select: 'name fullName', model: Vendor })
-      .populate({ path: 'uniId', select: 'fullName', model: Uni })
-      .populate({ path: 'orderId', select: 'orderNumber', model: Order })
-      .sort({ createdAt: -1 })
-      .lean();
-    
-    if (invoices.length === 0) {
+    if (job.status !== 'completed' || !job.zipPath || !fs.existsSync(job.zipPath)) {
       return res.status(404).json({
         success: false,
-        message: 'No invoices found for the specified criteria'
+        message: job.error || 'Export file is no longer available'
       });
     }
-    
-    logger.info(`📄 Found ${invoices.length} invoices for bulk download`);
-    
-    // Create temporary directory for ZIP creation
-    tempDir = path.join(os.tmpdir(), `bulk_invoices_${Date.now()}`);
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-    
-    const zipPath = path.join(tempDir, `bulk_invoices_${cleanStartDate}_to_${cleanEndDate}.zip`);
-    const output = fs.createWriteStream(zipPath);
-    const archive = archiver('zip', {
-      zlib: { level: 9 } // Maximum compression
-    });
-    
-    // Listen for archive events
-    archive.on('error', (err) => {
-      logger.error('❌ ZIP creation error:', err);
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          message: 'Failed to create ZIP file',
-          error: err.message
-        });
-      }
-    });
-    
-    output.on('close', () => {
-      logger.info(`✅ Bulk ZIP created successfully: ${archive.pointer()} bytes`);
-      
-      // Set response headers for ZIP download
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename="bulk_invoices_${cleanStartDate}_to_${cleanEndDate}.zip"`);
-      res.setHeader('Content-Length', archive.pointer());
-      
-      // Send the ZIP file
-      res.sendFile(zipPath, (err) => {
-        if (err) {
-          logger.error('❌ Error sending bulk ZIP file:', err);
-        }
-        
-        // Clean up temporary files
-        try {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-          logger.info('🧹 Bulk ZIP temporary files cleaned up');
-        } catch (cleanupError) {
-          logger.warn('⚠️ Failed to cleanup bulk ZIP temp files:', cleanupError.message);
-        }
-      });
-    });
-    
-    // Pipe archive data to the file
-    archive.pipe(output);
-    
-    // Add invoices to the ZIP
-    let addedCount = 0;
-    let skippedCount = 0;
-    
-    for (const invoice of invoices) {
-      try {
-        let pdfBuffer = null;
-        const orderNumber = invoice.orderId?.orderNumber || 'UNKNOWN';
-        let filename = `invoice_${invoice.invoiceNumber}_${invoice.invoiceType}_order_${orderNumber}.pdf`;
-        
-        // Priority 1: Try Cloudinary URL
-        if (invoice.pdfUrl && isValidCloudinaryUrl(invoice.pdfUrl)) {
-          logger.info(`☁️ Downloading from Cloudinary: ${invoice.invoiceNumber}`);
-          
-          try {
-            const cloudinaryResponse = await fetch(invoice.pdfUrl);
-            if (cloudinaryResponse.ok) {
-              pdfBuffer = Buffer.from(await cloudinaryResponse.arrayBuffer());
-              logger.info(`✅ Downloaded from Cloudinary: ${pdfBuffer.length} bytes`);
-            } else {
-              logger.info(`❌ Cloudinary download failed: ${cloudinaryResponse.status}`);
-            }
-          } catch (cloudinaryError) {
-            logger.info(`❌ Cloudinary error: ${cloudinaryError.message}`);
-          }
-        }
-        
-        // Priority 2: Try Razorpay URL
-        if (!pdfBuffer && invoice.razorpayInvoiceUrl && isValidRazorpayUrl(invoice.razorpayInvoiceUrl)) {
-          logger.info(`💳 Downloading from Razorpay: ${invoice.invoiceNumber}`);
-          
-          try {
-            const razorpayResponse = await fetch(invoice.razorpayInvoiceUrl);
-            if (razorpayResponse.ok) {
-              pdfBuffer = Buffer.from(await razorpayResponse.arrayBuffer());
-              logger.info(`✅ Downloaded from Razorpay: ${pdfBuffer.length} bytes`);
-            } else {
-              logger.info(`❌ Razorpay download failed: ${razorpayResponse.status}`);
-            }
-          } catch (razorpayError) {
-            logger.info(`❌ Razorpay error: ${razorpayError.message}`);
-          }
-        }
-        
-        // Priority 3: Try Razorpay API
-        if (!pdfBuffer && invoice.razorpayInvoiceId) {
-          logger.info(`🔑 Downloading from Razorpay API: ${invoice.invoiceNumber}`);
-          
-          try {
-            const razorpayResponse = await fetch(`https://api.razorpay.com/v1/invoices/${invoice.razorpayInvoiceId}`, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Basic ${Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_SECRET}`).toString('base64')}`,
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            if (razorpayResponse.ok) {
-              const razorpayData = await razorpayResponse.json();
-              if (razorpayData.short_url) {
-                const pdfResponse = await fetch(razorpayData.short_url);
-                if (pdfResponse.ok) {
-                  pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
-                  logger.info(`✅ Downloaded from Razorpay API: ${pdfBuffer.length} bytes`);
-                }
-              }
-            }
-          } catch (apiError) {
-            logger.info(`❌ Razorpay API error: ${apiError.message}`);
-          }
-        }
-        
-        // Priority 4: Try local file
-        if (!pdfBuffer && invoice.pdfUrl && invoice.pdfUrl.startsWith('/uploads/')) {
-          logger.info(`💾 Reading local file: ${invoice.invoiceNumber}`);
-          
-          const filePath = path.join(process.cwd(), invoice.pdfUrl);
-          if (fs.existsSync(filePath)) {
-            pdfBuffer = fs.readFileSync(filePath);
-            logger.info(`✅ Read local file: ${pdfBuffer.length} bytes`);
-          }
-        }
-        
-        // Add to ZIP if we have a PDF
-        if (pdfBuffer) {
-          archive.append(pdfBuffer, { name: filename });
-          addedCount++;
-          logger.info(`✅ Added to bulk ZIP: ${filename}`);
-        } else {
-          skippedCount++;
-          logger.info(`⏭️ Skipped (no PDF available): ${invoice.invoiceNumber}`);
-          
-          // Add a placeholder text file explaining why this invoice was skipped
-          const placeholderContent = `Invoice ${invoice.invoiceNumber} (${invoice.invoiceType})
-Order: ${orderNumber}
-Status: ${invoice.status}
-Total Amount: ${invoice.totalAmount}
-Created: ${invoice.createdAt}
 
-This invoice could not be included in the ZIP because:
-- No PDF URL available
-- Cloudinary/Razorpay download failed
-- Local file not found
-
-Please contact support for assistance.`;
-          
-          archive.append(placeholderContent, { name: `invoice_${invoice.invoiceNumber}_${invoice.invoiceType}_NOT_AVAILABLE.txt` });
-        }
-        
-      } catch (invoiceError) {
-        logger.error('❌ Error processing invoice:', invoice.invoiceNumber, invoiceError.message);
-        skippedCount++;
-        
-        // Add error placeholder
-        const errorContent = `Invoice ${invoice.invoiceNumber} (${invoice.invoiceType})
-Order: ${invoice.orderId?.orderNumber || 'UNKNOWN'}
-Error: ${invoiceError.message}
-Status: ${invoice.status}
-Total Amount: ${invoice.totalAmount}
-Created: ${invoice.createdAt}
-
-This invoice encountered an error during processing.`;
-        
-        archive.append(errorContent, { name: `invoice_${invoice.invoiceNumber}_${invoice.invoiceType}_ERROR.txt` });
-      }
-    }
-    
-    logger.info(`📊 Bulk ZIP Summary: ${addedCount} invoices added, ${skippedCount} skipped`);
-    
-    // Finalize the archive
-    await archive.finalize();
-    
+    invoiceExportService.exportQueue.markDownloaded(job);
+    return res.download(job.zipPath, job.filename || path.basename(job.zipPath));
   } catch (error) {
-    logger.error('❌ Error creating bulk ZIP:', error);
-    
-    // Clean up temporary directory if it exists
-    if (tempDir && fs.existsSync(tempDir)) {
-      try {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        logger.info('🧹 Cleaned up temp directory after error');
-      } catch (cleanupError) {
-        logger.warn('⚠️ Failed to cleanup temp directory:', cleanupError.message);
-      }
-    }
-    
-    // Check if response has already been sent
+    logger.error('Error sending bulk ZIP file:', error);
     if (!res.headersSent) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
-        message: 'Failed to create bulk ZIP file',
-        error: error.message
+        message: 'Failed to download export file'
       });
     }
   }
