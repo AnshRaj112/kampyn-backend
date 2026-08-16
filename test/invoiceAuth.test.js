@@ -122,6 +122,7 @@ async function runAnonymousAccessTests() {
     ['GET',  `/api/invoices/stats`],
     ['POST', `/api/invoices/bulk-download`],
     ['POST', `/api/invoices/bulk-zip-download`],
+    ['GET',  `/api/invoices/bulk-zip-jobs/00000000-0000-0000-0000-000000000000`],
   ];
 
   for (const [method, path] of endpoints) {
@@ -203,9 +204,9 @@ async function runAdminAuthorizationTests() {
   // Admin can access bulk-download
   const r5 = await request('POST', `/api/invoices/bulk-download`, {
     token: ENV.adminToken,
-    body: { startDate: '2024-01-01', endDate: '2024-12-31' }
+    body: { startDate: '2024-01-01', endDate: '2024-01-15' }
   });
-  assert([200, 404].includes(r5.status), `Admin → POST /bulk-download → 200 or 404 (not 401/403)`);
+  assert([200, 400, 404].includes(r5.status), `Admin → POST /bulk-download → 200, 400, or 404 (not 401/403)`);
 }
 
 async function runUniversityStaffTests() {

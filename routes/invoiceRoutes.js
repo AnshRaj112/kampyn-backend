@@ -203,14 +203,114 @@ router.get('/university/:uniId', uniOrSuperAdminAuth, invoiceController.getUnive
 // Admin-only: platform invoice listing
 router.get('/admin', adminAuthMiddleware, invoiceController.getAdminInvoices);
 
+// ---------------------------------------------------------------------------
+// invoiceExportAuth
+// ---------------------------------------------------------------------------
+// Bulk invoice exports are restricted to platform admins and university staff.
+// Vendors and end-users are rejected with 401/403 before any ZIP work starts.
+// ---------------------------------------------------------------------------
+const invoiceExportAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    let token = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies) {
+      token = req.cookies.adminToken || req.cookies.uniToken || req.cookies.token;
+    }
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. No token provided.'
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        message:
+          err.name === 'TokenExpiredError'
+            ? 'Token expired. Please log in again.'
+            : 'Invalid token.'
+      });
+    }
+
+    const userId = decoded.userId;
+
+    const admin = await Admin.findById(userId).select('-password');
+    if (admin && admin.isActive) {
+      const { shouldLogout } = await checkUserActivity(userId, 'admin');
+      if (shouldLogout) {
+        return res.status(401).json({
+          success: false,
+          message: 'Session expired due to inactivity. Please log in again.'
+        });
+      }
+      await updateUserActivity(userId, 'admin');
+      req.admin = {
+        adminId: admin._id,
+        email: admin.email,
+        role: admin.role,
+        permissions: admin.permissions
+      };
+      return next();
+    }
+
+    const university = await Uni.findById(userId).select('-password');
+    if (university && university.isAvailable === 'Y') {
+      if (req.tenantId && String(university._id) !== String(req.tenantId)) {
+        return res.status(403).json({
+          success: false,
+          message:
+            'Access denied. Your session does not belong to the requested university tenant context.'
+        });
+      }
+      const { shouldLogout } = await checkUserActivity(userId, 'uni');
+      if (shouldLogout) {
+        return res.status(401).json({
+          success: false,
+          message: 'Session expired due to inactivity. Please log in again.'
+        });
+      }
+      await updateUserActivity(userId, 'uni');
+      req.uni = {
+        _id: university._id,
+        fullName: university.fullName,
+        email: university.email
+      };
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Invoice exports are limited to administrators and university staff.'
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'invoiceExportAuth: unexpected error');
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error during authentication.'
+    });
+  }
+};
+
 // Admin/uni-only: invoice statistics and bulk operations (DoS risk — restricted)
 router.get('/stats', uniOrSuperAdminAuth, invoiceController.getInvoiceStats);
 
-// Admin/uni-only: bulk download metadata
-router.post('/bulk-download', adminAuthMiddleware, invoiceController.getInvoicesForBulkDownload);
+// Admin/uni-only: bulk download metadata (capped, rate-limited, audited)
+router.post('/bulk-download', invoiceExportAuth, invoiceController.getInvoicesForBulkDownload);
 
-// Admin/uni-only: bulk ZIP download with date range (DoS risk — admin only)
-router.post('/bulk-zip-download', adminAuthMiddleware, invoiceController.bulkZipDownload);
+// Admin/uni-only: enqueue bulk ZIP (async worker; never unbounded on the HTTP thread)
+router.post('/bulk-zip-download', invoiceExportAuth, invoiceController.bulkZipDownload);
+
+// Poll / download a queued bulk ZIP. Same auth as enqueue; ownership checked in handler.
+router.get('/bulk-zip-jobs/:jobId/file', invoiceExportAuth, invoiceController.downloadBulkZipFile);
+router.get('/bulk-zip-jobs/:jobId', invoiceExportAuth, invoiceController.getBulkZipJobStatus);
 
 // Admin/uni: generate invoices for an order
 router.post('/generate-order-invoices', uniOrSuperAdminAuth, invoiceController.generateOrderInvoices);
