@@ -10,6 +10,9 @@ const MAX_ORDER_IDS = Number(process.env.INVOICE_EXPORT_MAX_ORDER_IDS) || 100;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const OBJECT_ID = /^[a-f\d]{24}$/i;
+const INVOICE_TYPES = new Set(['vendor', 'platform']);
+const RECIPIENT_TYPES = new Set(['vendor', 'admin']);
 
 /** @type {Map<string, number[]>} actorKey -> timestamps of export attempts in the current window */
 const exportAttempts = new Map();
@@ -19,7 +22,8 @@ function parseIsoDate(value, label) {
     return { ok: false, message: `${label} must be an ISO date (YYYY-MM-DD)` };
   }
   const parsed = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) {
+  // Date otherwise normalizes values such as 2026-02-31 into March.
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
     return { ok: false, message: `${label} is not a valid date` };
   }
   return { ok: true, date: parsed, raw: value };
@@ -72,6 +76,9 @@ function validateExportWindow({ startDate, endDate, orderIds } = {}) {
         message: `orderIds cannot exceed ${MAX_ORDER_IDS} entries`
       };
     }
+    if (orderIds.some((id) => typeof id !== 'string' || !OBJECT_ID.test(id))) {
+      return { ok: false, status: 400, message: 'orderIds must contain valid order IDs' };
+    }
   }
 
   return {
@@ -82,6 +89,23 @@ function validateExportWindow({ startDate, endDate, orderIds } = {}) {
     endBound: endInclusive,
     rangeDays
   };
+}
+
+function validateOptionalFilters(body = {}) {
+  for (const field of ['vendorId', 'uniId']) {
+    const value = body[field];
+    if (value !== undefined && value !== null &&
+      (typeof value !== 'string' || !OBJECT_ID.test(value))) {
+      return { ok: false, status: 400, message: `${field} must be a valid ID` };
+    }
+  }
+  if (body.invoiceType !== undefined && !INVOICE_TYPES.has(body.invoiceType)) {
+    return { ok: false, status: 400, message: 'invoiceType must be vendor or platform' };
+  }
+  if (body.recipientType !== undefined && !RECIPIENT_TYPES.has(body.recipientType)) {
+    return { ok: false, status: 400, message: 'recipientType must be vendor or admin' };
+  }
+  return { ok: true };
 }
 
 function resolveExportActor(req = {}) {
@@ -179,6 +203,11 @@ function evaluateBulkExportRequest(req, { count, recordRateLimit = true } = {}) 
     return { ok: false, status: window.status, message: window.message, actor };
   }
 
+  const optionalFilters = validateOptionalFilters(req.body || {});
+  if (!optionalFilters.ok) {
+    return { ok: false, status: optionalFilters.status, message: optionalFilters.message, actor };
+  }
+
   if (recordRateLimit) {
     const rate = checkExportRateLimit(actor.key);
     if (!rate.allowed) {
@@ -228,6 +257,7 @@ module.exports = {
   MAX_ORDER_IDS,
   RATE_WINDOW_MS,
   validateExportWindow,
+  validateOptionalFilters,
   resolveExportActor,
   checkExportRateLimit,
   resetExportRateLimit,

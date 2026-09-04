@@ -106,6 +106,10 @@ async function requestBulkZipExport(req) {
     });
   } catch (err) {
     logger.error({ error: err.message }, 'Failed to write invoice export audit log');
+    // Do not acknowledge a sensitive financial export if its mandatory audit
+    // record could not be written. The queued job may still be visible to the
+    // worker, but the caller receives no successful export response.
+    return jsonError(500, 'Failed to record invoice export audit log');
   }
 
   return {
@@ -156,6 +160,7 @@ async function requestBulkMetadataExport(req) {
     });
   } catch (err) {
     logger.error({ error: err.message }, 'Failed to write invoice export audit log');
+    return jsonError(500, 'Failed to record invoice export audit log');
   }
 
   return {
