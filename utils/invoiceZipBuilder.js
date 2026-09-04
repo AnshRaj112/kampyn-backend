@@ -12,6 +12,7 @@ const Invoice = require('../models/invoice/Invoice');
 const Vendor = require('../models/account/Vendor');
 const Uni = require('../models/account/Uni');
 const Order = require('../models/order/Order');
+const { MAX_EXPORT_ROWS } = require('./invoiceExportGuard');
 const { isValidCloudinaryUrl, isValidRazorpayUrl } = require('./urlValidation');
 const logger = require('./pinoLogger');
 
@@ -98,7 +99,14 @@ async function buildBulkInvoiceZip(job) {
     .populate({ path: 'uniId', select: 'fullName', model: Uni })
     .populate({ path: 'orderId', select: 'orderNumber', model: Order })
     .sort({ createdAt: -1 })
+    // Invoices can be inserted after the enqueue-time count. Keep the worker
+    // bounded too, so that race cannot create an unbounded archive.
+    .limit(MAX_EXPORT_ROWS + 1)
     .lean();
+
+  if (invoices.length > MAX_EXPORT_ROWS) {
+    throw new Error(`Export exceeds the maximum of ${MAX_EXPORT_ROWS} invoices at processing time`);
+  }
 
   const cleanStart = sanitizeFilename(job.startDate || 'start');
   const cleanEnd = sanitizeFilename(job.endDate || 'end');

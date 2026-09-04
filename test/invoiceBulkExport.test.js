@@ -13,6 +13,7 @@ const {
   MAX_EXPORTS_PER_HOUR,
   MAX_ORDER_IDS,
   validateExportWindow,
+  validateOptionalFilters,
   resolveExportActor,
   checkExportRateLimit,
   resetExportRateLimit,
@@ -132,6 +133,12 @@ async function runCapTests() {
     orderIds: Array.from({ length: MAX_ORDER_IDS + 1 }, (_, i) => String(i))
   });
   assertCond(tooManyIds.status === 400, `orderIds over ${MAX_ORDER_IDS} → 400`);
+
+  const impossibleDate = validateExportWindow({ startDate: '2026-02-30', endDate: '2026-03-01' });
+  assertCond(impossibleDate.status === 400, 'Non-existent ISO date → 400');
+
+  const injection = validateOptionalFilters({ vendorId: { $ne: null } });
+  assertCond(injection.status === 400, 'Object-valued filter (query injection) → 400');
 
   const overRows = evaluateBulkExportRequest(
     adminReq({ startDate: '2026-01-01', endDate: '2026-01-07' }),
