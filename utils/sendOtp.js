@@ -32,13 +32,6 @@ const sendViaLoops = async (email, otp) => {
     }
   };
 
-  logger.info({
-    email,
-    otpValue: otp,
-    transactionalId: process.env.LOOPS_TRANSACTIONAL_ID,
-    requestBody: requestBody,
-    hasApiKey: !!process.env.LOOPS_API_KEY
-  }, "Sending OTP via Loops API (Production)");
 
   const response = await fetch("https://app.loops.so/api/v1/transactional", {
     method: "POST",
@@ -52,22 +45,11 @@ const sendViaLoops = async (email, otp) => {
   const data = await response.json();
 
   if (!response.ok) {
-    logger.error({
-      error: data?.message || "Failed to send OTP email",
-      email,
-      status: response.status,
-      statusText: response.statusText,
-      responseData: data,
-      requestBody: requestBody
-    }, "Error sending OTP email via Loops API");
+    logger.error(data?.message || "Failed to send OTP email", "Error sending OTP email via Loops API");
     throw new Error(data?.message || "Failed to send OTP email");
   }
 
-  logger.info({
-    email,
-    otpValue: otp,
-    responseData: data
-  }, "OTP sent successfully via Loops API");
+  logger.info(data, "OTP sent successfully via Loops API");
   return data;
 };
 
@@ -77,11 +59,7 @@ const sendViaLoops = async (email, otp) => {
  * @param {string} otp - The OTP code.
  */
 const sendViaSMTP = async (email, otp) => {
-  logger.info({
-    email,
-    otpValue: otp,
-    smtpUser: process.env.EMAIL_USER
-  }, "Sending OTP via SMTP (Development)");
+  logger.info(email, "Sending OTP via SMTP (Development)");
 
   // Create transporter
   const transporter = nodemailer.createTransport({
@@ -135,19 +113,10 @@ const sendViaSMTP = async (email, otp) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    logger.info({
-      email,
-      otpValue: otp,
-      messageId: info.messageId,
-      response: info.response
-    }, "OTP sent successfully via SMTP");
+    logger.info(info, "OTP sent successfully via SMTP");
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    logger.error({
-      error: error.message,
-      email,
-      stack: error.stack
-    }, "Error sending OTP email via SMTP");
+    logger.error(error, "Error sending OTP email via SMTP");
     throw new Error(`Failed to send OTP email: ${error.message}`);
   }
 };
