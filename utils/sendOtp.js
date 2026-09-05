@@ -59,7 +59,7 @@ const sendViaLoops = async (email, otp) => {
  * @param {string} otp - The OTP code.
  */
 const sendViaSMTP = async (email, otp) => {
-  logger.info(email, "Sending OTP via SMTP (Development)");
+  logger.info("Sending OTP via SMTP (Development)");
 
   // Create transporter
   const transporter = nodemailer.createTransport({
