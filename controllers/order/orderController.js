@@ -92,13 +92,6 @@ exports.storeOrderDetails = async (req, res) => {
   try {
     const { razorpayOrderId, userId, cart, vendorId, orderType, collectorName, collectorPhone, address, finalTotal } = req.body;
 
-    logger.info({
-      razorpayOrderId,
-      userId,
-      cartLength: cart?.length || 0,
-      finalTotal
-    }, "Storing order details for mobile payment");
-
     // Store order details in the pendingOrderDetails map
     const orderUtils = require("../utils/orderUtils");
     const orderDetailsToStore = {
