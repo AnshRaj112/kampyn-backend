@@ -6,7 +6,8 @@ const logger = require("../../utils/pinoLogger");
 
 exports.toggleFavourite = async (req, res) => {
   try {
-    const { userId, itemId, kind, vendorId } = req.params;
+    const { itemId, kind, vendorId } = req.params;
+    const userId = req.authenticatedUserId;
 
     if (!["Retail", "Produce"].includes(kind)) {
       return res.status(400).json({ error: "Invalid kind." });
@@ -71,7 +72,7 @@ exports.toggleFavourite = async (req, res) => {
 // Get all favourite items
 exports.getFavourites = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.authenticatedUserId;
 
     const user = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: "User not found." });
@@ -119,7 +120,8 @@ exports.getFavourites = async (req, res) => {
 // Get favourite items filtered by uniId
 exports.getFavouritesByUni = async (req, res) => {
   try {
-    const { userId, uniId } = req.params;
+    const { uniId } = req.params;
+    const userId = req.authenticatedUserId;
 
     if (!uniId) {
       return res.status(400).json({ error: "Missing 'uniId' in path." });
