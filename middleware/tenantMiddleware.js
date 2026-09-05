@@ -118,7 +118,6 @@ const tenantMiddleware = async (req, res, next) => {
   }
 
   if (!tenantIdentifier) {
-    // Standalone context (e.g. admin.kampyn.com)
     req.tenant = null;
     req.tenantId = null;
     req.tenantSlug = null;
