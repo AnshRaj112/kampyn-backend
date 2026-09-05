@@ -17,6 +17,38 @@ const { generateOtp } = require("./shared/otpGenerator");
 const { handleUnverifiedLogin } = require("./shared/authLoginHelpers");
 // const { createRoleLoginHandler } = require("./shared/authFlowHandlers");
 
+
+const getFrontendHosts = () => {
+  return Object.entries(process.env)
+    .filter(([key, value]) => key.startsWith("FRONTEND_HOST_") && value)
+    .map(([, value]) => value
+      .trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/\/$/, "")
+    );
+};
+
+// Check whether a request originates from one of the configured frontend hosts.
+const isRequestFromFrontendHosts = (host, referer) => {
+  const frontendHosts = getFrontendHosts();
+
+  const normalizedHost = (host || "")
+    .toLowerCase()
+    .split(":")[0];
+
+  const normalizedReferer = (referer || "").toLowerCase();
+
+  return frontendHosts.some((frontendHost) => {
+    const normalizedFrontendHost = frontendHost.toLowerCase();
+
+    return (
+      normalizedHost === normalizedFrontendHost ||
+      normalizedReferer.includes(normalizedFrontendHost)
+    );
+  });
+};
+
+
 // Cookie Token Set
 const setTokenCookie = (res, token) => {
   res.cookie("uniToken", token, getCookieOptions());
@@ -176,10 +208,7 @@ exports.login = async (req, res) => {
 
     const host = req.headers.host || "";
     const referer = req.headers.referer || "";
-    const isAdminPortal = host.includes("admin.localhost") || 
-                          host.includes("admin.kampyn.com") || 
-                          referer.includes("admin.localhost") || 
-                          referer.includes("admin.kampyn.com");
+    const isAdminPortal = isRequestFromFrontendHosts(host, referer);
 
     if (isAdminPortal) {
       return res.status(403).json({
