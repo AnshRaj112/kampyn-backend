@@ -49,7 +49,7 @@ exports.addToCart = async (req, res) => {
       .status(200)
       .json({ message: "Item added to cart successfully." });
   } catch (err) {
-    logger.error({ error: err.message }, "Add to cart error");
+    logger.error("Add to cart error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -71,7 +71,7 @@ exports.getCart = async (req, res) => {
       vendorName: data.vendorName,
     });
   } catch (err) {
-    logger.error({ error: err.message }, "Get cart error");
+    logger.error("Get cart error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -93,7 +93,7 @@ exports.increaseOne = async (req, res) => {
     await cartUtils.changeQuantity(userId, itemId, kind, +1, vendorId);
     return res.status(200).json({ message: "Quantity increased." });
   } catch (err) {
-    logger.error({ error: err.message }, "Increase one error");
+    logger.error("Increase one error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -115,7 +115,7 @@ exports.decreaseOne = async (req, res) => {
     await cartUtils.changeQuantity(userId, itemId, kind, -1);
     return res.status(200).json({ message: "Quantity decreased." });
   } catch (err) {
-    logger.error({ error: err.message }, "Decrease one error");
+    logger.error("Decrease one error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -137,7 +137,7 @@ exports.removeItem = async (req, res) => {
     await cartUtils.removeItem(userId, itemId, kind);
     return res.status(200).json({ message: "Item removed from cart." });
   } catch (err) {
-    logger.error({ error: err.message }, "Remove item error");
+    logger.error("Remove item error");
     return res.status(400).json({ message: err.message });
   }
 };
@@ -160,7 +160,7 @@ exports.getExtras = async (req, res) => {
       extras,
     });
   } catch (err) {
-    logger.error({ error: err.message }, "Get extras error");
+    logger.error("Get extras error");
     return res.status(400).json({ message: err.message });
   }
 };
