@@ -1,55 +1,123 @@
+const sanitizeHtml = require("sanitize-html");
 const logger = require("../utils/pinoLogger");
 
 /**
- * Sanitizes a request payload value recursively to prevent NoSQL query injection and XSS
+ * Sanitizes strings to prevent HTML/XSS injection.
+ *
+ * This configuration removes all HTML tags and attributes.
+ * The result is plain text only.
  */
-function sanitizeValue(val) {
-  if (typeof val === "string") {
-    // 1. Prevent XSS: Strip scripts, html tags, event handlers, and javascript protocols
-    return val
-      .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
-      .replace(/<\/?[^>]+(>|$)/g, '')
-      .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
-      .replace(/on\w+\s*=\s*'[^']*'/gi, '')
-      .replace(/javascript\s*:\s*/gi, '');
-  } else if (Array.isArray(val)) {
-    return val.map(sanitizeValue);
-  } else if (val !== null && typeof val === "object") {
-    // Check if the object is a standard object, not a special class or buffer
-    if (Object.prototype.toString.call(val) === "[object Object]") {
-      const sanitizedObj = {};
-      for (const key in val) {
-        // 2. Prevent NoSQL Injection: Remove keys starting with $ or containing mongoose operators
-        if (key.startsWith("$")) {
-          logger.warn({ key, value: val[key] }, "NoSQL Injection query payload blocked");
-          continue; // Strip out key
-        }
-        sanitizedObj[key] = sanitizeValue(val[key]);
-      }
-      return sanitizedObj;
-    }
+function sanitizeString(value) {
+  if (typeof value !== "string") {
+    return value;
   }
-  return val;
+
+  return sanitizeHtml(value, {
+    allowedTags: [],
+    allowedAttributes: {},
+    disallowedTagsMode: "discard",
+    allowVulnerableTags: false,
+  });
 }
 
 /**
- * Express middleware to sanitize body, query, and params of every request
+ * Checks whether an object key could be used for NoSQL/operator injection.
+ *
+ * MongoDB operators commonly start with "$".
+ * Dotted keys can also be dangerous depending on how the value is later used
+ * in database queries or updates.
+ */
+function isDangerousKey(key) {
+  return (
+    typeof key !== "string" ||
+    key.startsWith("$") ||
+    key.includes(".")
+  );
+}
+
+/**
+ * Recursively sanitizes request values.
+ *
+ * - Strings: removes HTML/XSS payloads
+ * - Arrays: sanitizes every item
+ * - Plain objects: removes dangerous NoSQL keys and sanitizes nested values
+ */
+function sanitizeValue(value) {
+  // Strings
+  if (typeof value === "string") {
+    return sanitizeString(value);
+  }
+
+  // Arrays
+  if (Array.isArray(value)) {
+    return value.map(sanitizeValue);
+  }
+
+  // Null and primitive values
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  // Only recursively process plain objects
+  if (Object.prototype.toString.call(value) === "[object Object]") {
+    const sanitizedObject = {};
+
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (isDangerousKey(key)) {
+        logger.warn(
+          {
+            key,
+            value: nestedValue,
+          },
+          "Potential NoSQL injection key removed from request payload"
+        );
+
+        continue;
+      }
+
+      sanitizedObject[key] = sanitizeValue(nestedValue);
+    }
+
+    return sanitizedObject;
+  }
+
+  // Preserve special objects such as Date, Buffer, etc.
+  return value;
+}
+
+/**
+ * Express middleware that sanitizes:
+ *
+ * - req.body
+ * - req.query
+ * - req.params
  */
 const sanitizeMiddleware = (req, res, next) => {
   try {
-    if (req.body) {
+    if (req.body !== undefined && req.body !== null) {
       req.body = sanitizeValue(req.body);
     }
-    if (req.query) {
+
+    if (req.query !== undefined && req.query !== null) {
       req.query = sanitizeValue(req.query);
     }
-    if (req.params) {
+
+    if (req.params !== undefined && req.params !== null) {
       req.params = sanitizeValue(req.params);
     }
+
+    return next();
   } catch (error) {
-    logger.error({ error: error.message }, "Error during payload sanitization");
+    logger.error(
+      {
+        error: error.message,
+        stack: error.stack,
+      },
+      "Error during request payload sanitization"
+    );
+
+    return next(error);
   }
-  next();
 };
 
 module.exports = sanitizeMiddleware;
