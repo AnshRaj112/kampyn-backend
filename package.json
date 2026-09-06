@@ -56,6 +56,7 @@
     "pm2": "^7.0.4",
     "razorpay": "^2.9.6",
     "sanitize-filename": "^1.6.3",
+    "sanitize-html": "^2.17.7",
     "uuid": "14.0.1"
   },
   "devDependencies": {
