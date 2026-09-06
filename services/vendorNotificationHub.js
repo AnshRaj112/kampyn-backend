@@ -55,7 +55,7 @@ function sendVendorNotification(vendorId, eventName, payload) {
     try {
       client.write(data);
     } catch (err) {
-      logger.warn({ vendorId: key, error: err.message }, "Failed to write SSE payload, removing client");
+      logger.warn("Failed to write SSE payload, removing client");
       removeVendorClient(key, client);
     }
   });

@@ -45,7 +45,7 @@ try {
   console.log("✅ NoSQL Injection keys successfully stripped!");
 } catch (err) {
   console.error("❌ NoSQL Injection test failed:", err.message);
-  console.error("Actual body:", JSON.stringify(result1.req.body, null, 2));
+  console.error("Actual body:");
 }
 
 // 2. Test XSS Injection Protection

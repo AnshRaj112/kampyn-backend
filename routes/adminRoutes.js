@@ -1011,8 +1011,6 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
     const { uniId } = req.params;
     const { platformFee } = req.body;
 
-    logger.info(`🔵 Admin: Updating platform fee for university ${uniId} to ₹${platformFee}`);
-
     // Validate input
     if (platformFee === undefined || platformFee === null) {
       return res.status(400).json({
@@ -1041,8 +1039,6 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
         message: "University not found"
       });
     }
-
-    logger.info(`✅ Admin: Platform fee updated for ${university.fullName} to ₹${platformFee}`);
 
     res.json({
       success: true,
@@ -1073,9 +1069,6 @@ router.put("/universities/:uniId/platform-fee", async (req, res) => {
 router.put("/universities/bulk-platform-fees", async (req, res) => {
   try {
     const { updates } = req.body;
-
-    logger.info(`🔵 Admin: Bulk updating platform fees for ${updates.length} universities`);
-
     // Validate input
     if (!Array.isArray(updates) || updates.length === 0) {
       return res.status(400).json({

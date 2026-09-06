@@ -122,12 +122,7 @@ async function _validateAndFetch(
 
     // For retail items, check quantity directly from the entry
     const invQty = entry.quantity || 0;
-    logger.debug({
-      itemId,
-      vendorId: vendorIdFromController,
-      quantity: invQty,
-      desiredQty
-    }, "Retail item quantity check");
+    logger.debug("Retail item quantity check");
 
     if (desiredQty > invQty) {
       throw new Error(`Only ${invQty} unit(s) available`);
