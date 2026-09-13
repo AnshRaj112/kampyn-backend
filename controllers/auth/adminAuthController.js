@@ -82,7 +82,6 @@ exports.verifyOtp = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "OTP verified successfully",
-      token,
       user: {
         _id: user._id,
         fullName: user.fullName,
@@ -260,7 +259,6 @@ exports.adminLogin = async (req, res) => {
       message: "Admin login successful",
       data: {
         admin: adminProfile,
-        token: token // Also return token for client-side storage if needed
       }
     });
 

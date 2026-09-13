@@ -20,6 +20,7 @@ The backend automatically deploys to Render when:
 
 ### 3. Environment Variables (in Render)
 - [ ] `NODE_ENV` = `production`
+- [ ] `REDIS_URI` = Redis connection URI (required for the PM2 production cluster; configure it as a secret)
 - [ ] `PORT` = `10000`
 - [ ] `MONGO_URL` = Your MongoDB connection string
 - [ ] `FRONTEND_URL` = Your frontend URL
@@ -78,4 +79,4 @@ npm run validate-cicd
 - Never commit API tokens to code
 - Use GitHub secrets for sensitive data
 - Limit merge access to main branch
-- Monitor deployment logs regularly 
+- Monitor deployment logs regularly

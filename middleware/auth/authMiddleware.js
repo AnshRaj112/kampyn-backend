@@ -12,7 +12,7 @@ exports.authMiddleware = async (req, res, next) => {
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.split(" ")[1];
     } else if (req.cookies) {
-      token = req.cookies.token || req.cookies.vendorToken || req.cookies.uniToken;
+      token = req.cookies.token || req.cookies.adminToken || req.cookies.vendorToken || req.cookies.uniToken || req.cookies.guestHouseToken;
     }
 
     if (!token) {

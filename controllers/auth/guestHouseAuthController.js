@@ -45,7 +45,6 @@ exports.verifyOtp = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "OTP verified successfully",
-      token,
       user: guestHouse,
     });
   } catch (error) {
@@ -110,7 +109,6 @@ exports.login = async (req, res) => {
     return res.json({
       success: true,
       message: "Login successful",
-      token,
       user: safeGuestHouse,
     });
   } catch (error) {

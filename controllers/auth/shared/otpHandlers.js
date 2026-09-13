@@ -147,7 +147,6 @@ const createVerifyOtpHandler = ({
       return res.status(200).json({
         success: true,
         message: "OTP verified successfully",
-        token,
         tenantSlug,
         user: buildSuccessUser(user),
       });
