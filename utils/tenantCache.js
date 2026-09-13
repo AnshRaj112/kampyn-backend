@@ -1,44 +1,64 @@
 const logger = require("./pinoLogger");
 
-// In-memory local cache as primary fallback
 const localCache = new Map();
-const DEFAULT_TTL_MS = 300000; // 5 minutes default TTL
+const DEFAULT_TTL_MS = 300000;
+const redisUri = process.env.REDIS_URI;
+const redisRequired = process.env.NODE_ENV === "production";
 
 let redisClient = null;
+let connectPromise = null;
 
-// Initialize Redis if REDIS_HOST env var is present
-if (process.env.REDIS_HOST) {
-  try {
-    // Try importing ioredis or redis
-    const Redis = require("ioredis");
-    redisClient = new Redis({
-      host: process.env.REDIS_HOST,
-      port: process.env.REDIS_PORT || 6379,
-      password: process.env.REDIS_PASSWORD || undefined,
-      lazyConnect: true,
-      maxRetriesPerRequest: 3
-    });
-    
-    redisClient.connect().catch(err => {
-      logger.warn({ error: err.message }, "Redis connection failed. Fallback to in-memory caching active.");
-      redisClient = null;
-    });
-  } catch (err) {
-    logger.debug("ioredis not installed. Using in-memory caching fallback.");
+function createRedisClient() {
+  if (!redisUri || redisClient) return redisClient;
+  const Redis = require("ioredis");
+  redisClient = new Redis(redisUri, { lazyConnect: true, maxRetriesPerRequest: 1, enableOfflineQueue: false });
+  redisClient.on("error", (error) => logger.warn({ error: error.message }, "Redis connection error"));
+  redisClient.on("ready", () => logger.info("Redis shared state is ready"));
+  return redisClient;
+}
+
+async function initialize() {
+  if (!redisUri) {
+    if (redisRequired) throw new Error("REDIS_URI is required when NODE_ENV=production");
+    logger.warn("REDIS_URI is not configured; using single-instance in-memory cache fallback");
+    return getReadiness();
   }
+  const client = createRedisClient();
+  try {
+    if (!connectPromise) connectPromise = client.connect().catch((error) => { connectPromise = null; throw error; });
+    await connectPromise;
+    await client.ping();
+    return getReadiness();
+  } catch (error) {
+    if (redisRequired) throw new Error(`Redis is required in production but unavailable: ${error.message}`);
+    logger.warn({ error: error.message }, "Redis unavailable; using single-instance in-memory cache fallback");
+    return getReadiness();
+  }
+}
+
+async function getReadiness() {
+  const connected = Boolean(redisClient && redisClient.status === "ready");
+  return { configured: Boolean(redisUri), required: redisRequired, connected, mode: connected ? "redis" : "memory" };
+}
+
+function handleRedisFailure(error, operation, key) {
+  logger.warn({ key, error: error.message }, `Redis ${operation} error`);
+  if (redisRequired) throw new Error(`Redis ${operation} failed while shared state is required: ${error.message}`);
 }
 
 /**
  * Gets a cached configuration key
  */
 async function get(key) {
-  if (redisClient) {
+  if (redisClient && redisClient.status === "ready") {
     try {
       const val = await redisClient.get(key);
       return val ? JSON.parse(val) : null;
-    } catch (err) {
-      logger.warn({ key, error: err.message }, "Redis get error, falling back to local cache lookup");
+    } catch (error) {
+      handleRedisFailure(error, "get", key);
     }
+  } else if (redisRequired) {
+    throw new Error("Redis shared state is required but not connected");
   }
 
   const cached = localCache.get(key);
@@ -55,14 +75,15 @@ async function get(key) {
  * Sets a configuration key with TTL
  */
 async function set(key, value, ttlMs = DEFAULT_TTL_MS) {
-  if (redisClient) {
+  if (redisClient && redisClient.status === "ready") {
     try {
-      const seconds = Math.ceil(ttlMs / 1000);
-      await redisClient.setex(key, seconds, JSON.stringify(value));
+      await redisClient.set(key, JSON.stringify(value), "PX", ttlMs);
       return;
-    } catch (err) {
-      logger.warn({ key, error: err.message }, "Redis setex error, falling back to local cache storage");
+    } catch (error) {
+      handleRedisFailure(error, "set", key);
     }
+  } else if (redisRequired) {
+    throw new Error("Redis shared state is required but not connected");
   }
 
   localCache.set(key, {
@@ -75,12 +96,14 @@ async function set(key, value, ttlMs = DEFAULT_TTL_MS) {
  * Deletes a configuration key (invalidation)
  */
 async function del(key) {
-  if (redisClient) {
+  if (redisClient && redisClient.status === "ready") {
     try {
       await redisClient.del(key);
-    } catch (err) {
-      logger.warn({ key, error: err.message }, "Redis delete error");
+    } catch (error) {
+      handleRedisFailure(error, "delete", key);
     }
+  } else if (redisRequired) {
+    throw new Error("Redis shared state is required but not connected");
   }
   localCache.delete(key);
 }
@@ -98,5 +121,7 @@ module.exports = {
   get,
   set,
   del,
-  invalidateTenant
+  invalidateTenant,
+  initialize,
+  getReadiness
 };

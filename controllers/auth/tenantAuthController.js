@@ -151,7 +151,6 @@ exports.login = async (req, res) => {
     return res.json({
       success: true,
       message: "Login successful",
-      token,
       role: "university",
       tenantSlug,
       user: {
@@ -285,7 +284,6 @@ exports.verifyOtp = async (req, res) => {
     return res.json({
       success: true,
       message: "OTP verified successfully",
-      token,
       tenantSlug,
       user: {
         _id: user._id,

@@ -18,6 +18,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const logger = require("./utils/pinoLogger");
+const tenantCache = require("./utils/tenantCache");
 
 // Import security configurations
 const {
@@ -89,6 +90,7 @@ const menuSortRoutes = require("./routes/menuSortRoutes");
 const vendorNotificationRoutes = require("./routes/vendorNotificationRoutes");
 //const tempRoutes = require("./routes/tempRoutes");
 const { trackApiHit } = require("./middleware/apiTrackingMiddleware");
+const { csrfProtection, csrfTokenEndpoint } = require("./middleware/csrfMiddleware");
 
 // NEW: Tenant routes and middlewares
 const tenantRoutes = require("./routes/tenantRoutes");
@@ -134,6 +136,11 @@ app.use(sanitizeMiddleware);
 // 7. Cookie parser - Parse cookies for authentication
 app.use(cookieParser());
 
+// Cookie-authenticated requests require a CSRF token. The token is returned
+// to the SPA for an in-memory header while the session remains HttpOnly.
+app.get('/api/csrf/token', csrfTokenEndpoint);
+app.use(csrfProtection());
+
 // 8. Global rate limiting - Protect against DDoS
 app.use(apiLimiter);
 
@@ -150,11 +157,14 @@ app.use(trackApiHit);
 app.use(tenantMiddleware);
 
 // ✅ Health check endpoint for Render
-app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    status: "OK",
+app.get("/api/health", async (req, res) => {
+  const redis = await tenantCache.getReadiness();
+  const ready = !redis.required || redis.connected;
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "OK" : "NOT_READY",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    dependencies: { redis },
   });
 });
 
@@ -219,10 +229,6 @@ app.use("/api/vendor/notifications", vendorNotificationRoutes);
 //app.use("/temp", tempRoutes);
 
 // ✅ Health check endpoint
-app.get("/api/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString() });
-});
-
 // ✅ Global error handling
 app.use((err, req, res, next) => {
   logger.error({ err, url: req.url, method: req.method }, "Server Error");
@@ -240,6 +246,8 @@ module.exports = app;
 // ✅ Start Server after DB connection
 async function startServer() {
   try {
+    // Production runs under PM2 cluster mode and must share state across workers.
+    await tenantCache.initialize();
     await connectDB();
 
     app.listen(PORT, '0.0.0.0', async () => {

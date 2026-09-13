@@ -24,6 +24,8 @@
     "fix-debug": "node scripts/fix-debug.js",
     "migrate-orders": "node scripts/migrate-orders.js",
     "test-locks": "node scripts/test-locking-system.js",
+    "test:redis": "node test/redisSharedState.test.js",
+    "test:redis-integration": "node test/redisIntegration.test.js",
     "create-admin": "node scripts/create-super-admin.js",
     "validate-cicd": "node scripts/setup-cicd.js",
     "postinstall": "npx patch-package"
@@ -42,6 +44,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.0",
     "helmet": "8.1.0",
+    "ioredis": "^5.6.1",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.18.1",
     "lusca": "^1.7.0",

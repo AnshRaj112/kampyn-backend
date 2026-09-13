@@ -131,6 +131,7 @@ Below are the **primary** variables used across the codebase. Tune Mongo pool se
 | `NODE_ENV` | `development` / `production` |
 | `JWT_SECRET` | Secret for signing and verifying JWTs |
 | `TZ` | Set to `Asia/Kolkata` in `index.js` for IST |
+| `REDIS_URI` | Redis connection URI. Required for production / PM2 cluster deployments; keep it in the deployment secret manager and never commit it. Development without this value uses a single-process in-memory fallback only. |
 
 ### MongoDB (multi-cluster)
 

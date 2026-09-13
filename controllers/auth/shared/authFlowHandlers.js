@@ -52,7 +52,6 @@ const createRoleSignupHandler = ({
 
       return res.status(201).json({
         message: "Account created successfully. OTP sent for verification.",
-        token,
         role: successRole(newAccount),
         id: newAccount._id,
       });
@@ -130,7 +129,6 @@ const createRoleLoginHandler = ({
       return res.json({
         success: true,
         message: "Login successful",
-        token,
         user: buildSuccessUser(user),
       });
     } catch (error) {

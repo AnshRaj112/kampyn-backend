@@ -152,7 +152,6 @@ exports.signup = async (req, res) => {
 
     return res.status(201).json({
       message: "Account created successfully. OTP sent for verification.",
-      token,
       role: "university",
       id: newAccount._id,
     });
@@ -298,7 +297,6 @@ exports.login = async (req, res) => {
     return res.json({
       success: true,
       message: "Login successful",
-      token,
       role: "university",
       tenantSlug,
       user: {

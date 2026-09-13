@@ -182,7 +182,6 @@ exports.verifyOtp = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "OTP verified successfully",
-      token,
       user: {
         _id: user._id,
         fullName: user.fullName,
@@ -292,7 +291,6 @@ exports.login = async (req, res) => {
     res.json({
       success: true,
       message: "Login successful",
-      token,
       user: {
         _id: user._id,
         fullName: user.fullName,
@@ -334,7 +332,6 @@ exports.googleAuth = createGoogleAuthHandler({
   buildSuccessResponse: (user, token) => ({
     success: true,
     message: "Google login successful",
-    token,
     user: {
       _id: user._id,
       fullName: user.fullName,
@@ -364,7 +361,6 @@ exports.googleSignup = createGoogleSignupHandler({
   buildSuccessResponse: (newUser, token) => ({
     success: true,
     message: "Google signup successful",
-    token,
     user: {
       _id: newUser._id,
       fullName: newUser.fullName,
